@@ -1,0 +1,139 @@
+from flask import Blueprint, request, jsonify
+from app.services.supabase_client import get_supabase
+from app.utils.jwt_handler import generate_token
+from app.middleware.auth import token_required
+import bcrypt
+import traceback
+
+auth_bp = Blueprint('auth', __name__)
+
+@auth_bp.route('/test-db', methods=['GET'])
+def test_db():
+    """Test database connection"""
+    try:
+        supabase = get_supabase()
+        print("Testing Supabase connection...")
+        response = supabase.table('users').select('*').execute()
+        print(f"Response: {response}")
+        return jsonify({
+            'success': True,
+            'users_count': len(response.data),
+            'users': response.data
+        }), 200
+    except Exception as e:
+        print(f"Test DB error: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@auth_bp.route('/login', methods=['POST'])
+def login():
+    """User login endpoint"""
+    try:
+        data = request.get_json()
+        
+        # DEBUG: Print received data
+        print(f"Received login data: {data}")
+        
+        if not data or not data.get('username') or not data.get('password'):
+            return jsonify({'error': 'Username and password are required'}), 400
+        
+        username = data['username']
+        password = data['password']
+        
+        print(f"Attempting login for username: {username}")
+        
+        # Get user from database
+        supabase = get_supabase()
+        response = supabase.table('users').select('*').eq('username', username).execute()
+        
+        print(f"Database response: {response.data}")
+        
+        if not response.data or len(response.data) == 0:
+            print(f"User not found: {username}")
+            return jsonify({'error': 'Invalid credentials'}), 401
+        
+        user = response.data[0]
+        
+        print(f"Found user: {user['username']}, checking password...")
+        print(f"Stored password_hash: {user['password_hash']}")
+        print(f"Provided password: {password}")
+        
+        # Verify password (for demo, using plain text comparison)
+        if user['password_hash'] != password:
+            print("Password mismatch!")
+            return jsonify({'error': 'Invalid credentials'}), 401
+        
+        print("Password matched! Generating token...")
+        
+        # Update last login
+        supabase.table('users').update({
+            'last_login': 'now()'
+        }).eq('id', user['id']).execute()
+        
+        # Generate JWT token
+        token = generate_token(user['id'], user['username'], user['role'])
+        
+        # Log activity
+        supabase.table('activity_logs').insert({
+            'user_id': user['id'],
+            'action': 'login',
+            'description': f"User {user['username']} logged in"
+        }).execute()
+        
+        return jsonify({
+            'token': token,
+            'user': {
+                'id': user['id'],
+                'username': user['username'],
+                'role': user['role'],
+                'email': user.get('email')
+            }
+        }), 200
+        
+    except Exception as e:
+        print(f"Login error: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': 'Login failed'}), 500
+
+@auth_bp.route('/me', methods=['GET'])
+@token_required
+def get_current_user():
+    """Get current user info"""
+    try:
+        user_id = request.current_user['user_id']
+        
+        supabase = get_supabase()
+        response = supabase.table('users').select('id, username, role, email').eq('id', user_id).execute()
+        
+        if not response.data:
+            return jsonify({'error': 'User not found'}), 404
+        
+        return jsonify({'user': response.data[0]}), 200
+        
+    except Exception as e:
+        print(f"Get user error: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': 'Failed to get user info'}), 500
+
+@auth_bp.route('/logout', methods=['POST'])
+@token_required
+def logout():
+    """User logout endpoint"""
+    try:
+        user_id = request.current_user['user_id']
+        username = request.current_user['username']
+        
+        # Log activity
+        supabase = get_supabase()
+        supabase.table('activity_logs').insert({
+            'user_id': user_id,
+            'action': 'logout',
+            'description': f"User {username} logged out"
+        }).execute()
+        
+        return jsonify({'message': 'Logged out successfully'}), 200
+        
+    except Exception as e:
+        print(f"Logout error: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': 'Logout failed'}), 500

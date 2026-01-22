@@ -1,0 +1,38 @@
+# Web Framework
+Flask==3.1.0
+Flask-CORS==5.0.0
+
+# Database
+supabase==2.3.4
+
+# Authentication
+PyJWT==2.8.0
+bcrypt==4.1.2
+
+# Environment
+python-dotenv==1.0.1
+
+# Validation
+marshmallow==3.20.2
+
+# Production Server
+gunicorn==21.2.0
+
+# Utilities
+python-dateutil==2.8.2
+pytz==2024.1
+
+# HTTP requests (if needed for API calls)
+requests==2.31.0
+
+# For Raspberry Pi (install separately on Pi)
+# opencv-python==4.9.0.80
+# numpy==1.26.3
+# picamera2==0.3.16
+# gpiozero==2.0.1
+# RPi.GPIO==0.7.1
+
+# Optional: For ML models
+# tensorflow-lite==2.14.0
+# or
+# pytorch-mobile==1.13.0

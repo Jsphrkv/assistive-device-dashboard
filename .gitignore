@@ -1,0 +1,84 @@
+# Root .gitignore for Assistive Device Dashboard
+
+# ============================================
+# FRONTEND (React/Vite)
+# ============================================
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# ============================================
+# SERVER (Flask/Python)
+# ============================================
+server/venv/
+server/__pycache__/
+server/**/__pycache__/
+server/**/*.pyc
+server/**/*.pyo
+server/**/*.pyd
+server/.env
+server/*.db
+server/*.sqlite
+server/*.sqlite3
+server/instance/
+
+# ============================================
+# RASPBERRY PI
+# ============================================
+raspberry-pi/venv/
+raspberry-pi/__pycache__/
+raspberry-pi/**/__pycache__/
+raspberry-pi/.env
+
+# ============================================
+# GENERAL
+# ============================================
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Environment variables (backup - each folder has its own)
+.env
+.env.local
+
+# Testing
+coverage/
+.nyc_output/
+
+# Misc
+*.orig
+.pytest_cache/
