@@ -64,9 +64,7 @@ def create_detection():
     """Create new detection log (called by Raspberry Pi)"""
     try:
         data = request.get_json()
-        
-        if not data:
-            return jsonify({'error': 'No data provided'}), 400
+        device_id = request.current_device['id']
         
         # Validate required fields
         required_fields = ['obstacle_type', 'distance_cm', 'danger_level', 'alert_type']
@@ -81,7 +79,8 @@ def create_detection():
             'obstacle_type': data['obstacle_type'],
             'distance_cm': data['distance_cm'],
             'danger_level': data['danger_level'],
-            'alert_type': data['alert_type']
+            'alert_type': data['alert_type'],
+            'device_id': device_id  # ← Link to device
         }
         
         response = supabase.table('detection_logs').insert(insert_data).execute()

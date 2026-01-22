@@ -137,3 +137,45 @@ def logout():
         print(f"Logout error: {str(e)}")
         traceback.print_exc()
         return jsonify({'error': 'Logout failed'}), 500
+    
+@auth_bp.route('/register', methods=['POST'])
+def register():
+    """User registration endpoint"""
+    try:
+        data = request.get_json()
+        
+        if not data or not data.get('username') or not data.get('email') or not data.get('password'):
+            return jsonify({'error': 'Username, email, and password are required'}), 400
+        
+        username = data['username']
+        email = data['email']
+        password = data['password']
+        
+        # Check if user already exists
+        supabase = get_supabase()
+        existing_user = supabase.table('users').select('*').eq('username', username).execute()
+        
+        if existing_user.data and len(existing_user.data) > 0:
+            return jsonify({'error': 'Username already exists'}), 409
+        
+        # Check if email already exists
+        existing_email = supabase.table('users').select('*').eq('email', email).execute()
+        
+        if existing_email.data and len(existing_email.data) > 0:
+            return jsonify({'error': 'Email already exists'}), 409
+        
+        # Create new user (default role is 'user')
+        new_user = supabase.table('users').insert({
+            'username': username,
+            'email': email,
+            'password_hash': password,  # TODO: Use bcrypt.hashpw() in production
+            'role': 'user',
+            'created_at': 'now()'
+        }).execute()
+        
+        return jsonify({'message': 'Registration successful'}), 201
+        
+    except Exception as e:
+        print(f"Registration error: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': 'Registration failed'}), 500

@@ -36,52 +36,46 @@ def device_token_required(f):
     """Decorator to require valid device token (for Raspberry Pi)"""
     @wraps(f)
     def decorated(*args, **kwargs):
-        print("\n" + "="*60)
-        print("DEVICE TOKEN CHECK")
-        print("="*60)
-        
         token = None
         
         # Get token from header
         if 'X-Device-Token' in request.headers:
             token = request.headers['X-Device-Token']
-            print(f"✓ Found X-Device-Token header")
-            print(f"  Token: {token[:50]}...")
         elif 'Authorization' in request.headers:
             auth_header = request.headers['Authorization']
-            print(f"✓ Found Authorization header: {auth_header[:30]}...")
             try:
                 token = auth_header.split(' ')[1]
             except IndexError:
-                print("✗ Invalid Authorization format")
                 return jsonify({'error': 'Invalid token format'}), 401
-        else:
-            print("✗ No token header found")
-            print(f"  Available headers: {list(request.headers.keys())}")
         
         if not token:
-            print("✗ Token is empty")
             return jsonify({'error': 'Device token is missing'}), 401
         
-        # Decode token
-        print(f"Attempting to decode token...")
-        payload = decode_token(token)
+        # Verify token exists in database
+        from app.services.supabase_client import get_supabase
+        supabase = get_supabase()
         
-        print(f"Decoded payload: {payload}")
+        device = supabase.table('user_devices')\
+            .select('*')\
+            .eq('device_token', token)\
+            .eq('is_active', True)\
+            .single()\
+            .execute()
         
-        if not payload:
-            print("✗ Token decode failed (expired or invalid)")
-            return jsonify({'error': 'Token is invalid or expired'}), 401
+        if not device.data:
+            return jsonify({'error': 'Invalid or inactive device token'}), 401
         
-        if payload.get('type') != 'device':
-            print(f"✗ Wrong token type: {payload.get('type')}")
-            return jsonify({'error': 'Invalid device token'}), 401
-        
-        print("✓ Token validated successfully")
-        print("="*60 + "\n")
+        # Update last_seen timestamp
+        supabase.table('user_devices')\
+            .update({
+                'last_seen': 'now()',
+                'status': 'active'
+            })\
+            .eq('id', device.data['id'])\
+            .execute()
         
         # Add device info to request context
-        request.current_device = payload
+        request.current_device = device.data
         
         return f(*args, **kwargs)
     
