@@ -12,15 +12,16 @@ import CameraTab from "./components/camera/CameraTab";
 import SettingsTab from "./components/settings/SettingsTab";
 import SystemInfoTab from "./components/system/SystemInfoTab";
 import DevicesTab from "./components/devices/DevicesTab";
+import HistoricalDataTab from "./components/ml/HistoricalDataTab"; // ← Add this
 import { getCurrentUser } from "./services/authService";
+import NotificationSystem from "./components/notifications/NotificationSystem";
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [activeTab, setActiveTab] = useState("dashboard");
-  const [currentView, setCurrentView] = useState("login"); // login, register, forgotPassword, resetPassword, verifyEmail
+  const [currentView, setCurrentView] = useState("login");
 
   useEffect(() => {
-    // Check URL for special routes
     const path = window.location.pathname;
     const search = window.location.search;
 
@@ -29,18 +30,13 @@ function App() {
     console.log("Path:", path);
     console.log("Search:", search);
 
-    // Check for password reset FIRST (more specific)
     if (path === "/reset-password" && search.includes("token=")) {
       console.log("→ Route: PASSWORD RESET");
       setCurrentView("resetPassword");
-    }
-    // Then check for email verification
-    else if (path === "/verify-email" && search.includes("token=")) {
+    } else if (path === "/verify-email" && search.includes("token=")) {
       console.log("→ Route: EMAIL VERIFICATION");
       setCurrentView("verifyEmail");
-    }
-    // Default: check if user is logged in
-    else {
+    } else {
       console.log("→ Route: DEFAULT (checking auth)");
       const user = getCurrentUser();
       if (user) {
@@ -53,7 +49,6 @@ function App() {
   const handleLogin = (user) => {
     setCurrentUser(user);
     setCurrentView("login");
-    // Clear URL params
     window.history.pushState({}, "", "/");
   };
 
@@ -71,7 +66,6 @@ function App() {
   };
   const handleShowForgotPassword = () => setCurrentView("forgotPassword");
 
-  // Handle special views (email verification, password reset)
   if (currentView === "verifyEmail") {
     return <VerifyEmail onShowLogin={handleShowLogin} />;
   }
@@ -80,7 +74,6 @@ function App() {
     return <ResetPassword onShowLogin={handleShowLogin} />;
   }
 
-  // Not logged in - show auth views
   if (!currentUser) {
     if (currentView === "register") {
       return <Register onShowLogin={handleShowLogin} />;
@@ -108,6 +101,8 @@ function App() {
         return <DetectionLogsTab />;
       case "statistics":
         return <StatisticsTab />;
+      case "mlhistory": // ← Add this case
+        return <HistoricalDataTab />;
       case "camera":
         return <CameraTab />;
       case "settings":
@@ -128,6 +123,7 @@ function App() {
       onTabChange={setActiveTab}
       onLogout={handleLogout}
     >
+      <NotificationSystem />
       {renderActiveTab()}
     </Layout>
   );

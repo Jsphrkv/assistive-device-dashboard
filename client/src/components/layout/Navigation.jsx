@@ -1,11 +1,19 @@
 import React from "react";
-import { Activity, AlertTriangle, Camera, Settings, Info } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  Camera,
+  Settings,
+  Info,
+  Clock,
+} from "lucide-react";
 
 const Navigation = ({ activeTab, onTabChange }) => {
   const tabs = [
     { id: "dashboard", label: "Dashboard", icon: Activity },
     { id: "logs", label: "Detection Logs", icon: AlertTriangle },
     { id: "statistics", label: "Statistics", icon: Activity },
+    { id: "mlhistory", label: "ML History", icon: Clock },
     { id: "camera", label: "Live Camera", icon: Camera },
     { id: "settings", label: "Settings", icon: Settings },
     // { id: "system", label: "System Info", icon: Info },

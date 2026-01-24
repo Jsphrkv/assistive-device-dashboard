@@ -3,6 +3,7 @@ import AlertsChart from "./AlertsChart";
 import ObstaclesChart from "./ObstaclesChart";
 import PeakTimesChart from "./PeakTimesChart";
 import { statisticsAPI } from "../../services/api";
+import MLStatistics from "../ml/MLStatistics";
 
 const StatisticsTab = () => {
   const [dailyStats, setDailyStats] = useState([]);
@@ -43,18 +44,23 @@ const StatisticsTab = () => {
   }
 
   return (
-    <div className="space-y-6 fade-in">
-      <h2 className="text-2xl font-bold text-gray-900">
-        Alert History & Statistics
-      </h2>
+    <div className="p-6">
+      <div className="space-y-6 fade-in">
+        <h2 className="text-2xl font-bold text-gray-900">
+          Alert History & Statistics
+        </h2>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <AlertsChart data={dailyStats} />
-        <ObstaclesChart data={obstacleStats} />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <AlertsChart data={dailyStats} />
+          <ObstaclesChart data={obstacleStats} />
+        </div>
+
+        <div className="grid grid-cols-1 gap-6">
+          <PeakTimesChart data={hourlyStats} />
+        </div>
       </div>
-
-      <div className="grid grid-cols-1 gap-6">
-        <PeakTimesChart data={hourlyStats} />
+      <div className="mt-8">
+        <MLStatistics />
       </div>
     </div>
   );
