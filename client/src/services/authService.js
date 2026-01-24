@@ -12,6 +12,19 @@ export const login = async (username, password) => {
 
     return { user, error: null };
   } catch (error) {
+    // Handle email verification error
+    if (
+      error.response?.status === 403 &&
+      error.response?.data?.needsVerification
+    ) {
+      return {
+        user: null,
+        error: error.response.data.error,
+        message: error.response.data.message,
+        email: error.response.data.email,
+      };
+    }
+
     return {
       user: null,
       error: error.response?.data?.error || "Login failed",
@@ -44,10 +57,7 @@ export const isAdmin = () => {
   return user?.role === "admin";
 };
 
-// Add logActivity function (used by SettingsTab)
 export const logActivity = async (userId, action, description = null) => {
-  // This will be handled by backend automatically
-  // Just a placeholder for now
   console.log(`Activity: ${action}`, { userId, description });
 };
 

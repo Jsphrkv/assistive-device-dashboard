@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from "react";
 import LoginForm from "./pages/LoginForm";
 import Register from "./pages/Register";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
+import VerifyEmail from "./pages/VerifyEmail";
 import Layout from "./components/layout/Layout";
 import DashboardTab from "./components/dashboard/DashboardTab";
 import DetectionLogsTab from "./components/logs/DetectionLogsTab";
@@ -14,50 +17,89 @@ import { getCurrentUser } from "./services/authService";
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [activeTab, setActiveTab] = useState("dashboard");
-  const [showRegister, setShowRegister] = useState(false); // NEW: Track if showing register page
+  const [currentView, setCurrentView] = useState("login"); // login, register, forgotPassword, resetPassword, verifyEmail
 
   useEffect(() => {
-    // Check if user is already logged in
-    const user = getCurrentUser();
-    if (user) {
-      setCurrentUser(user);
+    // Check URL for special routes
+    const path = window.location.pathname;
+    const search = window.location.search;
+
+    console.log("=".repeat(60));
+    console.log("APP ROUTING");
+    console.log("Path:", path);
+    console.log("Search:", search);
+
+    // Check for password reset FIRST (more specific)
+    if (path === "/reset-password" && search.includes("token=")) {
+      console.log("→ Route: PASSWORD RESET");
+      setCurrentView("resetPassword");
     }
+    // Then check for email verification
+    else if (path === "/verify-email" && search.includes("token=")) {
+      console.log("→ Route: EMAIL VERIFICATION");
+      setCurrentView("verifyEmail");
+    }
+    // Default: check if user is logged in
+    else {
+      console.log("→ Route: DEFAULT (checking auth)");
+      const user = getCurrentUser();
+      if (user) {
+        setCurrentUser(user);
+      }
+    }
+    console.log("=".repeat(60));
   }, []);
 
   const handleLogin = (user) => {
     setCurrentUser(user);
-    setShowRegister(false); // Reset to login view
+    setCurrentView("login");
+    // Clear URL params
+    window.history.pushState({}, "", "/");
   };
 
   const handleLogout = () => {
-    // Clear localStorage first
-    localStorage.removeItem("token");
-    localStorage.removeItem("currentUser");
-
-    // Then update state
     setCurrentUser(null);
     setActiveTab("dashboard");
-    setShowRegister(false);
+    setCurrentView("login");
+    window.history.pushState({}, "", "/");
   };
 
-  const handleShowRegister = () => {
-    setShowRegister(true);
-  };
-
+  const handleShowRegister = () => setCurrentView("register");
   const handleShowLogin = () => {
-    setShowRegister(false);
+    setCurrentView("login");
+    window.history.pushState({}, "", "/");
   };
+  const handleShowForgotPassword = () => setCurrentView("forgotPassword");
 
-  // If not logged in, show login or register page
+  // Handle special views (email verification, password reset)
+  if (currentView === "verifyEmail") {
+    return <VerifyEmail onShowLogin={handleShowLogin} />;
+  }
+
+  if (currentView === "resetPassword") {
+    return <ResetPassword onShowLogin={handleShowLogin} />;
+  }
+
+  // Not logged in - show auth views
   if (!currentUser) {
-    if (showRegister) {
+    if (currentView === "register") {
       return <Register onShowLogin={handleShowLogin} />;
     }
+
+    if (currentView === "forgotPassword") {
+      return <ForgotPassword onShowLogin={handleShowLogin} />;
+    }
+
     return (
-      <LoginForm onLogin={handleLogin} onShowRegister={handleShowRegister} />
+      <LoginForm
+        onLogin={handleLogin}
+        onShowRegister={handleShowRegister}
+        onShowForgotPassword={handleShowForgotPassword}
+      />
     );
   }
 
+  // Logged in - show dashboard
   const renderActiveTab = () => {
     switch (activeTab) {
       case "dashboard":

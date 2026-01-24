@@ -1,8 +1,9 @@
 import React, { useState } from "react";
-import { Camera, Eye, EyeOff } from "lucide-react";
+import { Camera, Eye, EyeOff, Mail, AlertCircle } from "lucide-react";
 import { login } from "../services/authService";
+import { authAPI } from "../services/api";
 
-const LoginForm = ({ onLogin, onShowRegister }) => {
+const LoginForm = ({ onLogin, onShowRegister, onShowForgotPassword }) => {
   const [formData, setFormData] = useState({
     username: "",
     password: "",
@@ -10,43 +11,61 @@ const LoginForm = ({ onLogin, onShowRegister }) => {
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [userEmail, setUserEmail] = useState("");
+  const [resendingEmail, setResendingEmail] = useState(false);
 
   const handleSubmit = async () => {
     console.log("=== SUBMIT STARTED ===");
 
     if (!formData.username || !formData.password) {
-      console.log("Validation failed");
       setError("Please enter both username and password");
       return;
     }
 
     setLoading(true);
     setError("");
+    setNeedsVerification(false);
 
-    console.log("About to call login...");
-
-    // IMPORTANT: Wrap the entire login in try-catch
     try {
       const result = await login(formData.username, formData.password);
-      console.log("Login returned:", result);
 
       if (result.error) {
-        console.log("Setting error:", result.error);
-        setError(result.error);
+        // Check if it's an email verification error
+        if (result.error === "Email not verified") {
+          setNeedsVerification(true);
+          setUserEmail(result.email || "");
+          setError("Please verify your email before logging in");
+        } else {
+          setError(result.error);
+        }
         setLoading(false);
-        console.log("Error set, should NOT refresh now");
         return;
       }
 
-      console.log("Login success, calling onLogin");
       onLogin(result.user);
     } catch (err) {
-      console.error("CAUGHT EXCEPTION:", err);
       setError("An unexpected error occurred");
       setLoading(false);
     }
+  };
 
-    console.log("=== SUBMIT ENDED ===");
+  const handleResendVerification = async () => {
+    if (!userEmail) {
+      setError("Email address not found. Please try registering again.");
+      return;
+    }
+
+    setResendingEmail(true);
+    try {
+      await authAPI.resendVerification(userEmail);
+      setError("");
+      alert("Verification email sent! Please check your inbox.");
+    } catch (err) {
+      setError("Failed to resend verification email");
+    } finally {
+      setResendingEmail(false);
+    }
   };
 
   const handleKeyPress = (e) => {
@@ -124,8 +143,22 @@ const LoginForm = ({ onLogin, onShowRegister }) => {
           </div>
 
           {error && (
-            <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg">
-              {error}
+            <div className="bg-red-50 border border-red-200 text-red-700 text-sm p-3 rounded-lg flex items-start gap-2">
+              <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p>{error}</p>
+                {needsVerification && userEmail && (
+                  <button
+                    onClick={handleResendVerification}
+                    disabled={resendingEmail}
+                    className="mt-2 text-blue-600 hover:text-blue-700 font-medium underline disabled:opacity-50"
+                  >
+                    {resendingEmail
+                      ? "Sending..."
+                      : "Resend verification email"}
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
@@ -137,6 +170,16 @@ const LoginForm = ({ onLogin, onShowRegister }) => {
           >
             {loading ? "Signing in..." : "Sign In"}
           </button>
+
+          <div className="text-center">
+            <button
+              type="button"
+              onClick={onShowForgotPassword}
+              className="text-sm text-blue-600 hover:text-blue-700"
+            >
+              Forgot password?
+            </button>
+          </div>
         </div>
 
         <div className="mt-6 text-center">

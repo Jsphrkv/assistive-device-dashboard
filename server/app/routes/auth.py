@@ -1,11 +1,23 @@
 from flask import Blueprint, request, jsonify
+from app.utils.tokens import generate_email_token, verify_email_token
 from app.services.supabase_client import get_supabase
+from app.services.email_service import (
+    send_verification_email, 
+    send_password_reset_email,
+    generate_token as generate_email_token,
+    verify_token as verify_email_token
+)
 from app.utils.jwt_handler import generate_token
 from app.middleware.auth import token_required
 import bcrypt
 import traceback
+from datetime import datetime, timedelta
 
 auth_bp = Blueprint('auth', __name__)
+
+# ============================================
+# EXISTING ROUTES (Keep these)
+# ============================================
 
 @auth_bp.route('/test-db', methods=['GET'])
 def test_db():
@@ -25,61 +37,6 @@ def test_db():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-@auth_bp.route('/login', methods=['POST'])
-def login():
-    """User login endpoint"""
-    try:
-        data = request.get_json()
-        
-        if not data or not data.get('username') or not data.get('password'):
-            return jsonify({'error': 'Username and password are required'}), 400
-        
-        username = data['username']
-        password = data['password']
-        
-        # Get user from database
-        supabase = get_supabase()
-        response = supabase.table('users').select('*').eq('username', username).execute()
-        
-        if not response.data or len(response.data) == 0:
-            return jsonify({'error': 'Invalid credentials'}), 401
-        
-        user = response.data[0]
-        
-        # ✅ Verify password with bcrypt
-        if not bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
-            return jsonify({'error': 'Invalid credentials'}), 401
-        
-        # Update last login
-        supabase.table('users').update({
-            'last_login': 'now()'
-        }).eq('id', user['id']).execute()
-        
-        # Generate JWT token
-        token = generate_token(user['id'], user['username'], user['role'])
-        
-        # Log activity
-        supabase.table('activity_logs').insert({
-            'user_id': user['id'],
-            'action': 'login',
-            'description': f"User {user['username']} logged in"
-        }).execute()
-        
-        return jsonify({
-            'token': token,
-            'user': {
-                'id': user['id'],
-                'username': user['username'],
-                'role': user['role'],
-                'email': user.get('email')
-            }
-        }), 200
-        
-    except Exception as e:
-        print(f"Login error: {str(e)}")
-        traceback.print_exc()
-        return jsonify({'error': 'Login failed'}), 500
-
 @auth_bp.route('/me', methods=['GET'])
 @token_required
 def get_current_user():
@@ -88,7 +45,7 @@ def get_current_user():
         user_id = request.current_user['user_id']
         
         supabase = get_supabase()
-        response = supabase.table('users').select('id, username, role, email').eq('id', user_id).execute()
+        response = supabase.table('users').select('id, username, role, email, email_verified').eq('id', user_id).execute()
         
         if not response.data:
             return jsonify({'error': 'User not found'}), 404
@@ -122,52 +79,405 @@ def logout():
         print(f"Logout error: {str(e)}")
         traceback.print_exc()
         return jsonify({'error': 'Logout failed'}), 500
-    
+
+# ============================================
+# UPDATED REGISTRATION WITH EMAIL VERIFICATION
+# ============================================
+
 @auth_bp.route('/register', methods=['POST'])
 def register():
-    """User registration endpoint"""
+    """Register new user"""
     try:
         data = request.get_json()
+        email = data.get('email', '').lower().strip()
+        username = data.get('username', '').strip()
+        password = data.get('password')
+        # full_name = data.get('fullName', '').strip()  # ← Remove this
         
-        if not data or not data.get('username') or not data.get('email') or not data.get('password'):
-            return jsonify({'error': 'Username, email, and password are required'}), 400
+        # Validation
+        if not all([email, username, password]):
+            return jsonify({'error': 'All fields are required'}), 400
         
-        username = data['username']
-        email = data['email']
-        password = data['password']
-        
-        # Validate password strength
         if len(password) < 8:
             return jsonify({'error': 'Password must be at least 8 characters'}), 400
         
-        # Check if user already exists
+        # Check if user exists
         supabase = get_supabase()
-        existing_user = supabase.table('users').select('*').eq('username', username).execute()
+        existing = supabase.table('users').select('email').eq('email', email).execute()
         
-        if existing_user.data and len(existing_user.data) > 0:
-            return jsonify({'error': 'Username already exists'}), 409
+        if existing.data:
+            return jsonify({'error': 'Email already registered'}), 400
         
-        # Check if email already exists
-        existing_email = supabase.table('users').select('*').eq('email', email).execute()
-        
-        if existing_email.data and len(existing_email.data) > 0:
-            return jsonify({'error': 'Email already exists'}), 409
-        
-        # ✅ Hash password with bcrypt
+        # Hash password
         password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
         
-        # Create new user (default role is 'user')
-        new_user = supabase.table('users').insert({
-            'username': username,
-            'email': email,
-            'password_hash': password_hash,  # ✅ Now hashed!
-            'role': 'user',
-            'created_at': 'now()'
-        }).execute()
+        # Generate verification token
+        verification_token = generate_email_token(email, salt='email-verification')
         
-        return jsonify({'message': 'Registration successful'}), 201
+        # Create user WITHOUT full_name
+        user_data = {
+            'email': email,
+            'username': username,
+            'password_hash': password_hash,
+            # 'full_name': full_name,  # ← Remove this line
+            'role': 'user',
+            'email_verified': False,
+            'verification_token': verification_token,
+            'created_at': datetime.utcnow().isoformat()
+        }
+        
+        response = supabase.table('users').insert(user_data).execute()
+        
+        if not response.data:
+            return jsonify({'error': 'Registration failed'}), 500
+        
+        # Send verification email
+        send_verification_email(email, username, verification_token)
+        
+        return jsonify({
+            'message': 'Registration successful! Please check your email to verify your account.'
+        }), 201
         
     except Exception as e:
         print(f"Registration error: {str(e)}")
         traceback.print_exc()
         return jsonify({'error': 'Registration failed'}), 500
+
+# ============================================
+# EMAIL VERIFICATION
+# ============================================
+
+@auth_bp.route('/verify-email', methods=['POST'])
+def verify_email():
+    """Verify email with token"""
+    try:
+        data = request.get_json()
+        token = data.get('token')
+        
+        if not token:
+            return jsonify({'error': 'Verification token is required'}), 400
+        
+        # Verify token (24 hour expiry)
+        email = verify_email_token(token, salt='email-verification', max_age=86400)
+        
+        if not email:
+            return jsonify({'error': 'Invalid or expired verification link'}), 400
+        
+        # Update user
+        supabase = get_supabase()
+        response = supabase.table('users')\
+            .update({
+                'email_verified': True,
+                'verification_token': None
+            })\
+            .eq('email', email)\
+            .execute()
+        
+        if not response.data:
+            return jsonify({'error': 'User not found'}), 404
+        
+        return jsonify({'message': 'Email verified successfully! You can now login.'}), 200
+        
+    except Exception as e:
+        print(f"Email verification error: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': 'Verification failed'}), 500
+
+@auth_bp.route('/resend-verification', methods=['POST'])
+def resend_verification():
+    """Resend verification email"""
+    try:
+        data = request.get_json()
+        email = data.get('email', '').lower().strip()
+        
+        if not email:
+            return jsonify({'error': 'Email is required'}), 400
+        
+        supabase = get_supabase()
+        user = supabase.table('users').select('*').eq('email', email).execute()
+        
+        if not user.data:
+            # Don't reveal if email exists (security)
+            return jsonify({'message': 'If the email exists, a verification link has been sent'}), 200
+        
+        user_data = user.data[0]
+        
+        if user_data.get('email_verified', False):
+            return jsonify({'error': 'Email already verified'}), 400
+        
+        # Generate new token
+        verification_token = generate_email_token(email, salt='email-verification')
+        
+        # Update token
+        supabase.table('users')\
+            .update({'verification_token': verification_token})\
+            .eq('email', email)\
+            .execute()
+        
+        # Send email
+        send_verification_email(email, user_data['username'], verification_token)
+        
+        return jsonify({'message': 'Verification email sent! Please check your inbox.'}), 200
+        
+    except Exception as e:
+        print(f"Resend verification error: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': 'Failed to resend verification email'}), 500
+
+# ============================================
+# UPDATED LOGIN (requires email verification)
+# ============================================
+
+@auth_bp.route('/login', methods=['POST'])
+def login():
+    """User login endpoint (requires verified email)"""
+    try:
+        data = request.get_json()
+        
+        if not data or not data.get('username') or not data.get('password'):
+            return jsonify({'error': 'Username and password are required'}), 400
+        
+        username = data['username']
+        password = data['password']
+        
+        # Get user from database
+        supabase = get_supabase()
+        response = supabase.table('users').select('*').eq('username', username).execute()
+        
+        if not response.data or len(response.data) == 0:
+            return jsonify({'error': 'Invalid credentials'}), 401
+        
+        user = response.data[0]
+        
+        # Check if email is verified ✅
+        if not user.get('email_verified', False):
+            return jsonify({
+                'error': 'Email not verified',
+                'message': 'Please verify your email before logging in',
+                'email': user.get('email'),
+                'needsVerification': True
+            }), 403
+        
+        # Verify password with bcrypt
+        if not bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
+            return jsonify({'error': 'Invalid credentials'}), 401
+        
+        # Update last login
+        supabase.table('users').update({
+            'last_login': 'now()'
+        }).eq('id', user['id']).execute()
+        
+        # Generate JWT token
+        token = generate_token(user['id'], user['username'], user['role'])
+        
+        # Log activity
+        supabase.table('activity_logs').insert({
+            'user_id': user['id'],
+            'action': 'login',
+            'description': f"User {user['username']} logged in"
+        }).execute()
+        
+        return jsonify({
+            'token': token,
+            'user': {
+                'id': user['id'],
+                'username': user['username'],
+                'role': user['role'],
+                'email': user.get('email')
+            }
+        }), 200
+        
+    except Exception as e:
+        print(f"Login error: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': 'Login failed'}), 500
+
+# ============================================
+# PASSWORD RESET
+# ============================================
+
+@auth_bp.route('/forgot-password', methods=['POST'])
+def forgot_password():
+    """Request password reset"""
+    try:
+        data = request.get_json()
+        email = data.get('email', '').lower().strip()
+        
+        if not email:
+            return jsonify({'error': 'Email is required'}), 400
+        
+        supabase = get_supabase()
+        user = supabase.table('users').select('*').eq('email', email).execute()
+        
+        # Always return success to prevent email enumeration
+        if not user.data:
+            return jsonify({'message': 'If the email exists, a password reset link has been sent'}), 200
+        
+        user_data = user.data[0]
+        
+        # Generate reset token (24 hours expiry)
+        reset_token = generate_email_token(email, salt='password-reset')
+        
+        print(f"="*60)
+        print(f"PASSWORD RESET REQUESTED")
+        print(f"Email: {email}")
+        print(f"Username: {user_data['username']}")
+        print(f"Token (first 50 chars): {reset_token[:50]}...")
+        print(f"Token length: {len(reset_token)}")
+        print(f"="*60)
+        
+        # Send reset email
+        send_password_reset_email(email, user_data['username'], reset_token)
+        
+        return jsonify({'message': 'If the email exists, a password reset link has been sent'}), 200
+        
+    except Exception as e:
+        print(f"Forgot password error: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': 'Failed to process request'}), 500
+
+@auth_bp.route('/verify-reset-token/<path:token>', methods=['GET'])
+def verify_reset_token_route(token):
+    """Verify if reset token is valid"""
+    print(f"="*60)
+    print(f"VERIFY RESET TOKEN ENDPOINT HIT")
+    print(f"Received token: {token}")
+    print(f"="*60)
+    
+    try:
+        from urllib.parse import unquote
+        from app.utils.tokens import verify_email_token
+        
+        # URL decode the token
+        decoded_token = unquote(token)
+        
+        print(f"After URL decode: {decoded_token}")
+        print(f"Token length: {len(decoded_token)}")
+        
+        # Verify token with 24-hour expiry
+        email = verify_email_token(decoded_token, salt='password-reset', max_age=86400)
+        
+        if not email:
+            print("❌ Token verification returned None")
+            print(f"="*60)
+            return jsonify({
+                'valid': False,
+                'error': 'Invalid or expired reset link'
+            }), 400
+        
+        print(f"✅ Token VALID for email: {email}")
+        print(f"="*60)
+        
+        return jsonify({
+            'valid': True,
+            'email': email
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ EXCEPTION in verify_reset_token_route:")
+        print(f"Exception type: {type(e).__name__}")
+        print(f"Exception message: {str(e)}")
+        
+        import traceback
+        print("Full traceback:")
+        traceback.print_exc()
+        print(f"="*60)
+        
+        return jsonify({
+            'valid': False,
+            'error': 'Token verification failed',
+            'details': str(e)  # Include error details in response
+        }), 500
+
+@auth_bp.route('/reset-password', methods=['POST'])
+def reset_password():
+    """Reset password with token"""
+    print(f"="*60)
+    print(f"PASSWORD RESET ENDPOINT HIT")
+    print(f"="*60)
+    
+    try:
+        from urllib.parse import unquote
+        from app.utils.tokens import verify_email_token
+        import bcrypt
+        from app.services.supabase_client import get_supabase
+        
+        data = request.get_json()
+        print(f"Received data: {data}")
+        
+        token = data.get('token')
+        new_password = data.get('password')
+        
+        print(f"Token present: {bool(token)}")
+        print(f"Password present: {bool(new_password)}")
+        
+        if not token or not new_password:
+            print("❌ Missing token or password")
+            return jsonify({'error': 'Token and new password are required'}), 400
+        
+        if len(new_password) < 8:
+            print("❌ Password too short")
+            return jsonify({'error': 'Password must be at least 8 characters'}), 400
+        
+        # URL decode the token
+        decoded_token = unquote(token)
+        print(f"Decoded token (first 50): {decoded_token[:50]}...")
+        
+        # Verify token (24 hours expiry)
+        email = verify_email_token(decoded_token, salt='password-reset', max_age=86400)
+        
+        if not email:
+            print("❌ Token verification failed")
+            return jsonify({'error': 'Invalid or expired reset link'}), 400
+        
+        print(f"✅ Token valid for: {email}")
+        
+        # Hash new password
+        password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        print(f"✅ Password hashed")
+        
+        # Update password
+        supabase = get_supabase()
+        response = supabase.table('users')\
+            .update({
+                'password_hash': password_hash
+            })\
+            .eq('email', email)\
+            .execute()
+        
+        if not response.data:
+            print("❌ User not found in database")
+            return jsonify({'error': 'User not found'}), 404
+        
+        print(f"✅ Password updated in database")
+        
+        # Log activity
+        user = response.data[0]
+        try:
+            supabase.table('activity_logs').insert({
+                'user_id': user['id'],
+                'action': 'password_reset',
+                'description': f"Password reset for user {user['username']}"
+            }).execute()
+        except Exception as log_error:
+            print(f"Warning: Failed to log activity: {log_error}")
+        
+        print(f"✅ Password reset SUCCESSFUL for: {email}")
+        print(f"="*60)
+        
+        return jsonify({'message': 'Password reset successful! You can now login with your new password.'}), 200
+        
+    except Exception as e:
+        print(f"❌ PASSWORD RESET ERROR:")
+        print(f"Exception type: {type(e).__name__}")
+        print(f"Exception message: {str(e)}")
+        
+        import traceback
+        print("Full traceback:")
+        traceback.print_exc()
+        print(f"="*60)
+        
+        return jsonify({
+            'error': 'Password reset failed',
+            'details': str(e)
+        }), 500

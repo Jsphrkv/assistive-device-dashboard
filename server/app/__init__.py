@@ -1,6 +1,7 @@
 from flask import Flask
 from flask_cors import CORS
 from app.config import config
+from app.services.email_service import init_mail 
 import os
 
 def create_app(config_name=None):
@@ -13,6 +14,9 @@ def create_app(config_name=None):
     
     # Initialize CORS
     CORS(app, origins=app.config['CORS_ORIGINS'])
+
+    # Initialize Flask-Mail ✅ NEW
+    init_mail(app)
     
     # Register blueprints
     from app.routes.auth import auth_bp
