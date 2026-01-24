@@ -1,5 +1,5 @@
 import React from "react";
-import { isAuthenticated } from "../../services/authService";
+import { isAuthenticated } from "../services/authService";
 
 const ProtectedRoute = ({ children, redirectTo = "/login" }) => {
   if (!isAuthenticated()) {

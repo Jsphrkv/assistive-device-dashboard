@@ -3,6 +3,7 @@ import {
   getCurrentUser,
   login as loginService,
   logout as logoutService,
+  isAuthenticated,
 } from "../services/authService";
 
 const AuthContext = createContext(null);
@@ -12,8 +13,13 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const currentUser = getCurrentUser();
-    setUser(currentUser);
+    // Only set user if they're actually authenticated (token exists)
+    if (isAuthenticated()) {
+      const currentUser = getCurrentUser();
+      setUser(currentUser);
+    } else {
+      setUser(null);
+    }
     setLoading(false);
   }, []);
 
@@ -28,6 +34,8 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     await logoutService();
     setUser(null);
+    // Force redirect to login page
+    window.location.href = "/";
   };
 
   const value = {

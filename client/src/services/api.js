@@ -31,10 +31,17 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Unauthorized - clear token and redirect to login
-      storage.remove("token"); // ✅ Changed to use storage.remove
-      storage.remove("currentUser");
-      window.location.href = "/";
+      // Only redirect if NOT a login/register request
+      const isAuthRequest =
+        error.config?.url?.includes("/auth/login") ||
+        error.config?.url?.includes("/auth/register");
+
+      if (!isAuthRequest) {
+        // This is an expired token on a protected route
+        storage.remove("token");
+        storage.remove("currentUser");
+        window.location.href = "/";
+      }
     }
     return Promise.reject(error);
   },
@@ -44,6 +51,9 @@ api.interceptors.response.use(
 export const authAPI = {
   login: (username, password) =>
     api.post("/auth/login", { username, password }),
+
+  register: (username, email, password) =>
+    api.post("/auth/register", { username, email, password }),
 
   logout: () => api.post("/auth/logout"),
 

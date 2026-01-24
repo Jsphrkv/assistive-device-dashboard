@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from app.services.supabase_client import get_supabase
 from app.middleware.auth import token_required
-from app.middleware.rbac import admin_required
+from app.middleware.auth import admin_required
 
 settings_bp = Blueprint('settings', __name__)
 

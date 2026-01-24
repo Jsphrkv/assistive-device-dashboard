@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from app.services.supabase_client import get_supabase
 from app.middleware.auth import token_required
-from app.middleware.rbac import check_permission
+from app.middleware.auth import check_permission
 
 statistics_bp = Blueprint('statistics', __name__)
 

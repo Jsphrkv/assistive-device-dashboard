@@ -31,39 +31,24 @@ def login():
     try:
         data = request.get_json()
         
-        # DEBUG: Print received data
-        print(f"Received login data: {data}")
-        
         if not data or not data.get('username') or not data.get('password'):
             return jsonify({'error': 'Username and password are required'}), 400
         
         username = data['username']
         password = data['password']
         
-        print(f"Attempting login for username: {username}")
-        
         # Get user from database
         supabase = get_supabase()
         response = supabase.table('users').select('*').eq('username', username).execute()
         
-        print(f"Database response: {response.data}")
-        
         if not response.data or len(response.data) == 0:
-            print(f"User not found: {username}")
             return jsonify({'error': 'Invalid credentials'}), 401
         
         user = response.data[0]
         
-        print(f"Found user: {user['username']}, checking password...")
-        print(f"Stored password_hash: {user['password_hash']}")
-        print(f"Provided password: {password}")
-        
-        # Verify password (for demo, using plain text comparison)
-        if user['password_hash'] != password:
-            print("Password mismatch!")
+        # ✅ Verify password with bcrypt
+        if not bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
             return jsonify({'error': 'Invalid credentials'}), 401
-        
-        print("Password matched! Generating token...")
         
         # Update last login
         supabase.table('users').update({
@@ -151,6 +136,10 @@ def register():
         email = data['email']
         password = data['password']
         
+        # Validate password strength
+        if len(password) < 8:
+            return jsonify({'error': 'Password must be at least 8 characters'}), 400
+        
         # Check if user already exists
         supabase = get_supabase()
         existing_user = supabase.table('users').select('*').eq('username', username).execute()
@@ -164,11 +153,14 @@ def register():
         if existing_email.data and len(existing_email.data) > 0:
             return jsonify({'error': 'Email already exists'}), 409
         
+        # ✅ Hash password with bcrypt
+        password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        
         # Create new user (default role is 'user')
         new_user = supabase.table('users').insert({
             'username': username,
             'email': email,
-            'password_hash': password,  # TODO: Use bcrypt.hashpw() in production
+            'password_hash': password_hash,  # ✅ Now hashed!
             'role': 'user',
             'created_at': 'now()'
         }).execute()

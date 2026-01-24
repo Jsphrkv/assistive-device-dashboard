@@ -127,3 +127,10 @@ media/
 *.tmp
 *.temp
 .cache/
+
+# Python Cache
+_pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd

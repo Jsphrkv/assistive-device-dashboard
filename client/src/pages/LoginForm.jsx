@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { Camera, Eye, EyeOff } from "lucide-react";
-import { login } from "../../services/authService";
+import { login } from "../services/authService";
 
-const LoginForm = ({ onLogin }) => {
+const LoginForm = ({ onLogin, onShowRegister }) => {
   const [formData, setFormData] = useState({
     username: "",
     password: "",
@@ -12,7 +12,10 @@ const LoginForm = ({ onLogin }) => {
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
+    console.log("=== SUBMIT STARTED ===");
+
     if (!formData.username || !formData.password) {
+      console.log("Validation failed");
       setError("Please enter both username and password");
       return;
     }
@@ -20,15 +23,30 @@ const LoginForm = ({ onLogin }) => {
     setLoading(true);
     setError("");
 
-    const result = await login(formData.username, formData.password);
+    console.log("About to call login...");
 
-    if (result.error) {
-      setError(result.error);
+    // IMPORTANT: Wrap the entire login in try-catch
+    try {
+      const result = await login(formData.username, formData.password);
+      console.log("Login returned:", result);
+
+      if (result.error) {
+        console.log("Setting error:", result.error);
+        setError(result.error);
+        setLoading(false);
+        console.log("Error set, should NOT refresh now");
+        return;
+      }
+
+      console.log("Login success, calling onLogin");
+      onLogin(result.user);
+    } catch (err) {
+      console.error("CAUGHT EXCEPTION:", err);
+      setError("An unexpected error occurred");
       setLoading(false);
-      return;
     }
 
-    onLogin(result.user);
+    console.log("=== SUBMIT ENDED ===");
   };
 
   const handleKeyPress = (e) => {
@@ -66,6 +84,7 @@ const LoginForm = ({ onLogin }) => {
               onKeyPress={handleKeyPress}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="Enter username"
+              disabled={loading}
             />
           </div>
 
@@ -83,6 +102,7 @@ const LoginForm = ({ onLogin }) => {
                 onKeyPress={handleKeyPress}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="Enter password"
+                disabled={loading}
               />
               <button
                 type="button"
@@ -110,6 +130,7 @@ const LoginForm = ({ onLogin }) => {
           )}
 
           <button
+            type="button"
             onClick={handleSubmit}
             disabled={loading}
             className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
@@ -118,18 +139,17 @@ const LoginForm = ({ onLogin }) => {
           </button>
         </div>
 
-        <div className="mt-6 pt-6 border-t border-gray-200">
-          <p className="text-xs text-gray-500 text-center mb-2">
-            Demo Credentials:
+        <div className="mt-6 text-center">
+          <p className="text-sm text-gray-600">
+            Don't have an account?{" "}
+            <button
+              type="button"
+              onClick={onShowRegister}
+              className="text-blue-600 hover:text-blue-700 font-medium"
+            >
+              Sign up here
+            </button>
           </p>
-          <div className="text-xs text-gray-600 space-y-1">
-            <p>
-              <strong>Admin:</strong> admin / admin123
-            </p>
-            <p>
-              <strong>User:</strong> user / user123
-            </p>
-          </div>
         </div>
       </div>
     </div>

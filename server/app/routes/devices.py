@@ -1,16 +1,19 @@
 from flask import Blueprint, request, jsonify
 from app.services.supabase_client import get_supabase
-from app.middleware.auth import token_required
-from app.middleware.rbac import admin_required
+from app.middleware.auth import token_required, device_token_required, admin_required, check_permission
 from app.utils.jwt_handler import generate_device_token
 import secrets
 
 devices_bp = Blueprint('devices', __name__)
 
+# ============================================
+# DEVICE MANAGEMENT (User-facing)
+# ============================================
+
 @devices_bp.route('/', methods=['GET'])
 @token_required
 def get_user_devices():
-    """Get all devices for current user"""
+    """Get all devices for current user with their status"""
     try:
         user_id = request.current_user['user_id']
         user_role = request.current_user['role']
@@ -30,10 +33,27 @@ def get_user_devices():
                 .order('created_at', desc=True)\
                 .execute()
         
-        return jsonify({'data': response.data}), 200
+        # Enrich with current status from device_status table
+        devices = response.data
+        for device in devices:
+            # Get latest status for this device if it's active
+            if device.get('status') == 'active':
+                status_response = supabase.table('device_status')\
+                    .select('*')\
+                    .eq('device_id', device['id'])\
+                    .order('updated_at', desc=True)\
+                    .limit(1)\
+                    .execute()
+                
+                if status_response.data:
+                    device['current_status'] = status_response.data[0]
+        
+        return jsonify({'data': devices}), 200
         
     except Exception as e:
         print(f"Get devices error: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': 'Failed to get devices'}), 500
 
 @devices_bp.route('/', methods=['POST'])
@@ -55,7 +75,7 @@ def register_device():
         
         supabase = get_supabase()
         
-        # Check device limit (optional - e.g., max 5 devices per user)
+        # Check device limit (max 5 devices per user)
         existing = supabase.table('user_devices')\
             .select('*', count='exact')\
             .eq('user_id', user_id)\
@@ -115,7 +135,7 @@ def update_device(device_id):
         
         supabase = get_supabase()
         
-        # Check ownership (users can only update their own devices)
+        # Check ownership
         device = supabase.table('user_devices')\
             .select('*')\
             .eq('id', device_id)\
@@ -178,6 +198,13 @@ def delete_device(device_id):
         # Delete device
         supabase.table('user_devices').delete().eq('id', device_id).execute()
         
+        # Log activity
+        supabase.table('activity_logs').insert({
+            'user_id': user_id,
+            'action': 'Device Deleted',
+            'description': f'Deleted device: {device.data["device_name"]}'
+        }).execute()
+        
         return jsonify({'message': 'Device deleted successfully'}), 200
         
     except Exception as e:
@@ -228,3 +255,195 @@ def regenerate_device_token(device_id):
     except Exception as e:
         print(f"Regenerate token error: {e}")
         return jsonify({'error': 'Failed to regenerate token'}), 500
+
+# ============================================
+# DEVICE STATUS (Runtime data)
+# ============================================
+
+@devices_bp.route('/status', methods=['GET'])
+@token_required
+@check_permission('device', 'read')
+def get_device_status():
+    """Get current device status (for dashboard)"""
+    try:
+        user_id = request.current_user['user_id']
+        supabase = get_supabase()
+        
+        # Get user's active device
+        device = supabase.table('user_devices')\
+            .select('*')\
+            .eq('user_id', user_id)\
+            .eq('status', 'active')\
+            .limit(1)\
+            .execute()
+        
+        if not device.data:
+            return jsonify({'error': 'No active device found'}), 404
+        
+        device_id = device.data[0]['id']
+        
+        # Get latest status
+        response = supabase.table('device_status')\
+            .select('*')\
+            .eq('device_id', device_id)\
+            .order('updated_at', desc=True)\
+            .limit(1)\
+            .execute()
+        
+        if not response.data:
+            return jsonify({'error': 'No device status found'}), 404
+        
+        status = response.data[0]
+        
+        return jsonify({
+            'deviceOnline': status['device_online'],
+            'cameraStatus': status['camera_status'],
+            'batteryLevel': status['battery_level'],
+            'lastObstacle': status['last_obstacle'],
+            'lastDetectionTime': status['last_detection_time']
+        }), 200
+        
+    except Exception as e:
+        print(f"Get device status error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Failed to get device status'}), 500
+
+@devices_bp.route('/status', methods=['POST'])
+@device_token_required
+def update_device_status():
+    """Update device status (called by Raspberry Pi)"""
+    try:
+        device_id = request.current_device['id']
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        supabase = get_supabase()
+        
+        # Prepare update data
+        update_data = {
+            'device_id': device_id,
+            'updated_at': 'now()'
+        }
+        
+        if 'deviceOnline' in data:
+            update_data['device_online'] = data['deviceOnline']
+        if 'cameraStatus' in data:
+            update_data['camera_status'] = data['cameraStatus']
+        if 'batteryLevel' in data:
+            update_data['battery_level'] = data['batteryLevel']
+        if 'lastObstacle' in data:
+            update_data['last_obstacle'] = data['lastObstacle']
+        if 'lastDetectionTime' in data:
+            update_data['last_detection_time'] = data['lastDetectionTime']
+        
+        # Check if a status row exists for this device
+        existing = supabase.table('device_status')\
+            .select('id')\
+            .eq('device_id', device_id)\
+            .limit(1)\
+            .execute()
+        
+        if existing.data and len(existing.data) > 0:
+            # Update existing row
+            status_id = existing.data[0]['id']
+            response = supabase.table('device_status')\
+                .update(update_data)\
+                .eq('id', status_id)\
+                .execute()
+        else:
+            # Insert new row
+            response = supabase.table('device_status').insert(update_data).execute()
+        
+        return jsonify({'message': 'Device status updated', 'data': response.data}), 200
+        
+    except Exception as e:
+        print(f"Update device status error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Failed to update device status'}), 500
+
+# ============================================
+# SYSTEM INFO (Hardware details)
+# ============================================
+
+@devices_bp.route('/system-info', methods=['GET'])
+@token_required
+@check_permission('system', 'read')
+def get_system_info():
+    """Get system information for user's device"""
+    try:
+        user_id = request.current_user['user_id']
+        supabase = get_supabase()
+        
+        # Get user's active device
+        device = supabase.table('user_devices')\
+            .select('*')\
+            .eq('user_id', user_id)\
+            .eq('status', 'active')\
+            .limit(1)\
+            .execute()
+        
+        if not device.data:
+            return jsonify({'error': 'No active device found'}), 404
+        
+        device_id = device.data[0]['id']
+        
+        # Get system info for this device
+        response = supabase.table('system_info')\
+            .select('*')\
+            .eq('device_id', device_id)\
+            .limit(1)\
+            .execute()
+        
+        if not response.data:
+            return jsonify({'error': 'No system info found'}), 404
+        
+        info = response.data[0]
+        
+        return jsonify({
+            'raspberryPiModel': info['raspberry_pi_model'],
+            'softwareVersion': info['software_version'],
+            'lastRebootTime': info['last_reboot_time'],
+            'cpuTemperature': info['cpu_temperature'],
+            'cpuModel': info['cpu_model'],
+            'ramSize': info['ram_size'],
+            'storageSize': info['storage_size'],
+            'osVersion': info['os_version']
+        }), 200
+        
+    except Exception as e:
+        print(f"Get system info error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Failed to get system info'}), 500
+
+@devices_bp.route('/system-info/temperature', methods=['POST'])
+@device_token_required
+def update_temperature():
+    """Update CPU temperature (called by Raspberry Pi)"""
+    try:
+        device_id = request.current_device['id']
+        data = request.get_json()
+        
+        if not data or 'temperature' not in data:
+            return jsonify({'error': 'Temperature is required'}), 400
+        
+        supabase = get_supabase()
+        response = supabase.table('system_info')\
+            .update({
+                'cpu_temperature': data['temperature'],
+                'updated_at': 'now()'
+            })\
+            .eq('device_id', device_id)\
+            .execute()
+        
+        return jsonify({'message': 'Temperature updated'}), 200
+        
+    except Exception as e:
+        print(f"Update temperature error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Failed to update temperature'}), 500
