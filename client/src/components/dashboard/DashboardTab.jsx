@@ -18,7 +18,14 @@ const DashboardTab = () => {
     try {
       const response = await deviceAPI.getStatus();
       setDeviceStatus(response.data);
-      setHasDevice(true);
+
+      // Check if the response indicates no device
+      if (response.data.hasDevice === false) {
+        setHasDevice(false);
+      } else {
+        setHasDevice(true);
+      }
+
       setLoading(false);
     } catch (error) {
       console.error("Error fetching device status:", error);
