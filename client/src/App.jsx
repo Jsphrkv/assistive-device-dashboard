@@ -101,7 +101,7 @@ function App() {
         return <DetectionLogsTab />;
       case "statistics":
         return <StatisticsTab />;
-      case "mlhistory": // ← Add this case
+      case "mlhistory":
         return <HistoricalDataTab />;
       case "camera":
         return <CameraTab />;

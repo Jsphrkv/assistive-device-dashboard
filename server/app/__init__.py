@@ -13,14 +13,14 @@ def create_app(config_name=None):
     app.config.from_object(config[config_name])
     
     # Initialize CORS
-    CORS(app, origins=app.config['CORS_ORIGINS'])
+    CORS(app, origins="https://assistive-device-dashboard.vercel.app", supports_credentials=True)
 
     # Initialize Flask-Mail ✅ NEW
     init_mail(app)
     
     # Register blueprints
     from app.routes.auth import auth_bp
-    from app.routes.devices import devices_bp      # ← From devices.py (plural)
+    from app.routes.devices import devices_bp     
     from app.routes.detections import detections_bp
     from app.routes.ml_routes import ml_bp
     from app.routes.statistics import statistics_bp
