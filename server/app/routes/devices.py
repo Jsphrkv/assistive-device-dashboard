@@ -4,7 +4,7 @@ from app.middleware.auth import token_required, device_token_required, admin_req
 from app.utils.jwt_handler import generate_device_token
 import secrets
 
-devices_bp = Blueprint('devices', __name__)
+devices_bp = Blueprint('devices', __name__, url_prefix='/api/devices')
 
 # ============================================
 # DEVICE MANAGEMENT (User-facing)

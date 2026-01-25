@@ -3,7 +3,7 @@ from app.services.supabase_client import get_supabase
 from app.middleware.auth import token_required
 from app.middleware.auth import check_permission
 
-statistics_bp = Blueprint('statistics', __name__)
+statistics_bp = Blueprint('statistics', __name__, url_prefix='/api/statistics')
 
 @statistics_bp.route('/daily', methods=['GET'])
 @token_required

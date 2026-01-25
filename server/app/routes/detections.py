@@ -3,7 +3,7 @@ from app.services.supabase_client import get_supabase
 from app.middleware.auth import token_required, device_token_required
 from app.middleware.auth import check_permission
 
-detections_bp = Blueprint('detections', __name__)
+detections_bp = Blueprint('detections', __name__, url_prefix='/api/detections')
 
 @detections_bp.route('/', methods=['GET'])
 @token_required

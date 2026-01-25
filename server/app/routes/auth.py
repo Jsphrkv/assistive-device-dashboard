@@ -13,7 +13,7 @@ import bcrypt
 import traceback
 from datetime import datetime, timedelta
 
-auth_bp = Blueprint('auth', __name__)
+auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 
 # ============================================
 # EXISTING ROUTES (Keep these)
