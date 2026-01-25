@@ -2,10 +2,12 @@ import React, { useState, useEffect } from "react";
 import SystemCard from "./SystemCard";
 import { deviceAPI } from "../../services/api";
 import { formatDate } from "../../utils/helpers";
+import { Server } from "lucide-react";
 
 const SystemInfoTab = () => {
   const [systemInfo, setSystemInfo] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [hasDevice, setHasDevice] = useState(true);
 
   useEffect(() => {
     fetchSystemInfo();
@@ -17,9 +19,13 @@ const SystemInfoTab = () => {
       const response = await deviceAPI.getSystemInfo();
       if (response.data) {
         setSystemInfo(response.data);
+        setHasDevice(true);
       }
     } catch (error) {
       console.error("Error fetching system info:", error);
+      if (error.response?.status === 404) {
+        setHasDevice(false);
+      }
     } finally {
       setLoading(false);
     }
@@ -27,8 +33,40 @@ const SystemInfoTab = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="spinner"></div>
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (!hasDevice) {
+    return (
+      <div className="space-y-6 fade-in">
+        <h2 className="text-2xl font-bold text-gray-900">System Information</h2>
+
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+          <div className="flex items-start gap-3">
+            <Server className="w-6 h-6 text-yellow-600 mt-1" />
+            <div>
+              <h3 className="text-lg font-semibold text-yellow-900 mb-2">
+                No Device Connected
+              </h3>
+              <p className="text-yellow-800 mb-4">
+                Register a device in the "Devices" tab to view system
+                information.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow p-6 opacity-50">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <SystemCard label="Raspberry Pi Model" value="--" color="blue" />
+            <SystemCard label="Software Version" value="--" color="green" />
+            <SystemCard label="Last Reboot Time" value="--" color="yellow" />
+            <SystemCard label="CPU Temperature" value="--°C" color="gray" />
+          </div>
+        </div>
       </div>
     );
   }

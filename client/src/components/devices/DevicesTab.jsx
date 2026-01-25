@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Plus, Trash2, RefreshCw, Copy, Check } from "lucide-react";
-import axios from "axios";
+import { deviceAPI } from "../../services/api";
 
 const DevicesTab = () => {
   const [devices, setDevices] = useState([]);
@@ -18,16 +18,11 @@ const DevicesTab = () => {
 
   const fetchDevices = async () => {
     try {
-      const token = localStorage.getItem("token");
-      const response = await axios.get(
-        "https://assistive-device-dashboard.onrender.com/api/devices",
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-      setDevices(response.data.data);
+      const response = await deviceAPI.getAll();
+      setDevices(response.data.data || []);
     } catch (error) {
       console.error("Error fetching devices:", error);
+      setDevices([]);
     } finally {
       setLoading(false);
     }
@@ -35,18 +30,10 @@ const DevicesTab = () => {
 
   const handleAddDevice = async () => {
     try {
-      const token = localStorage.getItem("token");
-      const response = await axios.post(
-        "https://assistive-device-dashboard.onrender.com/api/devices",
-        newDevice,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-
+      const response = await deviceAPI.create(newDevice);
       setDevices([response.data.device, ...devices]);
       setShowAddModal(false);
       setNewDevice({ deviceName: "", deviceModel: "Raspberry Pi 4" });
-
-      // Auto-copy token
       copyToClipboard(response.data.device.token);
     } catch (error) {
       console.error("Error adding device:", error);
@@ -55,17 +42,10 @@ const DevicesTab = () => {
   };
 
   const handleDeleteDevice = async (deviceId) => {
-    if (!confirm("Are you sure you want to delete this device?")) return;
+    if (!window.confirm("Are you sure you want to delete this device?")) return;
 
     try {
-      const token = localStorage.getItem("token");
-      await axios.delete(
-        `https://assistive-device-dashboard.onrender.com/api/devices/${deviceId}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-
+      await deviceAPI.delete(deviceId);
       setDevices(devices.filter((d) => d.id !== deviceId));
     } catch (error) {
       console.error("Error deleting device:", error);
@@ -74,16 +54,11 @@ const DevicesTab = () => {
   };
 
   const handleRegenerateToken = async (deviceId) => {
-    if (!confirm("This will invalidate the old token. Continue?")) return;
+    if (!window.confirm("This will invalidate the old token. Continue?"))
+      return;
 
     try {
-      const token = localStorage.getItem("token");
-      const response = await axios.post(
-        `https://assistive-device-dashboard.onrender.com/api/devices/${deviceId}/regenerate-token`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-
+      const response = await deviceAPI.regenerateToken(deviceId);
       copyToClipboard(response.data.token);
       fetchDevices();
     } catch (error) {
@@ -113,8 +88,8 @@ const DevicesTab = () => {
 
   if (loading) {
     return (
-      <div className="flex justify-center p-8">
-        <div className="spinner"></div>
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
       </div>
     );
   }
@@ -132,71 +107,9 @@ const DevicesTab = () => {
         </button>
       </div>
 
-      {/* Devices Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {devices.map((device) => (
-          <div key={device.id} className="bg-white rounded-lg shadow p-6">
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <h3 className="font-semibold text-gray-900">
-                  {device.device_name}
-                </h3>
-                <p className="text-sm text-gray-600">{device.device_model}</p>
-              </div>
-              <span
-                className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(device.status)}`}
-              >
-                {device.status}
-              </span>
-            </div>
-
-            <div className="space-y-2 text-sm text-gray-600 mb-4">
-              <p>Created: {new Date(device.created_at).toLocaleDateString()}</p>
-              {device.last_seen && (
-                <p>Last seen: {new Date(device.last_seen).toLocaleString()}</p>
-              )}
-            </div>
-
-            <div className="bg-gray-50 p-3 rounded mb-4">
-              <p className="text-xs text-gray-500 mb-1">Device Token:</p>
-              <div className="flex items-center gap-2">
-                <code className="text-xs font-mono truncate flex-1">
-                  {device.device_token.substring(0, 30)}...
-                </code>
-                <button
-                  onClick={() => copyToClipboard(device.device_token)}
-                  className="p-1 hover:bg-gray-200 rounded"
-                >
-                  {copiedToken === device.device_token ? (
-                    <Check className="w-4 h-4 text-green-600" />
-                  ) : (
-                    <Copy className="w-4 h-4 text-gray-600" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                onClick={() => handleRegenerateToken(device.id)}
-                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm bg-yellow-50 text-yellow-700 rounded hover:bg-yellow-100"
-              >
-                <RefreshCw className="w-4 h-4" />
-                New Token
-              </button>
-              <button
-                onClick={() => handleDeleteDevice(device.id)}
-                className="flex items-center justify-center gap-2 px-3 py-2 text-sm bg-red-50 text-red-700 rounded hover:bg-red-100"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {devices.length === 0 && (
+      {devices.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-lg shadow">
+          <Plus className="w-16 h-16 mx-auto mb-4 text-gray-300" />
           <p className="text-gray-600 mb-4">No devices registered yet</p>
           <button
             onClick={() => setShowAddModal(true)}
@@ -204,6 +117,72 @@ const DevicesTab = () => {
           >
             Add Your First Device
           </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {devices.map((device) => (
+            <div key={device.id} className="bg-white rounded-lg shadow p-6">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h3 className="font-semibold text-gray-900">
+                    {device.device_name}
+                  </h3>
+                  <p className="text-sm text-gray-600">{device.device_model}</p>
+                </div>
+                <span
+                  className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(device.status)}`}
+                >
+                  {device.status}
+                </span>
+              </div>
+
+              <div className="space-y-2 text-sm text-gray-600 mb-4">
+                <p>
+                  Created: {new Date(device.created_at).toLocaleDateString()}
+                </p>
+                {device.last_seen && (
+                  <p>
+                    Last seen: {new Date(device.last_seen).toLocaleString()}
+                  </p>
+                )}
+              </div>
+
+              <div className="bg-gray-50 p-3 rounded mb-4">
+                <p className="text-xs text-gray-500 mb-1">Device Token:</p>
+                <div className="flex items-center gap-2">
+                  <code className="text-xs font-mono truncate flex-1">
+                    {device.device_token.substring(0, 30)}...
+                  </code>
+                  <button
+                    onClick={() => copyToClipboard(device.device_token)}
+                    className="p-1 hover:bg-gray-200 rounded"
+                  >
+                    {copiedToken === device.device_token ? (
+                      <Check className="w-4 h-4 text-green-600" />
+                    ) : (
+                      <Copy className="w-4 h-4 text-gray-600" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleRegenerateToken(device.id)}
+                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm bg-yellow-50 text-yellow-700 rounded hover:bg-yellow-100"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  New Token
+                </button>
+                <button
+                  onClick={() => handleDeleteDevice(device.id)}
+                  className="flex items-center justify-center gap-2 px-3 py-2 text-sm bg-red-50 text-red-700 rounded hover:bg-red-100"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
