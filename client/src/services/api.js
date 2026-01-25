@@ -2,7 +2,8 @@ import axios from "axios";
 import { storage } from "../utils/helpers";
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+  import.meta.env.VITE_API_URL ||
+  "https://assistive-device-dashboard.onrender.com/api";
 
 // Create axios instance
 const api = axios.create({
@@ -69,19 +70,13 @@ export const authAPI = {
   getCurrentUser: () => api.get("/auth/me"),
 
   resetPassword: async (token, password) => {
-    const response = await fetch(
-      "http://localhost:5000/api/auth/reset-password",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          token: token,
-          password: password,
-        }),
+    const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
-    );
+      body: JSON.stringify({ token, password }),
+    });
 
     if (!response.ok) {
       const error = await response.json();

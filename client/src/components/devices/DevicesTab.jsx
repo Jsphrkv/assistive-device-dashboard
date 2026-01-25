@@ -19,9 +19,12 @@ const DevicesTab = () => {
   const fetchDevices = async () => {
     try {
       const token = localStorage.getItem("token");
-      const response = await axios.get("http://localhost:5000/api/devices", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await axios.get(
+        "https://assistive-device-dashboard.onrender.com/api/devices",
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
       setDevices(response.data.data);
     } catch (error) {
       console.error("Error fetching devices:", error);
@@ -34,7 +37,7 @@ const DevicesTab = () => {
     try {
       const token = localStorage.getItem("token");
       const response = await axios.post(
-        "http://localhost:5000/api/devices",
+        "https://assistive-device-dashboard.onrender.com/api/devices",
         newDevice,
         { headers: { Authorization: `Bearer ${token}` } },
       );
@@ -56,9 +59,12 @@ const DevicesTab = () => {
 
     try {
       const token = localStorage.getItem("token");
-      await axios.delete(`http://localhost:5000/api/devices/${deviceId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await axios.delete(
+        `https://assistive-device-dashboard.onrender.com/api/devices/${deviceId}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
 
       setDevices(devices.filter((d) => d.id !== deviceId));
     } catch (error) {
@@ -73,7 +79,7 @@ const DevicesTab = () => {
     try {
       const token = localStorage.getItem("token");
       const response = await axios.post(
-        `http://localhost:5000/api/devices/${deviceId}/regenerate-token`,
+        `https://assistive-device-dashboard.onrender.com/api/devices/${deviceId}/regenerate-token`,
         {},
         { headers: { Authorization: `Bearer ${token}` } },
       );

@@ -24,7 +24,7 @@ const AnomalyAlert = ({ deviceId }) => {
       };
 
       const response = await fetch(
-        "http://localhost:5000/api/ml/detect/anomaly",
+        "https://assistive-device-dashboard.onrender.com/api/ml/detect/anomaly",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

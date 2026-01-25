@@ -38,7 +38,7 @@ const ResetPassword = ({ onShowLogin }) => {
       console.log("Verifying token..."); // Debug log
 
       const response = await fetch(
-        `http://localhost:5000/api/auth/verify-reset-token/${encodeURIComponent(tokenToVerify)}`,
+        `https://assistive-device-dashboard.onrender.com/api/auth/verify-reset-token/${encodeURIComponent(tokenToVerify)}`,
         {
           method: "GET",
           headers: {

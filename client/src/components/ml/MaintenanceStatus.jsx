@@ -21,7 +21,7 @@ const MaintenanceStatus = ({ deviceInfo }) => {
       };
 
       const response = await fetch(
-        "http://localhost:5000/api/ml/predict/maintenance",
+        "https://assistive-device-dashboard.onrender.com/api/ml/predict/maintenance",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

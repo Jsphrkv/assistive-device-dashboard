@@ -26,7 +26,7 @@ const ActivityMonitor = () => {
       };
 
       const response = await fetch(
-        "http://localhost:5000/api/ml/recognize/activity",
+        "https://assistive-device-dashboard.onrender.com/api/ml/recognize/activity",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

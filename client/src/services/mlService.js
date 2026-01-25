@@ -2,7 +2,7 @@
  * ML Service - Interface for ML API endpoints
  */
 
-const ML_API_BASE = "http://localhost:5000/api/ml";
+const ML_API_BASE = "https://assistive-device-dashboard.onrender.com/api/ml";
 
 class MLService {
   /**
