@@ -7,7 +7,7 @@ import json
 from datetime import datetime
 from typing import Dict, Any
 
-BASE_URL = "http://localhost:5000/api/ml"
+BASE_URL = "https://assistive-device-dashboard.onrender.com/api/ml"
 
 class Colors:
     """Terminal colors for pretty output"""
