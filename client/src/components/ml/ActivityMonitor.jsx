@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Activity, User, TrendingUp } from "lucide-react";
+import { mlAPI } from "../../api";
 
 const ActivityMonitor = () => {
   const [activityData, setActivityData] = useState(null);
@@ -15,7 +16,6 @@ const ActivityMonitor = () => {
 
   const recognizeActivity = async () => {
     try {
-      // Simulated sensor data - replace with real sensor readings
       const sensorData = {
         acc_x: (Math.random() - 0.5) * 4,
         acc_y: (Math.random() - 0.5) * 4,
@@ -25,22 +25,15 @@ const ActivityMonitor = () => {
         gyro_z: (Math.random() - 0.5) * 30,
       };
 
-      const response = await fetch(
-        "https://assistive-device-dashboard.onrender.com/api/ml/recognize/activity",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(sensorData),
-        },
-      );
+      // Replace fetch with:
+      const response = await mlAPI.recognizeActivity(sensorData);
+      const data = response.data;
 
-      const data = await response.json();
       setActivityData(data);
 
-      // Add to history
       setHistory((prev) => [
         { ...data, timestamp: new Date() },
-        ...prev.slice(0, 9), // Keep last 10
+        ...prev.slice(0, 9),
       ]);
 
       setLoading(false);

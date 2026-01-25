@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { AlertTriangle, CheckCircle, XCircle } from "lucide-react";
+import { mlAPI } from "../../api";
 
 const AnomalyAlert = ({ deviceId }) => {
   const [anomalyData, setAnomalyData] = useState(null);
@@ -14,7 +15,6 @@ const AnomalyAlert = ({ deviceId }) => {
 
   const checkForAnomalies = async () => {
     try {
-      // Simulated telemetry data - replace with real device data
       const telemetry = {
         battery_level: Math.random() * 100,
         usage_duration: Math.random() * 400,
@@ -23,17 +23,20 @@ const AnomalyAlert = ({ deviceId }) => {
         error_count: Math.floor(Math.random() * 10),
       };
 
-      const response = await fetch(
-        "https://assistive-device-dashboard.onrender.com/api/ml/detect/anomaly",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(telemetry),
-        },
-      );
+      // Replace fetch with:
+      const response = await mlAPI.detectAnomaly(telemetry);
+      const data = response.data; // axios returns data in response.data
 
-      const data = await response.json();
       setAnomalyData(data);
+
+      if (data) {
+        addToHistory({
+          ...data,
+          timestamp: new Date().toISOString(),
+          telemetry: telemetry,
+        });
+      }
+
       setLoading(false);
     } catch (error) {
       console.error("Anomaly detection error:", error);

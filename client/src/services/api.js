@@ -113,4 +113,26 @@ export const settingsAPI = {
   reset: () => api.post("/settings/reset"),
 };
 
+export const mlAPI = {
+  // Anomaly Detection
+  detectAnomaly: (telemetryData) =>
+    api.post("/ml/detect/anomaly", telemetryData),
+
+  // Activity Recognition
+  recognizeActivity: (sensorData) =>
+    api.post("/ml/recognize/activity", sensorData),
+
+  // Maintenance Prediction
+  predictMaintenance: (deviceData) =>
+    api.post("/ml/predict/maintenance", deviceData),
+
+  // ML History (when backend is ready)
+  getHistory: (deviceId, limit = 100) =>
+    api.get(`/ml/history/${deviceId}?limit=${limit}`),
+
+  // ML Statistics (when backend is ready)
+  getStatistics: (deviceId, timeRange = "24h") =>
+    api.get(`/ml/statistics/${deviceId}?range=${timeRange}`),
+};
+
 export default api;

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Wrench, CheckCircle, Clock, AlertCircle } from "lucide-react";
+import { mlAPI } from "../../api";
 
 const MaintenanceStatus = ({ deviceInfo }) => {
   const [maintenanceData, setMaintenanceData] = useState(null);
@@ -11,7 +12,6 @@ const MaintenanceStatus = ({ deviceInfo }) => {
 
   const checkMaintenanceStatus = async () => {
     try {
-      // Simulated device info - replace with real data
       const deviceData = deviceInfo || {
         device_age_days: 365,
         battery_cycles: 500,
@@ -20,17 +20,24 @@ const MaintenanceStatus = ({ deviceInfo }) => {
         last_maintenance_days: 90,
       };
 
-      const response = await fetch(
-        "https://assistive-device-dashboard.onrender.com/api/ml/predict/maintenance",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(deviceData),
-        },
-      );
+      // Replace fetch with:
+      const response = await mlAPI.predictMaintenance(deviceData);
+      const data = response.data;
 
-      const data = await response.json();
       setMaintenanceData(data);
+
+      if (data) {
+        addToHistory({
+          ...data,
+          timestamp: new Date().toISOString(),
+          message: data.needs_maintenance
+            ? `Maintenance required - ${data.priority} priority`
+            : `System healthy - next maintenance in ~${data.estimated_days_until_maintenance} days`,
+          is_anomaly: data.needs_maintenance,
+          severity: data.priority,
+        });
+      }
+
       setLoading(false);
     } catch (error) {
       console.error("Maintenance prediction error:", error);

@@ -7,6 +7,7 @@ import MaintenanceStatus from "../ml/MaintenanceStatus";
 import ActivityMonitor from "../ml/ActivityMonitor";
 import { deviceAPI } from "../../services/api";
 import { formatRelativeTime } from "../../utils/helpers";
+import { deviceAPI } from "../api";
 
 const DashboardTab = () => {
   const [deviceStatus, setDeviceStatus] = useState(null);
@@ -21,13 +22,9 @@ const DashboardTab = () => {
   const fetchDeviceStatus = async () => {
     try {
       const response = await deviceAPI.getStatus();
-      if (response.data) {
-        setDeviceStatus(response.data);
-        setLoading(false);
-      }
+      setDeviceStatus(response.data);
     } catch (error) {
       console.error("Error fetching device status:", error);
-      setLoading(false);
     }
   };
 
