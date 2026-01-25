@@ -6,7 +6,7 @@ import ResetPassword from "./pages/ResetPassword";
 import VerifyEmail from "./pages/VerifyEmail";
 import Layout from "./components/layout/Layout";
 import DashboardTab from "./components/dashboard/DashboardTab";
-import DetectionLogsTab from "./components/logs/DetectionLogsTab";
+// import DetectionLogsTab from "./components/logs/DetectionLogsTab";
 import StatisticsTab from "./components/statistics/StatisticsTab";
 import CameraTab from "./components/camera/CameraTab";
 import SettingsTab from "./components/settings/SettingsTab";
