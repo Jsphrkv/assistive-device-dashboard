@@ -103,7 +103,8 @@ scipy==1.11.3
 # Flask Extensions
 # =========================
 Flask-Mail>=0.9.1            # allow latest compatible minor versions
-itsdangerous>=2.2            # compatible with Flask 3.1
+itsdangerous>=2.2    
+pydantic[email]==2.6.0        # compatible with Flask 3.1
 
 # =========================
 # Raspberry Pi / Optional ML (do not install on Render)
