@@ -88,7 +88,7 @@ export const authAPI = {
 };
 
 export const deviceAPI = {
-  getStatus: () => api.get("/device/status"),
+  getStatus: () => api.get("/devices/status"),
   getSystemInfo: () => api.get("/device/system-info"),
   getAll: () => api.get("/devices"),
   create: (deviceData) => api.post("/devices", deviceData),
