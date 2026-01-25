@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Wrench, CheckCircle, Clock, AlertCircle } from "lucide-react";
-import { mlAPI } from "../../api";
+import { mlAPI } from "../../services/api";
+import { useMLHistory } from "../../hooks/ml/useMLHistory";
 
 const MaintenanceStatus = ({ deviceInfo }) => {
   const [maintenanceData, setMaintenanceData] = useState(null);
@@ -20,7 +21,6 @@ const MaintenanceStatus = ({ deviceInfo }) => {
         last_maintenance_days: 90,
       };
 
-      // Replace fetch with:
       const response = await mlAPI.predictMaintenance(deviceData);
       const data = response.data;
 

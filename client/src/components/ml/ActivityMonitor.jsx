@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Activity, User, TrendingUp } from "lucide-react";
-import { mlAPI } from "../../api";
+import { mlAPI } from "../../services/api";
+import { useMLAnalytics } from "../../hooks/ml/useMLStatistics";
 
 const ActivityMonitor = () => {
   const [activityData, setActivityData] = useState(null);
@@ -25,17 +26,14 @@ const ActivityMonitor = () => {
         gyro_z: (Math.random() - 0.5) * 30,
       };
 
-      // Replace fetch with:
       const response = await mlAPI.recognizeActivity(sensorData);
       const data = response.data;
 
       setActivityData(data);
-
       setHistory((prev) => [
         { ...data, timestamp: new Date() },
         ...prev.slice(0, 9),
       ]);
-
       setLoading(false);
     } catch (error) {
       console.error("Activity recognition error:", error);

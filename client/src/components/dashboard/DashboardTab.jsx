@@ -7,7 +7,6 @@ import MaintenanceStatus from "../ml/MaintenanceStatus";
 import ActivityMonitor from "../ml/ActivityMonitor";
 import { deviceAPI } from "../../services/api";
 import { formatRelativeTime } from "../../utils/helpers";
-import { deviceAPI } from "../api";
 
 const DashboardTab = () => {
   const [deviceStatus, setDeviceStatus] = useState(null);

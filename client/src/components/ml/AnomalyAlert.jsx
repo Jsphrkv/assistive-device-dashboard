@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { AlertTriangle, CheckCircle, XCircle } from "lucide-react";
-import { mlAPI } from "../../api";
+import { mlAPI } from "../../services/api";
+import { useMLHistory } from "../../hooks/ml/useMLHistory";
 
 const AnomalyAlert = ({ deviceId }) => {
   const [anomalyData, setAnomalyData] = useState(null);
@@ -23,9 +24,8 @@ const AnomalyAlert = ({ deviceId }) => {
         error_count: Math.floor(Math.random() * 10),
       };
 
-      // Replace fetch with:
       const response = await mlAPI.detectAnomaly(telemetry);
-      const data = response.data; // axios returns data in response.data
+      const data = response.data;
 
       setAnomalyData(data);
 
