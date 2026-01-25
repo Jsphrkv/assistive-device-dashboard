@@ -1,4 +1,3 @@
-// src/components/logs/DetectionLogsTab.jsx
 import React, { useState, useEffect } from "react";
 import {
   FileText,
@@ -6,38 +5,31 @@ import {
   Download,
   Search,
   AlertTriangle,
-  CheckCircle,
   Activity,
   Wrench,
-  Calendar,
   Clock,
-  XCircle,
 } from "lucide-react";
 import { useMLHistory } from "../../hooks/ml/useMLHistory";
 
 const DetectionLogsTab = ({ deviceId }) => {
   const [allLogs, setAllLogs] = useState([]);
   const [filteredLogs, setFilteredLogs] = useState([]);
-  const [filterType, setFilterType] = useState("all"); // all, anomaly, activity, maintenance
+  const [filterType, setFilterType] = useState("all");
   const [filterSeverity, setFilterSeverity] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [dateRange, setDateRange] = useState("all");
 
-  // Use ML history hook
   const { history, loading } = useMLHistory(deviceId || "default", 500);
 
   useEffect(() => {
-    // Combine real history with mock logs
     loadDetectionLogs();
   }, [history]);
 
   useEffect(() => {
-    // Apply filters whenever logs or filters change
     applyFilters();
   }, [allLogs, filterType, filterSeverity, searchQuery, dateRange]);
 
   const loadDetectionLogs = () => {
-    // Start with real history data
     const realLogs = history.map((item) => ({
       id: item.timestamp,
       timestamp: new Date(item.timestamp),
@@ -53,10 +45,7 @@ const DetectionLogsTab = ({ deviceId }) => {
       details: item,
     }));
 
-    // Generate additional mock logs for demonstration
     const mockLogs = generateMockLogs(50);
-
-    // Combine and sort by timestamp (newest first)
     const combined = [...realLogs, ...mockLogs].sort(
       (a, b) => b.timestamp - a.timestamp,
     );
@@ -67,8 +56,6 @@ const DetectionLogsTab = ({ deviceId }) => {
   const generateMockLogs = (count) => {
     const types = ["anomaly", "activity", "maintenance"];
     const severities = ["low", "medium", "high"];
-    const statuses = ["normal", "alert", "warning"];
-
     const messages = {
       anomaly: [
         "Unusual device temperature detected",
@@ -118,10 +105,7 @@ const DetectionLogsTab = ({ deviceId }) => {
         message:
           messages[type][Math.floor(Math.random() * messages[type].length)],
         confidence: 0.7 + Math.random() * 0.3,
-        details: {
-          deviceId: deviceId || "default",
-          source: "mock-generator",
-        },
+        details: { deviceId: deviceId || "default", source: "mock-generator" },
       };
     });
   };
@@ -129,24 +113,20 @@ const DetectionLogsTab = ({ deviceId }) => {
   const applyFilters = () => {
     let filtered = [...allLogs];
 
-    // Filter by type
     if (filterType !== "all") {
       filtered = filtered.filter((log) => log.type === filterType);
     }
 
-    // Filter by severity
     if (filterSeverity !== "all") {
       filtered = filtered.filter((log) => log.severity === filterSeverity);
     }
 
-    // Filter by search query
     if (searchQuery) {
       filtered = filtered.filter((log) =>
         log.message.toLowerCase().includes(searchQuery.toLowerCase()),
       );
     }
 
-    // Filter by date range
     if (dateRange !== "all") {
       const now = new Date();
       const cutoff = new Date();
@@ -230,7 +210,6 @@ const DetectionLogsTab = ({ deviceId }) => {
     return colors[severity] || colors.low;
   };
 
-  // Calculate statistics
   const stats = {
     total: filteredLogs.length,
     anomalies: filteredLogs.filter((l) => l.type === "anomaly").length,
@@ -239,6 +218,14 @@ const DetectionLogsTab = ({ deviceId }) => {
     alerts: filteredLogs.filter((l) => l.status === "alert").length,
     warnings: filteredLogs.filter((l) => l.status === "warning").length,
   };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -252,7 +239,8 @@ const DetectionLogsTab = ({ deviceId }) => {
         </div>
         <button
           onClick={exportLogs}
-          className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          disabled={filteredLogs.length === 0}
+          className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Download className="w-4 h-4" />
           <span className="text-sm">Export Logs</span>
@@ -297,7 +285,6 @@ const DetectionLogsTab = ({ deviceId }) => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {/* Search */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
@@ -309,7 +296,6 @@ const DetectionLogsTab = ({ deviceId }) => {
             />
           </div>
 
-          {/* Type Filter */}
           <select
             value={filterType}
             onChange={(e) => setFilterType(e.target.value)}
@@ -321,7 +307,6 @@ const DetectionLogsTab = ({ deviceId }) => {
             <option value="maintenance">Maintenance</option>
           </select>
 
-          {/* Severity Filter */}
           <select
             value={filterSeverity}
             onChange={(e) => setFilterSeverity(e.target.value)}
@@ -333,7 +318,6 @@ const DetectionLogsTab = ({ deviceId }) => {
             <option value="low">Low</option>
           </select>
 
-          {/* Date Range Filter */}
           <select
             value={dateRange}
             onChange={(e) => setDateRange(e.target.value)}
@@ -378,11 +362,17 @@ const DetectionLogsTab = ({ deviceId }) => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredLogs.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan="6"
-                      className="px-6 py-8 text-center text-gray-500"
-                    >
-                      No logs found matching your filters
+                    <td colSpan="6" className="px-6 py-12 text-center">
+                      <FileText className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                      <p className="text-gray-500 font-medium">No logs found</p>
+                      <p className="text-sm text-gray-400 mt-1">
+                        {searchQuery ||
+                        filterType !== "all" ||
+                        filterSeverity !== "all" ||
+                        dateRange !== "all"
+                          ? "Try adjusting your filters"
+                          : "Logs will appear here as ML predictions are made"}
+                      </p>
                     </td>
                   </tr>
                 ) : (
