@@ -278,7 +278,16 @@ def get_device_status():
             .execute()
         
         if not device.data:
-            return jsonify({'error': 'No active device found'}), 404
+            # Return default empty status instead of 404
+            return jsonify({
+                'deviceOnline': False,
+                'cameraStatus': 'offline',
+                'batteryLevel': 0,
+                'lastObstacle': None,
+                'lastDetectionTime': None,
+                'hasDevice': False,
+                'message': 'No active device registered'
+            }), 200
         
         device_id = device.data[0]['id']
         
@@ -291,16 +300,26 @@ def get_device_status():
             .execute()
         
         if not response.data:
-            return jsonify({'error': 'No device status found'}), 404
+            # Return default status for registered device without status data
+            return jsonify({
+                'deviceOnline': False,
+                'cameraStatus': 'offline',
+                'batteryLevel': 0,
+                'lastObstacle': None,
+                'lastDetectionTime': None,
+                'hasDevice': True,
+                'message': 'Device registered but no status data yet'
+            }), 200
         
         status = response.data[0]
         
         return jsonify({
-            'deviceOnline': status['device_online'],
-            'cameraStatus': status['camera_status'],
-            'batteryLevel': status['battery_level'],
-            'lastObstacle': status['last_obstacle'],
-            'lastDetectionTime': status['last_detection_time']
+            'deviceOnline': status.get('device_online', False),
+            'cameraStatus': status.get('camera_status', 'offline'),
+            'batteryLevel': status.get('battery_level', 0),
+            'lastObstacle': status.get('last_obstacle'),
+            'lastDetectionTime': status.get('last_detection_time'),
+            'hasDevice': True
         }), 200
         
     except Exception as e:
