@@ -1,45 +1,18 @@
 import React, { useState, useEffect } from "react";
-import { Activity, User, TrendingUp } from "lucide-react";
-import { mlAPI } from "../../services/api";
-import { useMLAnalytics } from "../../hooks/ml/useMLStatistics";
+import { Activity, TrendingUp } from "lucide-react";
 
-const ActivityMonitor = () => {
-  const [activityData, setActivityData] = useState(null);
-  const [loading, setLoading] = useState(true);
+const ActivityMonitor = ({ activityData, loading }) => {
   const [history, setHistory] = useState([]);
 
+  // Update history when new activity data arrives
   useEffect(() => {
-    recognizeActivity();
-    // Update every 5 seconds
-    const interval = setInterval(recognizeActivity, 5000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const recognizeActivity = async () => {
-    try {
-      const sensorData = {
-        acc_x: (Math.random() - 0.5) * 4,
-        acc_y: (Math.random() - 0.5) * 4,
-        acc_z: 9.8 + (Math.random() - 0.5) * 2,
-        gyro_x: (Math.random() - 0.5) * 40,
-        gyro_y: (Math.random() - 0.5) * 40,
-        gyro_z: (Math.random() - 0.5) * 30,
-      };
-
-      const response = await mlAPI.recognizeActivity(sensorData);
-      const data = response.data;
-
-      setActivityData(data);
+    if (activityData && activityData.activity) {
       setHistory((prev) => [
-        { ...data, timestamp: new Date() },
-        ...prev.slice(0, 9),
+        { ...activityData, timestamp: new Date() },
+        ...prev.slice(0, 9), // Keep last 10 items
       ]);
-      setLoading(false);
-    } catch (error) {
-      console.error("Activity recognition error:", error);
-      setLoading(false);
     }
-  };
+  }, [activityData]);
 
   if (loading) {
     return (
@@ -50,7 +23,29 @@ const ActivityMonitor = () => {
     );
   }
 
-  if (!activityData) return null;
+  // Show empty state if no data
+  if (!activityData) {
+    return (
+      <div className="bg-white rounded-lg shadow p-6">
+        <div className="flex items-center mb-4">
+          <Activity className="w-6 h-6 text-gray-400 mr-2" />
+          <h3 className="text-lg font-semibold text-gray-600">
+            Activity Monitor
+          </h3>
+        </div>
+
+        <div className="bg-gray-50 rounded-lg border-2 border-dashed border-gray-300 p-6">
+          <div className="text-center">
+            <Activity className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+            <p className="text-sm text-gray-500">
+              No activity data available yet. Connect your device to start
+              monitoring.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const getActivityEmoji = (activity) => {
     switch (activity) {
@@ -112,52 +107,56 @@ const ActivityMonitor = () => {
       </div>
 
       {/* Activity Probabilities */}
-      <div className="mb-4">
-        <h5 className="text-sm font-semibold text-gray-700 mb-2">
-          Detection Confidence:
-        </h5>
-        <div className="space-y-2">
-          {Object.entries(activityData.all_probabilities).map(
-            ([activity, prob]) => (
-              <div key={activity} className="flex items-center">
-                <span className="text-xs w-24 capitalize">
-                  {activity.replace("_", " ")}
-                </span>
-                <div className="flex-1 bg-gray-200 rounded-full h-2 mx-2">
-                  <div
-                    className="bg-blue-600 h-2 rounded-full transition-all duration-500"
-                    style={{ width: `${prob * 100}%` }}
-                  ></div>
+      {activityData.all_probabilities && (
+        <div className="mb-4">
+          <h5 className="text-sm font-semibold text-gray-700 mb-2">
+            Detection Confidence:
+          </h5>
+          <div className="space-y-2">
+            {Object.entries(activityData.all_probabilities).map(
+              ([activity, prob]) => (
+                <div key={activity} className="flex items-center">
+                  <span className="text-xs w-24 capitalize">
+                    {activity.replace("_", " ")}
+                  </span>
+                  <div className="flex-1 bg-gray-200 rounded-full h-2 mx-2">
+                    <div
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${prob * 100}%` }}
+                    ></div>
+                  </div>
+                  <span className="text-xs w-12 text-right">
+                    {(prob * 100).toFixed(0)}%
+                  </span>
                 </div>
-                <span className="text-xs w-12 text-right">
-                  {(prob * 100).toFixed(0)}%
-                </span>
-              </div>
-            ),
-          )}
+              ),
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Recent History */}
-      <div>
-        <h5 className="text-sm font-semibold text-gray-700 mb-2">
-          Recent Activity:
-        </h5>
-        <div className="space-y-1">
-          {history.slice(0, 5).map((item, index) => (
-            <div
-              key={index}
-              className="flex items-center justify-between text-xs text-gray-600"
-            >
-              <span className="capitalize">
-                {getActivityEmoji(item.activity)}{" "}
-                {item.activity.replace("_", " ")}
-              </span>
-              <span>{new Date(item.timestamp).toLocaleTimeString()}</span>
-            </div>
-          ))}
+      {history.length > 0 && (
+        <div>
+          <h5 className="text-sm font-semibold text-gray-700 mb-2">
+            Recent Activity:
+          </h5>
+          <div className="space-y-1">
+            {history.slice(0, 5).map((item, index) => (
+              <div
+                key={index}
+                className="flex items-center justify-between text-xs text-gray-600"
+              >
+                <span className="capitalize">
+                  {getActivityEmoji(item.activity)}{" "}
+                  {item.activity.replace("_", " ")}
+                </span>
+                <span>{new Date(item.timestamp).toLocaleTimeString()}</span>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

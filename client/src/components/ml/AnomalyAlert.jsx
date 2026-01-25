@@ -1,49 +1,7 @@
-import React, { useState, useEffect } from "react";
-import { AlertTriangle, CheckCircle, XCircle } from "lucide-react";
-import { mlAPI } from "../../services/api";
-import { useMLHistory } from "../../hooks/ml/useMLHistory";
+import React from "react";
+import { AlertTriangle, CheckCircle } from "lucide-react";
 
-const AnomalyAlert = ({ deviceId }) => {
-  const [anomalyData, setAnomalyData] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    checkForAnomalies();
-    // Check every 30 seconds
-    const interval = setInterval(checkForAnomalies, 30000);
-    return () => clearInterval(interval);
-  }, [deviceId]);
-
-  const checkForAnomalies = async () => {
-    try {
-      const telemetry = {
-        battery_level: Math.random() * 100,
-        usage_duration: Math.random() * 400,
-        temperature: 30 + Math.random() * 25,
-        signal_strength: -90 + Math.random() * 30,
-        error_count: Math.floor(Math.random() * 10),
-      };
-
-      const response = await mlAPI.detectAnomaly(telemetry);
-      const data = response.data;
-
-      setAnomalyData(data);
-
-      if (data) {
-        addToHistory({
-          ...data,
-          timestamp: new Date().toISOString(),
-          telemetry: telemetry,
-        });
-      }
-
-      setLoading(false);
-    } catch (error) {
-      console.error("Anomaly detection error:", error);
-      setLoading(false);
-    }
-  };
-
+const AnomalyAlert = ({ deviceId, batteryLevel, anomalyData, loading }) => {
   if (loading) {
     return (
       <div className="bg-white rounded-lg shadow p-4 animate-pulse">
@@ -53,7 +11,26 @@ const AnomalyAlert = ({ deviceId }) => {
     );
   }
 
-  if (!anomalyData) return null;
+  // Show empty state if no data
+  if (!anomalyData) {
+    return (
+      <div className="bg-gray-50 rounded-lg border-2 border-dashed border-gray-300 p-6">
+        <div className="flex items-start">
+          <div className="flex-shrink-0">
+            <CheckCircle className="w-6 h-6 text-gray-400" />
+          </div>
+          <div className="ml-3 flex-1">
+            <h3 className="text-lg font-semibold text-gray-600 mb-1">
+              No Anomaly Data
+            </h3>
+            <p className="text-sm text-gray-500">
+              Waiting for device telemetry to analyze anomalies...
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const getSeverityColor = (severity) => {
     switch (severity) {
@@ -88,6 +65,22 @@ const AnomalyAlert = ({ deviceId }) => {
             {anomalyData.is_anomaly ? "Anomaly Detected" : "System Normal"}
           </h3>
           <p className="text-sm mb-2">{anomalyData.message}</p>
+
+          {/* Show telemetry details if available */}
+          {anomalyData.telemetry && (
+            <div className="mt-3 text-xs space-y-1 opacity-75">
+              <div>
+                Battery: {anomalyData.telemetry.battery_level?.toFixed(1)}%
+              </div>
+              <div>
+                Temperature: {anomalyData.telemetry.temperature?.toFixed(1)}°C
+              </div>
+              <div>
+                Signal: {anomalyData.telemetry.signal_strength?.toFixed(0)} dBm
+              </div>
+            </div>
+          )}
+
           <div className="mt-2 flex items-center justify-between">
             <span className="text-xs font-medium">
               Anomaly Score: {(anomalyData.anomaly_score * 100).toFixed(0)}%
