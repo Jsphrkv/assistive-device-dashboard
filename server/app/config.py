@@ -28,13 +28,13 @@ class Config:
     MAIL_DISPLAY_NAME = os.getenv('MAIL_DISPLAY_NAME', 'Assistive Device')
     
     # Frontend URL ✅ NEW
-    FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://assistive-device-dashboard.vercel.app/')
+    FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://assistive-device-dashboard.vercel.app')
     
     # Device
     DEVICE_API_KEY = os.getenv('DEVICE_API_KEY', 'device-api-key')
     
     # CORS
-    CORS_ORIGINS = os.getenv('CORS_ORIGINS', 'https://assistive-device-dashboard.vercel.app/').split(',')
+    CORS_ORIGINS = os.getenv('CORS_ORIGINS', 'https://assistive-device-dashboard.vercel.app').split(',')
     
     # Upload
     MAX_UPLOAD_SIZE = int(os.getenv('MAX_UPLOAD_SIZE', 10485760))
