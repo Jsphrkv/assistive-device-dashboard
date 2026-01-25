@@ -32,6 +32,12 @@ def create_app(config_name=None):
     app.register_blueprint(ml_bp, url_prefix='/api/ml')
     app.register_blueprint(statistics_bp, url_prefix='/api/statistics')
     app.register_blueprint(settings_bp, url_prefix='/api/settings')
+
+    print("=" * 50)
+    print("REGISTERED ROUTES:")
+    for rule in app.url_map.iter_rules():
+        print(f"{rule.methods} {rule.rule}")
+    print("=" * 50)
     
     # Health check endpoint
     @app.route('/health')
