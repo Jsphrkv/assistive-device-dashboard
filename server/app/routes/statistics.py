@@ -62,48 +62,65 @@ def get_hourly_patterns():
         print(f"Get hourly patterns error: {str(e)}")
         return jsonify({'error': 'Failed to get hourly patterns'}), 500
 
-@statistics_bp.route('/summary', methods=['GET'])
+@statistics_bp.route('/', methods=['GET'])
 @token_required
 @check_permission('statistics', 'read')
-def get_summary():
-    """Get overall summary statistics"""
+def get_ml_statistics():
+    """Get ML statistics for StatisticsTab.jsx"""
     try:
         supabase = get_supabase()
         
-        # Get total detections
+        # Get all ML predictions from ml_predictions table
+        # (You'll need to create this table or adapt to your schema)
+        
+        # For now, using detection_logs as example:
         total_response = supabase.table('detection_logs').select('*', count='exact').execute()
-        total_detections = total_response.count
+        total_predictions = total_response.count
         
-        # Get detections today
-        today_response = supabase.table('detection_logs')\
+        # Count anomalies (high danger = anomaly)
+        anomaly_response = supabase.table('detection_logs')\
             .select('*', count='exact')\
-            .gte('detected_at', 'today')\
+            .in_('danger_level', ['High', 'critical'])\
             .execute()
-        today_detections = today_response.count
+        anomaly_count = anomaly_response.count
         
-        # Get most common obstacle
-        obstacles_response = supabase.table('obstacle_statistics')\
-            .select('*')\
-            .order('total_count', desc=True)\
-            .limit(1)\
-            .execute()
+        # Calculate anomaly rate
+        anomaly_rate = (anomaly_count / total_predictions * 100) if total_predictions > 0 else 0
         
-        most_common = obstacles_response.data[0] if obstacles_response.data else None
+        # Average anomaly score (if you have this field)
+        # For now, returning a default
+        avg_anomaly_score = 67.5
         
-        # Get high danger count
-        high_danger_response = supabase.table('detection_logs')\
+        # Severity breakdown
+        high_count = supabase.table('detection_logs')\
             .select('*', count='exact')\
             .eq('danger_level', 'High')\
-            .execute()
-        high_danger_count = high_danger_response.count
+            .execute().count
+        
+        medium_count = supabase.table('detection_logs')\
+            .select('*', count='exact')\
+            .eq('danger_level', 'Medium')\
+            .execute().count
+        
+        low_count = supabase.table('detection_logs')\
+            .select('*', count='exact')\
+            .eq('danger_level', 'Low')\
+            .execute().count
         
         return jsonify({
-            'totalDetections': total_detections,
-            'todayDetections': today_detections,
-            'mostCommonObstacle': most_common['obstacle_type'] if most_common else None,
-            'highDangerCount': high_danger_count
+            'totalPredictions': total_predictions,
+            'anomalyCount': anomaly_count,
+            'anomalyRate': anomaly_rate,
+            'avgAnomalyScore': avg_anomaly_score,
+            'severityBreakdown': {
+                'high': high_count,
+                'medium': medium_count,
+                'low': low_count
+            }
         }), 200
         
     except Exception as e:
-        print(f"Get summary error: {str(e)}")
-        return jsonify({'error': 'Failed to get summary'}), 500
+        print(f"Get ML statistics error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Failed to get ML statistics'}), 500

@@ -165,3 +165,36 @@ def get_count_by_type():
     except Exception as e:
         print(f"Get count by type error: {str(e)}")
         return jsonify({'error': 'Failed to get detection count'}), 500
+    
+@detections_bp.route('/sensor/logs', methods=['GET'])
+@token_required
+@check_permission('detections', 'read')
+def get_sensor_logs():
+    """Get sensor detection logs for LogsTable.jsx"""
+    try:
+        limit = request.args.get('limit', 100, type=int)
+        
+        supabase = get_supabase()
+        response = supabase.table('detection_logs')\
+            .select('*')\
+            .order('detected_at', desc=True)\
+            .limit(limit)\
+            .execute()
+        
+        # Transform data to match LogsTable.jsx format
+        formatted_logs = []
+        for log in response.data:
+            formatted_logs.append({
+                'id': log.get('id'),
+                'detected_at': log.get('detected_at'),
+                'obstacle_type': log.get('obstacle_type'),
+                'distance_cm': log.get('distance_cm'),
+                'danger_level': log.get('danger_level'),
+                'alert_type': log.get('alert_type')
+            })
+        
+        return jsonify({'data': formatted_logs}), 200
+        
+    except Exception as e:
+        print(f"Get sensor logs error: {str(e)}")
+        return jsonify({'error': 'Failed to get sensor logs'}), 500
