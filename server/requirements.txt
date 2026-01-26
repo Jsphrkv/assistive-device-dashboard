@@ -59,7 +59,7 @@ flask-cors==4.0.0
 flask-jwt-extended==4.6.0
 flask-mail==0.9.1
 werkzeug==3.0.1
-python-dotenv==1.0.0# allow latest patch/minor
+python-dotenv==1.0.0 # allow latest patch/minor
 
 # =========================
 # Database
