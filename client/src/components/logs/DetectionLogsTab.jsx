@@ -5,124 +5,61 @@ import {
   Download,
   Search,
   AlertTriangle,
+  CheckCircle,
   Activity,
   Wrench,
   Clock,
+  RefreshCw,
+  BarChart3,
 } from "lucide-react";
 import { useMLHistory } from "../../hooks/ml/useMLHistory";
 
 const DetectionLogsTab = ({ deviceId }) => {
-  const [allLogs, setAllLogs] = useState([]);
   const [filteredLogs, setFilteredLogs] = useState([]);
   const [filterType, setFilterType] = useState("all");
   const [filterSeverity, setFilterSeverity] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [dateRange, setDateRange] = useState("all");
 
-  const { history, loading } = useMLHistory(deviceId || "default", 500);
-
-  useEffect(() => {
-    loadDetectionLogs();
-  }, [history]);
+  // Get real ML history from the hook
+  const { history, loading, refresh } = useMLHistory(
+    deviceId || "default",
+    500,
+  );
 
   useEffect(() => {
     applyFilters();
-  }, [allLogs, filterType, filterSeverity, searchQuery, dateRange]);
+  }, [history, filterType, filterSeverity, searchQuery, dateRange]);
 
-  const loadDetectionLogs = () => {
-    const realLogs = history.map((item) => ({
-      id: item.timestamp,
-      timestamp: new Date(item.timestamp),
-      type: item.message?.toLowerCase().includes("maintenance")
-        ? "maintenance"
-        : item.message?.toLowerCase().includes("activity")
-          ? "activity"
-          : "anomaly",
+  const applyFilters = () => {
+    if (!history || history.length === 0) {
+      setFilteredLogs([]);
+      return;
+    }
+
+    // Convert history to log format
+    let logs = history.map((item) => ({
+      id: item.timestamp || Date.now(),
+      timestamp: new Date(item.timestamp || Date.now()),
+      type: detectLogType(item),
       severity: item.severity || (item.is_anomaly ? "medium" : "low"),
       status: item.is_anomaly ? "alert" : "normal",
       message: item.message || "Detection logged",
-      confidence: item.confidence || item.anomaly_score || Math.random(),
+      confidence: item.confidence || item.anomaly_score || 0.85,
       details: item,
     }));
 
-    const mockLogs = generateMockLogs(50);
-    const combined = [...realLogs, ...mockLogs].sort(
-      (a, b) => b.timestamp - a.timestamp,
-    );
-
-    setAllLogs(combined);
-  };
-
-  const generateMockLogs = (count) => {
-    const types = ["anomaly", "activity", "maintenance"];
-    const severities = ["low", "medium", "high"];
-    const messages = {
-      anomaly: [
-        "Unusual device temperature detected",
-        "Battery drain rate anomaly",
-        "Signal strength fluctuation",
-        "Unexpected usage pattern",
-        "Error rate spike detected",
-      ],
-      activity: [
-        "Activity changed to walking",
-        "Device in use - high intensity",
-        "Resting state detected",
-        "Activity transition: walking to resting",
-        "Continuous usage detected",
-      ],
-      maintenance: [
-        "Routine maintenance check passed",
-        "Battery replacement recommended",
-        "Device age threshold approaching",
-        "Usage intensity high - monitor closely",
-        "All systems operating normally",
-      ],
-    };
-
-    return Array.from({ length: count }, (_, i) => {
-      const type = types[Math.floor(Math.random() * types.length)];
-      const severity =
-        severities[Math.floor(Math.random() * severities.length)];
-      const isAlert = Math.random() > 0.7;
-      const status = isAlert
-        ? "alert"
-        : Math.random() > 0.5
-          ? "warning"
-          : "normal";
-
-      const timestamp = new Date();
-      timestamp.setMinutes(
-        timestamp.getMinutes() - Math.floor(Math.random() * 10000),
-      );
-
-      return {
-        id: `mock-${i}-${Date.now()}`,
-        timestamp,
-        type,
-        severity,
-        status,
-        message:
-          messages[type][Math.floor(Math.random() * messages[type].length)],
-        confidence: 0.7 + Math.random() * 0.3,
-        details: { deviceId: deviceId || "default", source: "mock-generator" },
-      };
-    });
-  };
-
-  const applyFilters = () => {
-    let filtered = [...allLogs];
-
+    // Apply filters
     if (filterType !== "all") {
-      filtered = filtered.filter((log) => log.type === filterType);
+      logs = logs.filter((log) => log.type === filterType);
     }
 
     if (filterSeverity !== "all") {
-      filtered = filtered.filter((log) => log.severity === filterSeverity);
+      logs = logs.filter((log) => log.severity === filterSeverity);
     }
 
     if (searchQuery) {
-      filtered = filtered.filter((log) =>
+      logs = logs.filter((log) =>
         log.message.toLowerCase().includes(searchQuery.toLowerCase()),
       );
     }
@@ -146,13 +83,45 @@ const DetectionLogsTab = ({ deviceId }) => {
           break;
       }
 
-      filtered = filtered.filter((log) => log.timestamp >= cutoff);
+      logs = logs.filter((log) => log.timestamp >= cutoff);
     }
 
-    setFilteredLogs(filtered);
+    // Sort by newest first
+    logs.sort((a, b) => b.timestamp - a.timestamp);
+
+    setFilteredLogs(logs);
+  };
+
+  const detectLogType = (item) => {
+    const msg = item.message?.toLowerCase() || "";
+    const source = item.source?.toLowerCase() || "";
+
+    // Check source first for ML Statistics
+    if (source === "ml_statistics" || msg.includes("statistical analysis")) {
+      return "statistics";
+    }
+
+    if (
+      msg.includes("maintenance") ||
+      msg.includes("repair") ||
+      msg.includes("service")
+    ) {
+      return "maintenance";
+    }
+    if (
+      msg.includes("activity") ||
+      msg.includes("walking") ||
+      msg.includes("resting") ||
+      msg.includes("using")
+    ) {
+      return "activity";
+    }
+    return "anomaly";
   };
 
   const exportLogs = () => {
+    if (filteredLogs.length === 0) return;
+
     const csv = [
       ["Timestamp", "Type", "Severity", "Status", "Message", "Confidence"],
       ...filteredLogs.map((log) => [
@@ -183,6 +152,8 @@ const DetectionLogsTab = ({ deviceId }) => {
         return <Activity className="w-4 h-4" />;
       case "maintenance":
         return <Wrench className="w-4 h-4" />;
+      case "statistics":
+        return <BarChart3 className="w-4 h-4" />;
       default:
         return <FileText className="w-4 h-4" />;
     }
@@ -210,11 +181,13 @@ const DetectionLogsTab = ({ deviceId }) => {
     return colors[severity] || colors.low;
   };
 
+  // Calculate statistics
   const stats = {
     total: filteredLogs.length,
     anomalies: filteredLogs.filter((l) => l.type === "anomaly").length,
     activities: filteredLogs.filter((l) => l.type === "activity").length,
     maintenance: filteredLogs.filter((l) => l.type === "maintenance").length,
+    statistics: filteredLogs.filter((l) => l.type === "statistics").length,
     alerts: filteredLogs.filter((l) => l.status === "alert").length,
     warnings: filteredLogs.filter((l) => l.status === "warning").length,
   };
@@ -234,21 +207,55 @@ const DetectionLogsTab = ({ deviceId }) => {
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Detection Logs</h2>
           <p className="text-sm text-gray-600 mt-1">
-            Comprehensive log of all ML detections and predictions
+            Real-time log of all ML detections and predictions
+            {history.length > 0 && (
+              <span className="ml-2 text-blue-600 font-semibold">
+                • {history.length} total entries
+              </span>
+            )}
           </p>
         </div>
-        <button
-          onClick={exportLogs}
-          disabled={filteredLogs.length === 0}
-          className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Download className="w-4 h-4" />
-          <span className="text-sm">Export Logs</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={refresh}
+            className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            <span className="text-sm">Refresh</span>
+          </button>
+          <button
+            onClick={exportLogs}
+            disabled={filteredLogs.length === 0}
+            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Download className="w-4 h-4" />
+            <span className="text-sm">Export Logs</span>
+          </button>
+        </div>
       </div>
 
+      {/* Info Banner - Only show if no logs */}
+      {history.length === 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+          <div className="flex items-start gap-3">
+            <FileText className="w-6 h-6 text-blue-600 mt-1" />
+            <div>
+              <h3 className="text-lg font-semibold text-blue-900 mb-2">
+                No Detection Logs Yet
+              </h3>
+              <p className="text-blue-800">
+                Logs will appear here automatically as the ML components
+                (Anomaly Detection, Activity Monitor, Maintenance Prediction, ML
+                Statistics) make detections. Check the Dashboard tab to see ML
+                components in action.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Statistics Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-7 gap-4">
         <div className="bg-white rounded-lg shadow p-4">
           <p className="text-xs text-gray-600 mb-1">Total Logs</p>
           <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
@@ -267,6 +274,10 @@ const DetectionLogsTab = ({ deviceId }) => {
             {stats.maintenance}
           </p>
         </div>
+        <div className="bg-teal-50 rounded-lg shadow p-4">
+          <p className="text-xs text-teal-600 mb-1">Analytics</p>
+          <p className="text-2xl font-bold text-teal-600">{stats.statistics}</p>
+        </div>
         <div className="bg-orange-50 rounded-lg shadow p-4">
           <p className="text-xs text-orange-600 mb-1">Alerts</p>
           <p className="text-2xl font-bold text-orange-600">{stats.alerts}</p>
@@ -278,59 +289,62 @@ const DetectionLogsTab = ({ deviceId }) => {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow p-4">
-        <div className="flex items-center mb-4">
-          <Filter className="w-5 h-5 text-gray-600 mr-2" />
-          <h3 className="text-sm font-semibold text-gray-900">Filters</h3>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search logs..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+      {history.length > 0 && (
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="flex items-center mb-4">
+            <Filter className="w-5 h-5 text-gray-600 mr-2" />
+            <h3 className="text-sm font-semibold text-gray-900">Filters</h3>
           </div>
 
-          <select
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="all">All Types</option>
-            <option value="anomaly">Anomalies</option>
-            <option value="activity">Activities</option>
-            <option value="maintenance">Maintenance</option>
-          </select>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search logs..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
 
-          <select
-            value={filterSeverity}
-            onChange={(e) => setFilterSeverity(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="all">All Severities</option>
-            <option value="high">High</option>
-            <option value="medium">Medium</option>
-            <option value="low">Low</option>
-          </select>
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Types</option>
+              <option value="anomaly">Anomalies</option>
+              <option value="activity">Activities</option>
+              <option value="maintenance">Maintenance</option>
+              <option value="statistics">Analytics</option>
+            </select>
 
-          <select
-            value={dateRange}
-            onChange={(e) => setDateRange(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="all">All Time</option>
-            <option value="1hour">Last Hour</option>
-            <option value="24hours">Last 24 Hours</option>
-            <option value="7days">Last 7 Days</option>
-            <option value="30days">Last 30 Days</option>
-          </select>
+            <select
+              value={filterSeverity}
+              onChange={(e) => setFilterSeverity(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Severities</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+
+            <select
+              value={dateRange}
+              onChange={(e) => setDateRange(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Time</option>
+              <option value="1hour">Last Hour</option>
+              <option value="24hours">Last 24 Hours</option>
+              <option value="7days">Last 7 Days</option>
+              <option value="30days">Last 30 Days</option>
+            </select>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Logs Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
@@ -366,12 +380,9 @@ const DetectionLogsTab = ({ deviceId }) => {
                       <FileText className="w-16 h-16 mx-auto mb-4 text-gray-300" />
                       <p className="text-gray-500 font-medium">No logs found</p>
                       <p className="text-sm text-gray-400 mt-1">
-                        {searchQuery ||
-                        filterType !== "all" ||
-                        filterSeverity !== "all" ||
-                        dateRange !== "all"
-                          ? "Try adjusting your filters"
-                          : "Logs will appear here as ML predictions are made"}
+                        {history.length === 0
+                          ? "Logs will appear as ML components make detections"
+                          : "Try adjusting your filters"}
                       </p>
                     </td>
                   </tr>
@@ -392,7 +403,9 @@ const DetectionLogsTab = ({ deviceId }) => {
                                 ? "text-red-600"
                                 : log.type === "activity"
                                   ? "text-blue-600"
-                                  : "text-purple-600"
+                                  : log.type === "maintenance"
+                                    ? "text-purple-600"
+                                    : "text-teal-600"
                             }`}
                           >
                             {getTypeIcon(log.type)}
@@ -444,7 +457,7 @@ const DetectionLogsTab = ({ deviceId }) => {
       {/* Pagination Info */}
       {filteredLogs.length > 0 && (
         <div className="text-center text-sm text-gray-600">
-          Showing {filteredLogs.length} of {allLogs.length} total logs
+          Showing {filteredLogs.length} of {history.length} total logs
         </div>
       )}
     </div>

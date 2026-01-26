@@ -7,7 +7,7 @@ import {
   Brain,
   TrendingUp,
 } from "lucide-react";
-import { deviceAPI, detectionsAPI, mlAPI } from "../../services/api";
+import { deviceAPI, detectionsAPI } from "../../services/api";
 import { formatRelativeTime } from "../../utils/helpers";
 import AnomalyAlert from "../ml/AnomalyAlert";
 import ActivityMonitor from "../ml/ActivityMonitor";
@@ -18,34 +18,27 @@ const DashboardTab = () => {
   const [loading, setLoading] = useState(true);
   const [hasDevice, setHasDevice] = useState(true);
   const [totalDetections, setTotalDetections] = useState(0);
-  
-  // ML Data States
-  const [anomalyData, setAnomalyData] = useState(null);
-  const [activityData, setActivityData] = useState(null);
-  const [maintenanceData, setMaintenanceData] = useState(null);
-  const [mlLoading, setMlLoading] = useState(false);
 
   useEffect(() => {
     fetchAllData();
-    
+
     const interval = setInterval(() => {
       fetchAllData();
-    }, 30000); // Refresh every 30 seconds
-    
+    }, 30000);
+
     return () => clearInterval(interval);
   }, []);
 
   const fetchAllData = async () => {
     await fetchDeviceStatus();
     await fetchDetectionStats();
-    await fetchMLData();
   };
 
   const fetchDeviceStatus = async () => {
     try {
       const response = await deviceAPI.getStatus();
       const data = response.data;
-      
+
       setDeviceStatus(data);
       setHasDevice(data.hasDevice !== false);
       setLoading(false);
@@ -69,60 +62,6 @@ const DashboardTab = () => {
       console.error("Error fetching detection stats:", error);
       setTotalDetections(0);
     }
-  };
-
-  const fetchMLData = async () => {
-    if (!deviceStatus) return;
-    
-    setMlLoading(true);
-    
-    try {
-      // Fetch Anomaly Detection
-      const anomalyResponse = await mlAPI.detectAnomaly({
-        battery_level: deviceStatus?.batteryLevel || 50,
-        usage_duration: 120,
-        temperature: deviceStatus?.temperature || 45,
-        signal_strength: -60,
-        error_count: 0,
-      });
-      setAnomalyData(anomalyResponse.data);
-    } catch (error) {
-      console.error("Error fetching anomaly data:", error);
-      setAnomalyData(null);
-    }
-
-    try {
-      // Fetch Activity Recognition
-      const activityResponse = await mlAPI.recognizeActivity({
-        acc_x: Math.random() * 2 - 1,
-        acc_y: Math.random() * 2 - 1,
-        acc_z: 9.8 + Math.random() * 0.5,
-        gyro_x: Math.random() * 0.1,
-        gyro_y: Math.random() * 0.1,
-        gyro_z: Math.random() * 0.1,
-      });
-      setActivityData(activityResponse.data);
-    } catch (error) {
-      console.error("Error fetching activity data:", error);
-      setActivityData(null);
-    }
-
-    try {
-      // Fetch Maintenance Prediction
-      const maintenanceResponse = await mlAPI.predictMaintenance({
-        device_age_days: 365,
-        battery_cycles: 500,
-        usage_intensity: 0.6,
-        error_rate: 1.5,
-        last_maintenance_days: 90,
-      });
-      setMaintenanceData(maintenanceResponse.data);
-    } catch (error) {
-      console.error("Error fetching maintenance data:", error);
-      setMaintenanceData(null);
-    }
-
-    setMlLoading(false);
   };
 
   if (loading) {
@@ -151,9 +90,14 @@ const DashboardTab = () => {
           </div>
         </div>
 
-        {/* Empty State Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <StatusCard title="Camera Status" value="--" icon={Camera} color="blue" empty />
+          <StatusCard
+            title="Camera Status"
+            value="--"
+            icon={Camera}
+            color="blue"
+            empty
+          />
           <div className="bg-white rounded-lg shadow p-4 opacity-50">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-gray-600">Battery Level</span>
@@ -164,18 +108,45 @@ const DashboardTab = () => {
             <div className="text-2xl font-bold text-gray-900">--</div>
             <p className="text-xs text-gray-400 mt-1">No data available</p>
           </div>
-          <StatusCard title="Last Obstacle" value="--" icon={AlertTriangle} color="red" empty />
+          <StatusCard
+            title="Last Obstacle"
+            value="--"
+            icon={AlertTriangle}
+            color="red"
+            empty
+          />
         </div>
 
-        {/* Empty ML Section */}
-        <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 opacity-50">
-          <h3 className="text-lg font-semibold text-gray-500 mb-3 flex items-center">
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200 opacity-50">
+          <h3 className="text-lg font-semibold text-gray-700 mb-2 flex items-center">
             <Brain className="w-5 h-5 mr-2" />
             AI-Powered Analysis
           </h3>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-gray-600">
             Register a device to see AI-powered insights
           </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 opacity-50">
+          <div className="bg-white rounded-lg shadow p-6">
+            <h4 className="font-semibold text-gray-500 mb-2">
+              Anomaly Detection
+            </h4>
+            <p className="text-sm text-gray-400">No data available</p>
+          </div>
+          <div className="bg-white rounded-lg shadow p-6">
+            <h4 className="font-semibold text-gray-500 mb-2">
+              Activity Monitor
+            </h4>
+            <p className="text-sm text-gray-400">No data available</p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow p-6 opacity-50">
+          <h4 className="font-semibold text-gray-500 mb-2">
+            Maintenance Status
+          </h4>
+          <p className="text-sm text-gray-400">No data available</p>
         </div>
       </div>
     );
@@ -183,7 +154,7 @@ const DashboardTab = () => {
 
   return (
     <div className="space-y-6">
-      {/* Status Overview */}
+      {/* Device Status */}
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-gray-900">Device Status</h2>
@@ -206,9 +177,7 @@ const DashboardTab = () => {
             icon={Camera}
             color="blue"
           />
-
           <BatteryIndicator level={deviceStatus?.batteryLevel || 0} />
-
           <StatusCard
             title="Last Obstacle"
             value={deviceStatus?.lastObstacle || "None"}
@@ -219,16 +188,11 @@ const DashboardTab = () => {
         </div>
       </div>
 
-      {/* ML Insights Section */}
+      {/* AI Analysis Banner */}
       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
-        <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+        <h3 className="text-lg font-semibold text-gray-900 mb-2 flex items-center">
           <Brain className="w-5 h-5 mr-2 text-blue-600" />
           AI-Powered Analysis
-          {mlLoading && (
-            <span className="ml-2 text-xs text-blue-600 animate-pulse">
-              Analyzing...
-            </span>
-          )}
         </h3>
         <p className="text-sm text-gray-600">
           Real-time machine learning insights for device health, anomalies, and
@@ -236,35 +200,22 @@ const DashboardTab = () => {
         </p>
       </div>
 
-      {/* ML Components Grid */}
+      {/* ML Components - They fetch their own data */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <AnomalyAlert
-          deviceId={deviceStatus?.deviceId || "device-001"}
-          batteryLevel={deviceStatus?.batteryLevel}
-          anomalyData={anomalyData}
-          loading={mlLoading}
-        />
-
-        <ActivityMonitor 
-          activityData={activityData}
-          loading={mlLoading}
-        />
+        <AnomalyAlert deviceId={deviceStatus?.deviceId || "device-001"} />
+        <ActivityMonitor deviceId={deviceStatus?.deviceId || "device-001"} />
       </div>
 
-      {/* Maintenance Status - Full Width */}
-      <div className="grid grid-cols-1">
-        <MaintenanceStatus
-          deviceInfo={{
-            device_age_days: 365,
-            battery_cycles: 500,
-            usage_intensity: 0.6,
-            error_rate: 1.5,
-            last_maintenance_days: 90,
-          }}
-          maintenanceData={maintenanceData}
-          loading={mlLoading}
-        />
-      </div>
+      <MaintenanceStatus
+        deviceId={deviceStatus?.deviceId || "device-001"}
+        deviceInfo={{
+          device_age_days: 365,
+          battery_cycles: 500,
+          usage_intensity: 0.6,
+          error_rate: 1.5,
+          last_maintenance_days: 90,
+        }}
+      />
 
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -308,8 +259,14 @@ const DashboardTab = () => {
   );
 };
 
-// StatusCard Component
-const StatusCard = ({ title, value, icon: Icon, color, subtitle, empty = false }) => {
+const StatusCard = ({
+  title,
+  value,
+  icon: Icon,
+  color,
+  subtitle,
+  empty = false,
+}) => {
   const colorClasses = {
     blue: "bg-blue-50 text-blue-600",
     green: "bg-green-50 text-green-600",
@@ -318,10 +275,14 @@ const StatusCard = ({ title, value, icon: Icon, color, subtitle, empty = false }
   };
 
   return (
-    <div className={`bg-white rounded-lg shadow p-4 ${empty ? "opacity-50" : ""}`}>
+    <div
+      className={`bg-white rounded-lg shadow p-4 ${empty ? "opacity-50" : ""}`}
+    >
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm text-gray-600">{title}</span>
-        <div className={`p-2 rounded-lg ${empty ? "bg-gray-50 text-gray-400" : colorClasses[color]}`}>
+        <div
+          className={`p-2 rounded-lg ${empty ? "bg-gray-50 text-gray-400" : colorClasses[color]}`}
+        >
           <Icon className="w-5 h-5" />
         </div>
       </div>
@@ -332,7 +293,6 @@ const StatusCard = ({ title, value, icon: Icon, color, subtitle, empty = false }
   );
 };
 
-// Battery Indicator Component
 const BatteryIndicator = ({ level }) => {
   const getColor = () => {
     if (level > 50) return "text-green-600 bg-green-50";
@@ -355,8 +315,8 @@ const BatteryIndicator = ({ level }) => {
             level > 50
               ? "bg-green-500"
               : level > 20
-              ? "bg-orange-500"
-              : "bg-red-500"
+                ? "bg-orange-500"
+                : "bg-red-500"
           }`}
           style={{ width: `${level}%` }}
         ></div>
