@@ -14,10 +14,10 @@ from app.schemas import (
     DeviceMaintenanceInfo,
     DeviceSensorData,
     DeviceAnalysisRequest,
-    AnomalyDetectionResponse,
     ActivityRecognitionResponse,
     MaintenancePredictionResponse
 )
+from app.detection import AnomalyDetectionResponse
 
 ml_bp = Blueprint('ml', __name__, url_prefix='/api/ml')
 

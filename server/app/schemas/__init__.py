@@ -6,7 +6,6 @@ from .device import (
     DeviceMaintenanceInfo,
     DeviceSensorData,
     DeviceAnalysisRequest,
-    AnomalyDetectionResponse,
     ActivityRecognitionResponse,
     MaintenancePredictionResponse
 )
@@ -36,7 +35,6 @@ __all__ = [
     'DeviceMaintenanceInfo',
     'DeviceSensorData',
     'DeviceAnalysisRequest',
-    'AnomalyDetectionResponse',
     'ActivityRecognitionResponse',
     'MaintenancePredictionResponse',
 
