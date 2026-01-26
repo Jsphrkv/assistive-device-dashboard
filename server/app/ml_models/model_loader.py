@@ -1,87 +1,134 @@
-import pickle
 import os
-from pathlib import Path
-from typing import Optional, Dict, Any
-import logging
-
-logger = logging.getLogger(__name__)
+import joblib
+from datetime import datetime
 
 class ModelLoader:
-    """Singleton class to load and cache ML models"""
+    """Load and cache trained ML models"""
     
-    _instance = None
-    _models: Dict[str, Any] = {}
-    
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-    
-    @property
-    def models_dir(self) -> Path:
-        """Get the trained_models directory path"""
-        return Path(__file__).parent / "trained_models"
-    
-    def load_model(self, model_name: str, file_extension: str = "pkl") -> Any:
+    def __init__(self):
+        self.models_dir = os.path.join(
+            os.path.dirname(__file__), 'saved_models'
+        )
+        self._models_cache = {}
+        self._scalers_cache = {}
+        self._encoders_cache = {}
+        self._metadata_cache = {}
+        
+    def load_model(self, model_name, force_reload=False):
         """
-        Load a model from the trained_models directory using pickle
+        Load a trained model from disk
+        
+        Args:
+            model_name: Name of the model (e.g., 'anomaly_model')
+            force_reload: Force reload even if cached
+            
+        Returns:
+            dict with 'model', 'scaler', 'metadata', 'encoder' (if available)
         """
-        cache_key = f"{model_name}.{file_extension}"
+        # Return cached if available
+        if not force_reload and model_name in self._models_cache:
+            return {
+                'model': self._models_cache[model_name],
+                'scaler': self._scalers_cache.get(model_name),
+                'encoder': self._encoders_cache.get(model_name),
+                'metadata': self._metadata_cache.get(model_name)
+            }
         
-        # Return cached model if already loaded
-        if cache_key in self._models:
-            logger.info(f"Using cached model: {cache_key}")
-            print(f"Using cached model: {cache_key}")
-            return self._models[cache_key]
-        
-        # Build file path
-        model_path = self.models_dir / cache_key
-        
-        # Check if file exists
-        if not model_path.exists():
+        # Load model
+        model_path = os.path.join(self.models_dir, f'{model_name}.pkl')
+        if not os.path.exists(model_path):
             raise FileNotFoundError(
-                f"Model file not found: {model_path}\n"
-                f"Available models: {self.list_available_models()}"
+                f"Model '{model_name}' not found. "
+                f"Please train the model first using train_{model_name.split('_')[0]}.py"
             )
         
-        # Load with pickle
-        try:
-            print(f"Loading model from: {model_path}")
-            print(f"File size: {model_path.stat().st_size} bytes")
-            
-            with open(model_path, 'rb') as f:
-                model = pickle.load(f)
-            
-            # Cache the loaded model
-            self._models[cache_key] = model
-            logger.info(f"Successfully loaded model: {cache_key}")
-            print(f"Successfully loaded model: {cache_key}")
-            return model
-            
-        except Exception as e:
-            logger.error(f"Error loading model {cache_key}: {str(e)}")
-            print(f"Error loading model {cache_key}: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            raise
+        model = joblib.load(model_path)
+        self._models_cache[model_name] = model
+        
+        # Load scaler
+        scaler_path = os.path.join(self.models_dir, f'{model_name}_scaler.pkl')
+        if os.path.exists(scaler_path):
+            scaler = joblib.load(scaler_path)
+            self._scalers_cache[model_name] = scaler
+        else:
+            scaler = None
+        
+        # Load encoder (for multiclass models)
+        encoder_path = os.path.join(self.models_dir, f'{model_name}_encoder.pkl')
+        if os.path.exists(encoder_path):
+            encoder = joblib.load(encoder_path)
+            self._encoders_cache[model_name] = encoder
+        else:
+            encoder = None
+        
+        # Load metadata
+        metadata_path = os.path.join(self.models_dir, f'{model_name}_metadata.pkl')
+        if os.path.exists(metadata_path):
+            metadata = joblib.load(metadata_path)
+            self._metadata_cache[model_name] = metadata
+        else:
+            metadata = {}
+        
+        print(f"✓ Loaded model: {model_name}")
+        if metadata:
+            print(f"  Trained: {metadata.get('trained_at', 'Unknown')}")
+            print(f"  Type: {metadata.get('model_type', 'Unknown')}")
+            if 'metrics' in metadata:
+                print(f"  Accuracy: {metadata['metrics'].get('accuracy', 'N/A'):.4f}")
+        
+        return {
+            'model': model,
+            'scaler': scaler,
+            'encoder': encoder,
+            'metadata': metadata
+        }
     
-    def list_available_models(self) -> list:
-        """List all model files in the trained_models directory"""
-        if not self.models_dir.exists():
+    def get_model_info(self, model_name):
+        """Get metadata about a model without loading it"""
+        metadata_path = os.path.join(self.models_dir, f'{model_name}_metadata.pkl')
+        if os.path.exists(metadata_path):
+            return joblib.load(metadata_path)
+        return None
+    
+    def list_available_models(self):
+        """List all available trained models"""
+        if not os.path.exists(self.models_dir):
             return []
-        return [f.name for f in self.models_dir.iterdir() if f.is_file() and not f.name.startswith('.')]
-    
-    def unload_model(self, model_name: str, file_extension: str = "pkl"):
-        """Remove a model from cache to free memory"""
-        cache_key = f"{model_name}.{file_extension}"
-        if cache_key in self._models:
-            del self._models[cache_key]
-            logger.info(f"Unloaded model: {cache_key}")
+        
+        models = []
+        for filename in os.listdir(self.models_dir):
+            if filename.endswith('.pkl') and not any(
+                x in filename for x in ['scaler', 'encoder', 'metadata']
+            ):
+                model_name = filename.replace('.pkl', '')
+                models.append(model_name)
+        
+        return models
     
     def clear_cache(self):
         """Clear all cached models"""
-        self._models.clear()
-        logger.info("Cleared all cached models")
+        self._models_cache.clear()
+        self._scalers_cache.clear()
+        self._encoders_cache.clear()
+        self._metadata_cache.clear()
+        print("✓ Model cache cleared")
 
-# Create singleton instance
+
+# Global instance
 model_loader = ModelLoader()
+
+
+# Convenience functions
+def load_anomaly_model():
+    """Load anomaly detection model"""
+    return model_loader.load_model('anomaly_model')
+
+
+def load_activity_model():
+    """Load activity recognition model"""
+    return model_loader.load_model('activity_model')
+
+
+def load_maintenance_model():
+    """Load maintenance prediction model"""
+    return model_loader.load_model('maintenance_model')

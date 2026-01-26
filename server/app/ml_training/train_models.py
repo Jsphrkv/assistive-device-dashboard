@@ -8,7 +8,7 @@ from pathlib import Path
 from sklearn.ensemble import IsolationForest, RandomForestClassifier, GradientBoostingClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, accuracy_score
-from data_generators import SyntheticDataGenerator
+from server.app.ml_training.data_generators import SyntheticDataGenerator
 
 def train_anomaly_detector():
     """Train anomaly detection model using Isolation Forest"""

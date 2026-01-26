@@ -5,7 +5,10 @@ from .device import (
     DeviceTelemetry,
     DeviceMaintenanceInfo,
     DeviceSensorData,
-    DeviceAnalysisRequest
+    DeviceAnalysisRequest,
+    AnomalyDetectionResponse,
+    ActivityRecognitionResponse,
+    MaintenancePredictionResponse
 )
 
 from .detection import (
@@ -33,7 +36,10 @@ __all__ = [
     'DeviceMaintenanceInfo',
     'DeviceSensorData',
     'DeviceAnalysisRequest',
-    
+    'AnomalyDetectionResponse',
+    'ActivityRecognitionResponse',
+    'MaintenancePredictionResponse',
+
     # Detection schemas
     'Detection',
     'DetectionCreate',

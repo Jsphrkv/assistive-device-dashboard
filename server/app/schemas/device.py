@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, Dict, Any
 from datetime import datetime
 
 class DeviceBase(BaseModel):
@@ -59,3 +59,25 @@ class DeviceAnalysisRequest(BaseModel):
     telemetry: Optional[DeviceTelemetry] = None
     device_info: Optional[DeviceMaintenanceInfo] = None
     sensor_data: Optional[DeviceSensorData] = None
+
+class DeviceTelemetry(BaseModel):
+    temperature: float = Field(default=37.0)
+    heart_rate: float = Field(default=75.0)
+    battery_level: float = Field(default=80.0)
+    signal_strength: float = Field(default=-50.0)
+    usage_hours: float = Field(default=8.0)
+
+class DeviceSensorData(BaseModel):
+    accelerometer_x: float = Field(default=0.0)
+    accelerometer_y: float = Field(default=0.0)
+    accelerometer_z: float = Field(default=0.0)
+    gyroscope_x: float = Field(default=0.0)
+    gyroscope_y: float = Field(default=0.0)
+    gyroscope_z: float = Field(default=0.0)
+
+class DeviceMaintenanceInfo(BaseModel):
+    battery_health: float = Field(default=80.0)
+    charge_cycles: int = Field(default=100)
+    temperature_avg: float = Field(default=35.0)
+    error_count: int = Field(default=0)
+    uptime_days: int = Field(default=30)

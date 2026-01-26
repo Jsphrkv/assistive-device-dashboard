@@ -7,13 +7,16 @@ from app.services.ml_service import ml_service
 from app.services.ml_storage_service import ml_storage
 from app.ml_models.model_loader import model_loader
 from app.schemas import (
+    # Device,
+    # DeviceCreate,
+    # DeviceUpdate,
     DeviceTelemetry,
     DeviceMaintenanceInfo,
     DeviceSensorData,
     DeviceAnalysisRequest,
     AnomalyDetectionResponse,
-    MaintenancePredictionResponse,
-    ActivityRecognitionResponse
+    ActivityRecognitionResponse,
+    MaintenancePredictionResponse
 )
 
 ml_bp = Blueprint('ml', __name__, url_prefix='/api/ml')
