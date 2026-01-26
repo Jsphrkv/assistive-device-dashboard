@@ -54,12 +54,6 @@ class Device(DeviceBase):
 #     gyro_y: float = Field(..., description="Gyroscope Y-axis")
 #     gyro_z: float = Field(..., description="Gyroscope Z-axis")
 
-class DeviceAnalysisRequest(BaseModel):
-    """Comprehensive device analysis request"""
-    telemetry: Optional[DeviceTelemetry] = None
-    device_info: Optional[DeviceMaintenanceInfo] = None
-    sensor_data: Optional[DeviceSensorData] = None
-
 class DeviceTelemetry(BaseModel):
     temperature: float = Field(default=37.0)
     heart_rate: float = Field(default=75.0)
@@ -81,3 +75,10 @@ class DeviceMaintenanceInfo(BaseModel):
     temperature_avg: float = Field(default=35.0)
     error_count: int = Field(default=0)
     uptime_days: int = Field(default=30)
+
+class DeviceAnalysisRequest(BaseModel):
+    """Comprehensive device analysis request"""
+    telemetry: Optional[DeviceTelemetry] = None
+    device_info: Optional[DeviceMaintenanceInfo] = None
+    sensor_data: Optional[DeviceSensorData] = None
+
