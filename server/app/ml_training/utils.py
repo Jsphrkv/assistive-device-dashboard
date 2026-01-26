@@ -36,6 +36,13 @@ class DataPreprocessor:
         X = df[feature_columns].values
         y = df[target_column].values
         
+        # ✅ FIX 1: Ensure y is 1D (THIS IS THE KEY FIX!)
+        if y.ndim > 1:
+            y = y.ravel()
+        
+        # ✅ FIX 2: Convert to int for binary classification
+        y = y.astype(int)
+        
         # Handle missing values
         X = np.nan_to_num(X, nan=0.0)
         
@@ -57,6 +64,12 @@ class DataPreprocessor:
             except ValueError as e:
                 print(f"⚠ Could not apply SMOTE: {e}")
         
+        # ✅ FIX 3: Ensure outputs are 1D after SMOTE
+        if y_train.ndim > 1:
+            y_train = y_train.ravel()
+        if y_test.ndim > 1:
+            y_test = y_test.ravel()
+        
         return X_train_scaled, X_test_scaled, y_train, y_test
     
     def prepare_multiclass_features(self, df, feature_columns, target_column):
@@ -66,6 +79,10 @@ class DataPreprocessor:
         
         # Encode labels
         y_encoded = self.label_encoder.fit_transform(y)
+        
+        # ✅ FIX: Ensure y_encoded is 1D
+        if y_encoded.ndim > 1:
+            y_encoded = y_encoded.ravel()
         
         # Handle missing values
         X = np.nan_to_num(X, nan=0.0)
@@ -78,6 +95,12 @@ class DataPreprocessor:
         # Scale features
         X_train_scaled = self.scaler.fit_transform(X_train)
         X_test_scaled = self.scaler.transform(X_test)
+        
+        # ✅ FIX: Ensure outputs are 1D
+        if y_train.ndim > 1:
+            y_train = y_train.ravel()
+        if y_test.ndim > 1:
+            y_test = y_test.ravel()
         
         return X_train_scaled, X_test_scaled, y_train, y_test
 
@@ -207,105 +230,155 @@ class ModelSaver:
 
 def generate_synthetic_data(n_samples=1000, dataset_type='anomaly'):
     """
-    Generate synthetic training data for testing
+    Generate synthetic data for ML training
     
     Args:
         n_samples: Number of samples to generate
-        dataset_type: 'anomaly', 'activity', or 'maintenance'
-        
+        dataset_type: Type of dataset ('anomaly', 'activity', 'maintenance')
+    
     Returns:
-        DataFrame with synthetic data
+        pandas DataFrame with synthetic data
     """
     np.random.seed(42)
     
     if dataset_type == 'anomaly':
-        # Anomaly detection data
-        normal_ratio = 0.85
-        n_normal = int(n_samples * normal_ratio)
-        n_anomaly = n_samples - n_normal
+        # Generate anomaly detection data
+        n_normal = int(n_samples * 0.85)  # 85% normal
+        n_anomaly = n_samples - n_normal   # 15% anomalies
         
-        # Normal data (tighter distributions)
+        # ❌ WRONG: This creates 2D array
+        # 'heart_rate': np.random.choice([
+        #     np.random.normal(50, 5, n_anomaly//2),
+        #     np.random.normal(120, 15, n_anomaly//2)
+        # ]).flatten()[:n_anomaly],
+        
+        # ✅ CORRECT: Generate data properly
+        
+        # Normal samples
         normal_data = {
-            'temperature': np.random.normal(37.0, 0.5, n_normal),
-            'heart_rate': np.random.normal(75, 10, n_normal),
-            'battery_level': np.random.uniform(20, 100, n_normal),
-            'signal_strength': np.random.uniform(-70, -30, n_normal),
-            'usage_hours': np.random.uniform(0, 16, n_normal),
-            'is_anomaly': np.zeros(n_normal)
+            'temperature': np.random.normal(37, 0.5, n_normal),
+            'humidity': np.random.normal(65, 10, n_normal),
+            'battery_level': np.random.normal(85, 10, n_normal),
+            'signal_strength': np.random.normal(-60, 10, n_normal),
+            'error_count': np.random.poisson(2, n_normal),
+            'is_anomaly': np.zeros(n_normal, dtype=int)  # 0 = normal
         }
         
-        # Anomaly data (wider distributions, extreme values)
-        anomaly_data = {
-            'temperature': np.random.normal(39.5, 2.0, n_anomaly),
-            'heart_rate': np.random.choice([np.random.normal(50, 5, n_anomaly//2), 
-                                           np.random.normal(120, 15, n_anomaly//2)]).flatten()[:n_anomaly],
-            'battery_level': np.random.uniform(0, 30, n_anomaly),
-            'signal_strength': np.random.uniform(-90, -70, n_anomaly),
-            'usage_hours': np.random.uniform(18, 24, n_anomaly),
-            'is_anomaly': np.ones(n_anomaly)
+        # Anomaly samples (split between two types)
+        n_anomaly_high = n_anomaly // 2
+        n_anomaly_low = n_anomaly - n_anomaly_high
+        
+        # Type 1: High temperature anomalies
+        anomaly_high = {
+            'temperature': np.random.normal(42, 2, n_anomaly_high),  # High temp
+            'humidity': np.random.normal(65, 10, n_anomaly_high),
+            'battery_level': np.random.normal(85, 10, n_anomaly_high),
+            'signal_strength': np.random.normal(-60, 10, n_anomaly_high),
+            'error_count': np.random.poisson(15, n_anomaly_high),  # High errors
+            'is_anomaly': np.ones(n_anomaly_high, dtype=int)
         }
         
-        # Combine
+        # Type 2: Low battery + weak signal anomalies
+        anomaly_low = {
+            'temperature': np.random.normal(37, 0.5, n_anomaly_low),
+            'humidity': np.random.normal(65, 10, n_anomaly_low),
+            'battery_level': np.random.normal(20, 10, n_anomaly_low),  # Low battery
+            'signal_strength': np.random.normal(-95, 5, n_anomaly_low),  # Weak signal
+            'error_count': np.random.poisson(20, n_anomaly_low),  # High errors
+            'is_anomaly': np.ones(n_anomaly_low, dtype=int)
+        }
+        
+        # Combine all samples
         df = pd.DataFrame({
-            key: np.concatenate([normal_data[key], anomaly_data[key]])
-            for key in normal_data.keys()
+            col: np.concatenate([
+                normal_data[col],
+                anomaly_high[col],
+                anomaly_low[col]
+            ])
+            for col in normal_data.keys()
         })
+        
+        # Shuffle the data
+        df = df.sample(frac=1, random_state=42).reset_index(drop=True)
         
     elif dataset_type == 'activity':
-        # Activity recognition data
+        # Generate activity recognition data
         activities = ['resting', 'walking', 'using_device']
-        activity_labels = np.random.choice(activities, n_samples)
+        n_per_activity = n_samples // 3
         
-        df = pd.DataFrame({
-            'accelerometer_x': np.random.normal(0, 1, n_samples),
-            'accelerometer_y': np.random.normal(0, 1, n_samples),
-            'accelerometer_z': np.random.normal(0, 1, n_samples),
-            'gyroscope_x': np.random.normal(0, 0.5, n_samples),
-            'gyroscope_y': np.random.normal(0, 0.5, n_samples),
-            'gyroscope_z': np.random.normal(0, 0.5, n_samples),
-            'activity': activity_labels
-        })
+        activity_data = []
         
-        # Adjust values based on activity
-        for i, activity in enumerate(activity_labels):
-            if activity == 'walking':
-                df.loc[i, ['accelerometer_x', 'accelerometer_y']] *= 3
-            elif activity == 'using_device':
-                df.loc[i, ['gyroscope_x', 'gyroscope_y']] *= 2
-                
+        for activity in activities:
+            if activity == 'resting':
+                data = {
+                    'accel_x': np.random.normal(0, 0.1, n_per_activity),
+                    'accel_y': np.random.normal(0, 0.1, n_per_activity),
+                    'accel_z': np.random.normal(9.8, 0.2, n_per_activity),
+                    'gyro_x': np.random.normal(0, 0.05, n_per_activity),
+                    'gyro_y': np.random.normal(0, 0.05, n_per_activity),
+                    'gyro_z': np.random.normal(0, 0.05, n_per_activity),
+                    'activity': [activity] * n_per_activity
+                }
+            elif activity == 'walking':
+                data = {
+                    'accel_x': np.random.normal(2, 1, n_per_activity),
+                    'accel_y': np.random.normal(1, 0.5, n_per_activity),
+                    'accel_z': np.random.normal(9.8, 2, n_per_activity),
+                    'gyro_x': np.random.normal(0.5, 0.3, n_per_activity),
+                    'gyro_y': np.random.normal(0.5, 0.3, n_per_activity),
+                    'gyro_z': np.random.normal(0.2, 0.2, n_per_activity),
+                    'activity': [activity] * n_per_activity
+                }
+            else:  # using_device
+                data = {
+                    'accel_x': np.random.normal(0.5, 0.3, n_per_activity),
+                    'accel_y': np.random.normal(0.5, 0.3, n_per_activity),
+                    'accel_z': np.random.normal(9.8, 0.5, n_per_activity),
+                    'gyro_x': np.random.normal(0.1, 0.1, n_per_activity),
+                    'gyro_y': np.random.normal(0.1, 0.1, n_per_activity),
+                    'gyro_z': np.random.normal(0.1, 0.1, n_per_activity),
+                    'activity': [activity] * n_per_activity
+                }
+            
+            activity_data.append(pd.DataFrame(data))
+        
+        df = pd.concat(activity_data, ignore_index=True)
+        df = df.sample(frac=1, random_state=42).reset_index(drop=True)
+        
     elif dataset_type == 'maintenance':
-        # Maintenance prediction data
-        needs_maintenance_ratio = 0.3
-        n_needs = int(n_samples * needs_maintenance_ratio)
-        n_normal = n_samples - n_needs
+        # Generate maintenance prediction data
+        n_no_maintenance = int(n_samples * 0.7)  # 70% don't need maintenance
+        n_needs_maintenance = n_samples - n_no_maintenance
         
-        # Normal devices
-        normal_data = {
-            'battery_health': np.random.uniform(80, 100, n_normal),
-            'charge_cycles': np.random.uniform(0, 300, n_normal),
-            'temperature_avg': np.random.normal(35, 2, n_normal),
-            'error_count': np.random.poisson(1, n_normal),
-            'uptime_days': np.random.uniform(0, 365, n_normal),
-            'needs_maintenance': np.zeros(n_normal)
+        # Devices that don't need maintenance
+        no_maintenance = {
+            'battery_health': np.random.uniform(80, 100, n_no_maintenance),
+            'charge_cycles': np.random.randint(0, 300, n_no_maintenance),
+            'temperature_avg': np.random.normal(37, 2, n_no_maintenance),
+            'error_count': np.random.poisson(1, n_no_maintenance),
+            'uptime_days': np.random.randint(1, 100, n_no_maintenance),
+            'needs_maintenance': np.zeros(n_no_maintenance, dtype=int)
         }
         
-        # Needs maintenance
-        maintenance_data = {
-            'battery_health': np.random.uniform(20, 70, n_needs),
-            'charge_cycles': np.random.uniform(400, 800, n_needs),
-            'temperature_avg': np.random.normal(40, 3, n_needs),
-            'error_count': np.random.poisson(10, n_needs),
-            'uptime_days': np.random.uniform(200, 730, n_needs),
-            'needs_maintenance': np.ones(n_needs)
+        # Devices that need maintenance
+        needs_maintenance = {
+            'battery_health': np.random.uniform(10, 60, n_needs_maintenance),
+            'charge_cycles': np.random.randint(500, 2000, n_needs_maintenance),
+            'temperature_avg': np.random.normal(42, 3, n_needs_maintenance),
+            'error_count': np.random.poisson(10, n_needs_maintenance),
+            'uptime_days': np.random.randint(100, 365, n_needs_maintenance),
+            'needs_maintenance': np.ones(n_needs_maintenance, dtype=int)
         }
         
         # Combine
         df = pd.DataFrame({
-            key: np.concatenate([normal_data[key], maintenance_data[key]])
-            for key in normal_data.keys()
+            col: np.concatenate([no_maintenance[col], needs_maintenance[col]])
+            for col in no_maintenance.keys()
         })
+        
+        df = df.sample(frac=1, random_state=42).reset_index(drop=True)
     
-    # Shuffle
-    df = df.sample(frac=1).reset_index(drop=True)
+    else:
+        raise ValueError(f"Unknown dataset_type: {dataset_type}")
     
     return df
