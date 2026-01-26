@@ -29,30 +29,30 @@ class Device(DeviceBase):
     class Config:
         from_attributes = True
 
-class DeviceTelemetry(BaseModel):
-    """Device telemetry data for ML anomaly detection"""
-    battery_level: float = Field(..., ge=0, le=100, description="Battery percentage")
-    usage_duration: float = Field(..., ge=0, description="Usage duration in minutes")
-    temperature: float = Field(..., description="Device temperature in Celsius")
-    signal_strength: float = Field(..., ge=-100, le=0, description="Signal strength in dBm")
-    error_count: int = Field(..., ge=0, description="Number of errors")
+# class DeviceTelemetry(BaseModel):
+#     """Device telemetry data for ML anomaly detection"""
+#     battery_level: float = Field(..., ge=0, le=100, description="Battery percentage")
+#     usage_duration: float = Field(..., ge=0, description="Usage duration in minutes")
+#     temperature: float = Field(..., description="Device temperature in Celsius")
+#     signal_strength: float = Field(..., ge=-100, le=0, description="Signal strength in dBm")
+#     error_count: int = Field(..., ge=0, description="Number of errors")
 
-class DeviceMaintenanceInfo(BaseModel):
-    """Device information for maintenance prediction"""
-    device_age_days: int = Field(..., ge=0, description="Device age in days")
-    battery_cycles: int = Field(..., ge=0, description="Number of battery charge cycles")
-    usage_intensity: float = Field(..., ge=0, le=1, description="Usage intensity (0-1)")
-    error_rate: float = Field(..., ge=0, description="Average errors per day")
-    last_maintenance_days: int = Field(..., ge=0, description="Days since last maintenance")
+# class DeviceMaintenanceInfo(BaseModel):
+#     """Device information for maintenance prediction"""
+#     device_age_days: int = Field(..., ge=0, description="Device age in days")
+#     battery_cycles: int = Field(..., ge=0, description="Number of battery charge cycles")
+#     usage_intensity: float = Field(..., ge=0, le=1, description="Usage intensity (0-1)")
+#     error_rate: float = Field(..., ge=0, description="Average errors per day")
+#     last_maintenance_days: int = Field(..., ge=0, description="Days since last maintenance")
 
-class DeviceSensorData(BaseModel):
-    """Device sensor data for activity recognition"""
-    acc_x: float = Field(..., description="Accelerometer X-axis")
-    acc_y: float = Field(..., description="Accelerometer Y-axis")
-    acc_z: float = Field(..., description="Accelerometer Z-axis")
-    gyro_x: float = Field(..., description="Gyroscope X-axis")
-    gyro_y: float = Field(..., description="Gyroscope Y-axis")
-    gyro_z: float = Field(..., description="Gyroscope Z-axis")
+# class DeviceSensorData(BaseModel):
+#     """Device sensor data for activity recognition"""
+#     acc_x: float = Field(..., description="Accelerometer X-axis")
+#     acc_y: float = Field(..., description="Accelerometer Y-axis")
+#     acc_z: float = Field(..., description="Accelerometer Z-axis")
+#     gyro_x: float = Field(..., description="Gyroscope X-axis")
+#     gyro_y: float = Field(..., description="Gyroscope Y-axis")
+#     gyro_z: float = Field(..., description="Gyroscope Z-axis")
 
 class DeviceAnalysisRequest(BaseModel):
     """Comprehensive device analysis request"""
