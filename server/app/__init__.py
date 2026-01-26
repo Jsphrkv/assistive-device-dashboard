@@ -3,6 +3,7 @@ from flask_cors import CORS
 from app.config import config
 from app.services.email_service import init_mail 
 import os
+from app.ml_models.model_loader import model_loader
 
 def create_app(config_name=None):
     """Application factory pattern"""
@@ -17,6 +18,14 @@ def create_app(config_name=None):
 
     # Initialize Flask-Mail ✅ NEW
     init_mail(app)
+
+     # Try to load ML models (don't crash if fails)
+    try:
+        from app.ml_models.model_loader import model_loader
+        print("ML models initialization attempted")
+    except Exception as e:
+        print(f"⚠ ML models not loaded: {e}")
+        print("  API will use fallback predictions")
     
     # Register blueprints
     from app.routes.auth import auth_bp

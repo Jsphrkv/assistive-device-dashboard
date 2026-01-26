@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pickle, os
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.metrics import (
@@ -11,6 +12,13 @@ from imblearn.over_sampling import SMOTE
 import joblib
 import os
 from datetime import datetime
+
+MODEL_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)),  # Go up to server/app/
+    'ml_models',
+    'saved_models'
+)
+
 
 class DataPreprocessor:
     """Handle data preprocessing for ML models"""
@@ -105,8 +113,66 @@ class DataPreprocessor:
         return X_train_scaled, X_test_scaled, y_train, y_test
 
 
+class ModelSaver:
+    """Save trained models to disk"""
+    
+    @staticmethod
+    def save_model(model, scaler, model_name, metrics=None, label_encoder=None):
+        """
+        Save model with protocol 4 for better compatibility
+        
+        Args:
+            model: Trained model
+            scaler: Fitted scaler
+            model_name: Name for the model files
+            metrics: Optional dict of metrics
+            label_encoder: Optional label encoder (for multiclass models)
+        """
+        model_path = f"{MODEL_DIR}/{model_name}.pkl"
+        scaler_path = f"{MODEL_DIR}/{model_name}_scaler.pkl"
+        metadata_path = f"{MODEL_DIR}/{model_name}_metadata.pkl"
+        
+        try:
+            # Save model with protocol 4
+            with open(model_path, 'wb') as f:
+                pickle.dump(model, f, protocol=4)
+            print(f"✓ Model saved to: {model_path}")
+            
+            # Save scaler
+            with open(scaler_path, 'wb') as f:
+                pickle.dump(scaler, f, protocol=4)
+            print(f"✓ Scaler saved to: {scaler_path}")
+            
+            # Save label encoder if provided
+            if label_encoder is not None:
+                encoder_path = f"{MODEL_DIR}/{model_name}_encoder.pkl"
+                with open(encoder_path, 'wb') as f:
+                    pickle.dump(label_encoder, f, protocol=4)
+                print(f"✓ Label encoder saved to: {encoder_path}")
+            
+            # Save metrics
+            if metrics:
+                with open(metadata_path, 'wb') as f:
+                    pickle.dump(metrics, f, protocol=4)
+                print(f"✓ Metadata saved to: {metadata_path}")
+            
+            print(f"\n✅ All files saved successfully for '{model_name}'")
+            
+            return {
+                'model_path': model_path,
+                'scaler_path': scaler_path,
+                'metadata_path': metadata_path if metrics else None
+            }
+            
+        except Exception as e:
+            print(f"❌ Error saving model: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
+
+
 class ModelEvaluator:
-    """Evaluate ML model performance"""
+    """Evaluate model performance"""
     
     @staticmethod
     def evaluate_binary_classifier(model, X_test, y_test, model_name="Model"):
@@ -114,118 +180,75 @@ class ModelEvaluator:
         y_pred = model.predict(X_test)
         y_pred_proba = model.predict_proba(X_test)[:, 1] if hasattr(model, 'predict_proba') else None
         
-        metrics = {
-            'accuracy': accuracy_score(y_test, y_pred),
-            'precision': precision_score(y_test, y_pred, zero_division=0),
-            'recall': recall_score(y_test, y_pred, zero_division=0),
-            'f1_score': f1_score(y_test, y_pred, zero_division=0)
-        }
-        
-        if y_pred_proba is not None:
-            metrics['roc_auc'] = roc_auc_score(y_test, y_pred_proba)
+        accuracy = accuracy_score(y_test, y_pred)
+        precision = precision_score(y_test, y_pred, zero_division=0)
+        recall = recall_score(y_test, y_pred, zero_division=0)
+        f1 = f1_score(y_test, y_pred, zero_division=0)
         
         print(f"\n{'='*60}")
         print(f"{model_name} Performance Metrics")
         print(f"{'='*60}")
-        print(f"Accuracy:  {metrics['accuracy']:.4f}")
-        print(f"Precision: {metrics['precision']:.4f}")
-        print(f"Recall:    {metrics['recall']:.4f}")
-        print(f"F1 Score:  {metrics['f1_score']:.4f}")
-        if 'roc_auc' in metrics:
-            print(f"ROC AUC:   {metrics['roc_auc']:.4f}")
+        print(f"Accuracy:  {accuracy:.4f}")
+        print(f"Precision: {precision:.4f}")
+        print(f"Recall:    {recall:.4f}")
+        print(f"F1 Score:  {f1:.4f}")
+        
+        if y_pred_proba is not None:
+            try:
+                roc_auc = roc_auc_score(y_test, y_pred_proba)
+                print(f"ROC AUC:   {roc_auc:.4f}")
+            except:
+                pass
+        
         print(f"{'='*60}\n")
         
-        # Confusion Matrix
-        cm = confusion_matrix(y_test, y_pred)
         print("Confusion Matrix:")
-        print(cm)
+        print(confusion_matrix(y_test, y_pred))
+        
         print("\nClassification Report:")
         print(classification_report(y_test, y_pred))
         
-        return metrics
+        return {
+            'accuracy': accuracy,
+            'precision': precision,
+            'recall': recall,
+            'f1_score': f1,
+            'confusion_matrix': confusion_matrix(y_test, y_pred).tolist()
+        }
     
     @staticmethod
     def evaluate_multiclass_classifier(model, X_test, y_test, label_encoder, model_name="Model"):
         """Evaluate multiclass classification model"""
         y_pred = model.predict(X_test)
         
-        metrics = {
-            'accuracy': accuracy_score(y_test, y_pred),
-            'precision': precision_score(y_test, y_pred, average='weighted', zero_division=0),
-            'recall': recall_score(y_test, y_pred, average='weighted', zero_division=0),
-            'f1_score': f1_score(y_test, y_pred, average='weighted', zero_division=0)
-        }
+        accuracy = accuracy_score(y_test, y_pred)
+        precision = precision_score(y_test, y_pred, average='weighted', zero_division=0)
+        recall = recall_score(y_test, y_pred, average='weighted', zero_division=0)
+        f1 = f1_score(y_test, y_pred, average='weighted', zero_division=0)
         
         print(f"\n{'='*60}")
         print(f"{model_name} Performance Metrics")
         print(f"{'='*60}")
-        print(f"Accuracy:  {metrics['accuracy']:.4f}")
-        print(f"Precision: {metrics['precision']:.4f}")
-        print(f"Recall:    {metrics['recall']:.4f}")
-        print(f"F1 Score:  {metrics['f1_score']:.4f}")
+        print(f"Accuracy:  {accuracy:.4f}")
+        print(f"Precision: {precision:.4f}")
+        print(f"Recall:    {recall:.4f}")
+        print(f"F1 Score:  {f1:.4f}")
         print(f"{'='*60}\n")
         
-        # Confusion Matrix
-        cm = confusion_matrix(y_test, y_pred)
         print("Confusion Matrix:")
-        print(cm)
+        print(confusion_matrix(y_test, y_pred))
+        
         print("\nClassification Report:")
         target_names = label_encoder.classes_ if hasattr(label_encoder, 'classes_') else None
         print(classification_report(y_test, y_pred, target_names=target_names))
         
-        return metrics
-
-
-class ModelSaver:
-    """Save and version trained models"""
-    
-    @staticmethod
-    def save_model(model, scaler, model_name, metrics=None, label_encoder=None):
-        """
-        Save trained model with metadata
-        
-        Args:
-            model: Trained model
-            scaler: Fitted scaler
-            model_name: Name for the model file
-            metrics: Performance metrics dict
-            label_encoder: Label encoder (for multiclass)
-        """
-        # Create directory if it doesn't exist
-        save_dir = os.path.join('app', 'ml_models', 'saved_models')
-        os.makedirs(save_dir, exist_ok=True)
-        
-        # Save model
-        model_path = os.path.join(save_dir, f'{model_name}.pkl')
-        joblib.dump(model, model_path)
-        print(f"✓ Model saved to: {model_path}")
-        
-        # Save scaler
-        scaler_path = os.path.join(save_dir, f'{model_name}_scaler.pkl')
-        joblib.dump(scaler, scaler_path)
-        print(f"✓ Scaler saved to: {scaler_path}")
-        
-        # Save label encoder if provided
-        if label_encoder is not None:
-            encoder_path = os.path.join(save_dir, f'{model_name}_encoder.pkl')
-            joblib.dump(label_encoder, encoder_path)
-            print(f"✓ Label encoder saved to: {encoder_path}")
-        
-        # Save metadata
-        metadata = {
-            'model_name': model_name,
-            'trained_at': datetime.now().isoformat(),
-            'metrics': metrics or {},
-            'model_type': type(model).__name__
+        return {
+            'accuracy': accuracy,
+            'precision': precision,
+            'recall': recall,
+            'f1_score': f1,
+            'confusion_matrix': confusion_matrix(y_test, y_pred).tolist()
         }
-        
-        metadata_path = os.path.join(save_dir, f'{model_name}_metadata.pkl')
-        joblib.dump(metadata, metadata_path)
-        print(f"✓ Metadata saved to: {metadata_path}")
-        
-        print(f"\n✅ All files saved successfully for '{model_name}'\n")
-        
-        return model_path
 
 
 def generate_synthetic_data(n_samples=1000, dataset_type='anomaly'):

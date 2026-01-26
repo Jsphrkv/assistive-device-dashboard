@@ -6,8 +6,8 @@ import time
 from app.services.ml_service import ml_service
 from app.services.ml_storage_service import ml_storage
 from app.ml_models.model_loader import model_loader
-from app.detection import AnomalyDetectionResponse, ActivityRecognitionResponse, MaintenancePredictionResponse
-from app.schemas import (
+from app.schemas.detection import AnomalyDetectionResponse, ActivityRecognitionResponse, MaintenancePredictionResponse
+from app.schemas.device import (
     # Device,
     # DeviceCreate,
     # DeviceUpdate,

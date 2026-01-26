@@ -89,12 +89,12 @@ def train_activity_model(data_path=None, use_synthetic=True):
     # Save model
     print("\n💾 Saving model...")
     ModelSaver.save_model(
-        model=model,
-        scaler=preprocessor.scaler,
-        model_name='activity_model',
-        metrics=metrics,
-        label_encoder=preprocessor.label_encoder
-    )
+    model=model,
+    scaler=preprocessor.scaler,
+    model_name='activity_model',
+    metrics=metrics,
+    label_encoder=preprocessor.label_encoder  # ✅ Now supported!
+)
     
     print("\n✅ Activity recognition model training complete!")
     print("="*60)
