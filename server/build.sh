@@ -19,6 +19,13 @@ echo "📁 Creating model directories..."
 mkdir -p server/app/ml_models/saved_models
 mkdir -p server/app/ml_training
 
+# DELETE OLD MODEL FILES (this is the key fix!)
+echo ""
+echo "🗑️  Removing old model files..."
+rm -f server/app/ml_models/saved_models/*.pkl
+rm -f server/app/ml_models/saved_models/*.joblib
+echo "✓ Old models removed"
+
 # Train ML models (don't fail build if this fails)
 echo ""
 echo "🤖 Training ML models..."
