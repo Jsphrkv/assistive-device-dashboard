@@ -35,7 +35,8 @@ api.interceptors.response.use(
       // Only redirect if NOT a login/register request
       const isAuthRequest =
         error.config?.url?.includes("/auth/login") ||
-        error.config?.url?.includes("/auth/register");
+        error.config?.url?.includes("/auth/register") ||
+        error.config?.url?.includes("/auth/logout");
 
       if (!isAuthRequest) {
         storage.remove("token");
