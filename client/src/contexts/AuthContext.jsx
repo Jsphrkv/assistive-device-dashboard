@@ -5,8 +5,8 @@ import {
   logout as logoutService,
   isAuthenticated,
 } from "../services/authService";
-// import { useNavigate } from "react-router-dom";
-import { authAPI } from "../services/api"; // Add this import
+import { authAPI } from "../services/api";
+import { storage } from "../utils/helpers"; // Make sure this import exists
 
 const AuthContext = createContext(null);
 
@@ -16,8 +16,11 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const verifyAuth = async () => {
+      console.log("🔍 Verifying auth on mount...");
+
       // Check if token exists
       if (!isAuthenticated()) {
+        console.log("❌ No token found");
         setUser(null);
         setLoading(false);
         return;
@@ -25,13 +28,13 @@ export const AuthProvider = ({ children }) => {
 
       try {
         // Verify token is actually valid by calling backend
+        console.log("✅ Token found, verifying with backend...");
         const response = await authAPI.getCurrentUser();
+        console.log("✅ User verified:", response.data.user);
         setUser(response.data.user);
       } catch (error) {
         // Token is invalid/expired, clear everything
-        console.error("Auth verification failed:", error);
-
-        // Clear storage synchronously
+        console.error("❌ Auth verification failed:", error);
         storage.remove("token");
         storage.remove("currentUser");
         setUser(null);
@@ -42,6 +45,19 @@ export const AuthProvider = ({ children }) => {
 
     verifyAuth();
   }, []);
+
+  const login = async (username, password) => {
+    try {
+      const { user, error } = await loginService(username, password);
+      if (!error) {
+        setUser(user);
+      }
+      return { user, error };
+    } catch (error) {
+      console.error("Login error:", error);
+      return { user: null, error: error.message || "Login failed" };
+    }
+  };
 
   const logout = async () => {
     console.log("🔐 AuthContext logout called");
