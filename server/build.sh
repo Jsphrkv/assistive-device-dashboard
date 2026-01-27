@@ -1,16 +1,30 @@
 #!/usr/bin/env bash
-# build.sh - Run during deployment
+# Build script for Render deployment
 
 set -o errexit  # Exit on error
 
-echo "Installing Python dependencies..."
+echo "======================================"
+echo "Starting Build Process"
+echo "======================================"
+
+# Install Python dependencies
+echo ""
+echo "📦 Installing dependencies..."
 pip install --upgrade pip
 pip install -r requirements.txt
 
-echo "Creating model directories..."
-mkdir -p app/ml_models/saved_models
+# Create necessary directories
+echo ""
+echo "📁 Creating model directories..."
+mkdir -p server/app/ml_models/saved_models
+mkdir -p server/app/ml_training
 
-echo "Training ML models..."
-python -c "from app.ml_training.train_on_deploy import train_models_for_production; train_models_for_production()"
+# Train ML models (don't fail build if this fails)
+echo ""
+echo "🤖 Training ML models..."
+python train_on_deploy.py || echo "⚠ Model training skipped - will use fallback predictions"
 
-echo "Build complete!"
+echo ""
+echo "======================================"
+echo "✅ Build Complete!"
+echo "======================================"
