@@ -30,13 +30,16 @@ def create_app(config_name=None):
     # Register blueprints
     from app.routes.auth import auth_bp
     from app.routes.devices import devices_bp     
+    from app.routes.device_routes import device_bp
     from app.routes.detections import detections_bp
     from app.routes.ml_routes import ml_bp
     from app.routes.statistics import statistics_bp
     from app.routes.settings import settings_bp
     
+    
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(devices_bp, url_prefix='/api/devices') 
+    app.register_blueprint(device_bp, url_prefix='/api/device')
     app.register_blueprint(detections_bp, url_prefix='/api/detections')
     app.register_blueprint(ml_bp, url_prefix='/api/ml')
     app.register_blueprint(statistics_bp, url_prefix='/api/statistics')

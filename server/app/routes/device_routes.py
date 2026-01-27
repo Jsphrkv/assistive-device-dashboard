@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 
 device_bp = Blueprint('device', __name__, url_prefix='/api/device')
 
+print("✅ device_routes.py loaded successfully!")
+
 @device_bp.route('/telemetry', methods=['POST'])
 def receive_telemetry():
     """
