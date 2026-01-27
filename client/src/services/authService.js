@@ -33,14 +33,21 @@ export const login = async (username, password) => {
 };
 
 export const logout = async () => {
+  // Clear storage FIRST, synchronously
+  const token = storage.get("token");
+  storage.remove("token");
+  storage.remove("currentUser");
+
+  // Then try to notify backend (but don't wait for it)
   try {
-    await authAPI.logout();
+    if (token) {
+      await authAPI.logout();
+    }
   } catch (error) {
-    console.error("Logout error:", error);
-  } finally {
-    storage.remove("token");
-    storage.remove("currentUser");
+    console.error("Logout API error:", error);
+    // Ignore errors - we've already cleared storage
   }
+
   return { error: null };
 };
 

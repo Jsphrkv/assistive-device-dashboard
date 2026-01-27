@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom"; // Add this if not already imported
 import LoginForm from "./pages/LoginForm";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -12,13 +13,12 @@ import CameraTab from "./components/camera/CameraTab";
 import SettingsTab from "./components/settings/SettingsTab";
 import SystemInfoTab from "./components/system/SystemInfoTab";
 import DevicesTab from "./components/devices/DevicesTab";
-import HistoricalDataTab from "./components/ml/HistoricalDataTab"; // ← Add this
-import { getCurrentUser } from "./services/authService";
+import HistoricalDataTab from "./components/ml/HistoricalDataTab";
 import { useAuth } from "./contexts/AuthContext";
 import NotificationSystem from "./components/notifications/NotificationSystem";
 
 function App() {
-  const { user: authUser, loading } = useAuth();
+  const { user: authUser, loading, logout } = useAuth(); // ✅ Add logout from useAuth
   const [currentUser, setCurrentUser] = useState(null);
   const [activeTab, setActiveTab] = useState("dashboard");
   const [currentView, setCurrentView] = useState("login");
@@ -29,7 +29,7 @@ function App() {
     setCurrentUser(authUser);
   }, [authUser]);
 
-  // Your routing useEffect stays the same but removes the getCurrentUser lines
+  // Your routing useEffect stays the same
   useEffect(() => {
     const path = window.location.pathname;
     const search = window.location.search;
@@ -47,7 +47,6 @@ function App() {
       setCurrentView("verifyEmail");
     } else {
       console.log("→ Route: DEFAULT");
-      // ✅ User comes from AuthContext, not localStorage!
     }
     console.log("=".repeat(60));
   }, []);
@@ -58,11 +57,22 @@ function App() {
     window.history.pushState({}, "", "/");
   };
 
-  const handleLogout = () => {
+  // ✅ FIXED: Now actually calls AuthContext logout
+  const handleLogout = async () => {
+    console.log("🚪 Logout initiated from App.jsx");
+
+    // Clear local state first
     setCurrentUser(null);
     setActiveTab("dashboard");
     setCurrentView("login");
+
+    // Call the actual logout from AuthContext (clears storage)
+    await logout();
+
+    // Update URL
     window.history.pushState({}, "", "/");
+
+    console.log("✅ Logout complete");
   };
 
   const handleShowRegister = () => setCurrentView("register");
@@ -71,6 +81,18 @@ function App() {
     window.history.pushState({}, "", "/");
   };
   const handleShowForgotPassword = () => setCurrentView("forgotPassword");
+
+  // Show loading state while checking auth
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (currentView === "verifyEmail") {
     return <VerifyEmail onShowLogin={handleShowLogin} />;
