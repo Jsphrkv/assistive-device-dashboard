@@ -124,7 +124,7 @@ def main():
     print("="*70)
     print("🤖 IoT DEVICE SIMULATOR")
     print("="*70)
-    print(f"Device ID: {DEVICE_ID}")
+    print(f"Device ID: {DEVICE_IDS}")
     print(f"API URL: {API_URL}")
     print(f"Send Interval: {SEND_INTERVAL} seconds")
     print(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")

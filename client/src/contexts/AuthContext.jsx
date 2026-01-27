@@ -5,6 +5,7 @@ import {
   logout as logoutService,
   isAuthenticated,
 } from "../services/authService";
+import { authAPI } from "../services/api"; // Add this import
 
 const AuthContext = createContext(null);
 
@@ -13,14 +14,29 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Only set user if they're actually authenticated (token exists)
-    if (isAuthenticated()) {
-      const currentUser = getCurrentUser();
-      setUser(currentUser);
-    } else {
-      setUser(null);
-    }
-    setLoading(false);
+    const verifyAuth = async () => {
+      // Check if token exists
+      if (!isAuthenticated()) {
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
+      try {
+        // Verify token is actually valid by calling backend
+        const response = await authAPI.getCurrentUser();
+        setUser(response.data.user);
+      } catch (error) {
+        // Token is invalid/expired, clear everything
+        console.error("Auth verification failed:", error);
+        await logoutService(); // This clears storage
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    verifyAuth();
   }, []);
 
   const login = async (username, password) => {
