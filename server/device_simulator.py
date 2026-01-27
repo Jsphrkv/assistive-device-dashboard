@@ -5,7 +5,11 @@ from datetime import datetime
 
 # API Configuration
 API_URL = "https://assistive-device-dashboard.onrender.com/api/device/telemetry"
-DEVICE_ID = "simulator_device_001"
+DEVICE_IDS = [
+    "550e8400-e29b-41d4-a716-446655440001",
+    "550e8400-e29b-41d4-a716-446655440002",
+    "550e8400-e29b-41d4-a716-446655440003"
+]
 SEND_INTERVAL = 30  # seconds
 
 def generate_telemetry(anomaly_mode=False):
@@ -52,7 +56,7 @@ def generate_telemetry(anomaly_mode=False):
     uptime_days = random.randint(1, 365)
     
     return {
-        'device_id': DEVICE_ID,
+        'device_id': random.choice(DEVICE_IDS),
         'temperature': round(temperature, 2),
         'heart_rate': round(heart_rate, 1),
         'battery_level': round(battery_level, 1),
