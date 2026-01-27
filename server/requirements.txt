@@ -59,7 +59,7 @@ flask-cors==4.0.0
 flask-jwt-extended==4.6.0
 flask-mail==0.9.1
 werkzeug==3.0.1
-python-dotenv==1.0.0 # allow latest patch/minor
+python-dotenv==1.0.0# allow latest patch/minor
 
 # =========================
 # Database
@@ -76,7 +76,7 @@ itsdangerous==2.1.2
 # =========================
 # Environment
 # =========================
-python-dotenv>=1.0.1
+# python-dotenv>=1.0.1
 
 # =========================
 # Validation
@@ -111,7 +111,7 @@ scipy==1.11.3
 # Flask Extensions
 # =========================
 pydantic[email]==2.6.0    
-pydantic==2.5.0    # compatible with Flask 3.1
+# pydantic==2.5.0    # compatible with Flask 3.1
 
 # =========================
 # Raspberry Pi / Optional ML (do not install on Render)
