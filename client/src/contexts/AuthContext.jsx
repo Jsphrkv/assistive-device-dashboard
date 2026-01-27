@@ -5,7 +5,7 @@ import {
   logout as logoutService,
   isAuthenticated,
 } from "../services/authService";
-import { useNavigate } from "react-router-dom";
+// import { useNavigate } from "react-router-dom";
 import { authAPI } from "../services/api"; // Add this import
 
 const AuthContext = createContext(null);
