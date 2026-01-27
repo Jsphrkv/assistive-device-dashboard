@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom"; // Add this if not already imported
 import LoginForm from "./pages/LoginForm";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -18,7 +17,7 @@ import { useAuth } from "./contexts/AuthContext";
 import NotificationSystem from "./components/notifications/NotificationSystem";
 
 function App() {
-  const { user: authUser, loading, logout } = useAuth(); // ✅ Add logout from useAuth
+  const { user: authUser, loading, logout } = useAuth(); // ✅ Get logout from useAuth
   const [currentUser, setCurrentUser] = useState(null);
   const [activeTab, setActiveTab] = useState("dashboard");
   const [currentView, setCurrentView] = useState("login");
@@ -29,7 +28,6 @@ function App() {
     setCurrentUser(authUser);
   }, [authUser]);
 
-  // Your routing useEffect stays the same
   useEffect(() => {
     const path = window.location.pathname;
     const search = window.location.search;
@@ -57,17 +55,17 @@ function App() {
     window.history.pushState({}, "", "/");
   };
 
-  // ✅ FIXED: Now actually calls AuthContext logout
+  // ✅ FIXED: Now calls AuthContext logout to clear storage
   const handleLogout = async () => {
     console.log("🚪 Logout initiated from App.jsx");
 
-    // Clear local state first
+    // Call the actual logout from AuthContext (clears storage)
+    await logout();
+
+    // Clear local state
     setCurrentUser(null);
     setActiveTab("dashboard");
     setCurrentView("login");
-
-    // Call the actual logout from AuthContext (clears storage)
-    await logout();
 
     // Update URL
     window.history.pushState({}, "", "/");
