@@ -14,13 +14,22 @@ import SystemInfoTab from "./components/system/SystemInfoTab";
 import DevicesTab from "./components/devices/DevicesTab";
 import HistoricalDataTab from "./components/ml/HistoricalDataTab"; // ← Add this
 import { getCurrentUser } from "./services/authService";
+import { useAuth } from "./contexts/AuthContext";
 import NotificationSystem from "./components/notifications/NotificationSystem";
 
 function App() {
+  const { user: authUser, loading } = useAuth();
   const [currentUser, setCurrentUser] = useState(null);
   const [activeTab, setActiveTab] = useState("dashboard");
   const [currentView, setCurrentView] = useState("login");
 
+  // Sync currentUser with AuthContext
+  useEffect(() => {
+    console.log("🔄 Syncing user from AuthContext:", authUser);
+    setCurrentUser(authUser);
+  }, [authUser]);
+
+  // Your routing useEffect stays the same but removes the getCurrentUser lines
   useEffect(() => {
     const path = window.location.pathname;
     const search = window.location.search;
@@ -37,11 +46,8 @@ function App() {
       console.log("→ Route: EMAIL VERIFICATION");
       setCurrentView("verifyEmail");
     } else {
-      console.log("→ Route: DEFAULT (checking auth)");
-      const user = getCurrentUser();
-      if (user) {
-        setCurrentUser(user);
-      }
+      console.log("→ Route: DEFAULT");
+      // ✅ User comes from AuthContext, not localStorage!
     }
     console.log("=".repeat(60));
   }, []);
