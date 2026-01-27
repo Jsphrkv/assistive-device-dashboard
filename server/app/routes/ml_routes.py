@@ -3,14 +3,12 @@ from pydantic import ValidationError
 from app.services.supabase_client import get_supabase
 from app.middleware.auth import token_required
 import time
+from datetime import datetime, timezone
 from app.services.ml_service import ml_service
 from app.services.ml_storage_service import ml_storage
 from app.ml_models.model_loader import model_loader
 from app.schemas.detection import AnomalyDetectionResponse, ActivityRecognitionResponse, MaintenancePredictionResponse
 from app.schemas.device import (
-    # Device,
-    # DeviceCreate,
-    # DeviceUpdate,
     DeviceTelemetry,
     DeviceMaintenanceInfo,
     DeviceSensorData,
@@ -23,16 +21,17 @@ ml_bp = Blueprint('ml', __name__, url_prefix='/api/ml')
 # ========== Anomaly Detection ==========
 
 @ml_bp.route('/detect/anomaly', methods=['POST'])
-@token_required  # Added auth
+@token_required
 def detect_anomaly():
     """Detect anomalies in device telemetry"""
     try:
         data = request.get_json()
+        print(f"🔍 [Anomaly] Received data: {data}")  # Debug log
         
         if not data:
             return jsonify({'error': 'Missing telemetry data'}), 400
         
-        device_id = data.get('device_id')  # Changed from pop to get
+        device_id = data.get('device_id')
         
         if not device_id:
             return jsonify({'error': 'device_id is required'}), 400
@@ -46,37 +45,47 @@ def detect_anomaly():
                 'details': e.errors()
             }), 400
         
-        # Call ML service (UNCHANGED - your actual ML model)
+        # Call ML service
         result = ml_service.detect_anomaly(telemetry.dict())
+        print(f"✅ [Anomaly] ML result: {result}")  # Debug log
         
-        # Save to ml_predictions table (UPDATED format)
-        supabase = get_supabase()
-        prediction = {
-            'device_id': device_id,
-            'prediction_type': 'anomaly',
-            'is_anomaly': result.get('is_anomaly', False),
-            'anomaly_score': result.get('anomaly_score', 0),
-            'anomaly_severity': result.get('severity', 'low'),  # Changed field name
-            'anomaly_message': result.get('message', ''),  # Changed field name
-            'telemetry_data': data.get('sensor_data', {}),  # Added
-            'model_version': 'v1.0',  # Added
-            'created_at': 'now()'
-        }
+        # Save to ml_predictions table
+        try:
+            supabase = get_supabase()
+            prediction = {
+                'device_id': device_id,
+                'prediction_type': 'anomaly',
+                'is_anomaly': result.get('is_anomaly', False),
+                'anomaly_score': result.get('anomaly_score', 0),
+                'anomaly_severity': result.get('severity', 'low'),
+                'anomaly_message': result.get('message', ''),
+                'telemetry_data': telemetry.dict(),  # Fixed: use validated data
+                'model_version': 'v1.0'
+                # Removed 'created_at' - let Supabase default handle it
+            }
+            
+            print(f"💾 [Anomaly] Saving to DB: {prediction}")  # Debug log
+            db_result = supabase.table('ml_predictions').insert(prediction).execute()
+            print(f"✅ [Anomaly] Saved to DB successfully! ID: {db_result.data[0].get('id') if db_result.data else 'unknown'}")  # Debug log
+            
+        except Exception as db_error:
+            print(f"❌ [Anomaly] Database save failed: {db_error}")
+            import traceback
+            traceback.print_exc()
+            # Don't fail the request if DB save fails
         
-        supabase.table('ml_predictions').insert(prediction).execute()
-        
-        # Return response matching frontend format (UPDATED)
+        # Return response
         return jsonify({
             'is_anomaly': result.get('is_anomaly', False),
             'anomaly_score': float(result.get('anomaly_score', 0)),
             'confidence': float(result.get('confidence', result.get('anomaly_score', 0))),
             'severity': result.get('severity', 'low'),
             'message': result.get('message', ''),
-            'timestamp': int(time.time() * 1000)  # JS timestamp
+            'timestamp': int(time.time() * 1000)
         }), 200
         
     except Exception as e:
-        print(f"Anomaly detection error: {e}")
+        print(f"❌ [Anomaly] Error: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'Anomaly detection failed'}), 500
@@ -85,16 +94,17 @@ def detect_anomaly():
 # ========== Predictive Maintenance ==========
 
 @ml_bp.route('/predict/maintenance', methods=['POST'])
-@token_required  # Added auth
+@token_required
 def predict_maintenance():
     """Predict if device needs maintenance"""
     try:
         data = request.get_json()
+        print(f"🔍 [Maintenance] Received data: {data}")  # Debug log
         
         if not data:
             return jsonify({'error': 'Missing device data'}), 400
         
-        device_id = data.get('device_id')  # Changed from pop to get
+        device_id = data.get('device_id')
         
         if not device_id:
             return jsonify({'error': 'device_id is required'}), 400
@@ -108,26 +118,34 @@ def predict_maintenance():
                 'details': e.errors()
             }), 400
         
-        # Call ML service (UNCHANGED - your actual ML model)
+        # Call ML service
         result = ml_service.predict_maintenance(device_info.dict())
+        print(f"✅ [Maintenance] ML result: {result}")  # Debug log
         
-        # Save to ml_predictions table (UPDATED format)
-        supabase = get_supabase()
-        prediction = {
-            'device_id': device_id,
-            'prediction_type': 'maintenance',
-            'needs_maintenance': result.get('needs_maintenance', False),
-            'maintenance_confidence': result.get('probability', 0),
-            'maintenance_priority': result.get('priority', 'low'),
-            'maintenance_recommendations': result.get('recommendations', {}),
-            'telemetry_data': device_info.dict(),
-            'model_version': 'v1.0',
-            'created_at': 'now()'
-        }
+        # Save to ml_predictions table
+        try:
+            supabase = get_supabase()
+            prediction = {
+                'device_id': device_id,
+                'prediction_type': 'maintenance',
+                'needs_maintenance': result.get('needs_maintenance', False),
+                'maintenance_confidence': result.get('probability', 0),
+                'maintenance_priority': result.get('priority', 'low'),
+                'maintenance_recommendations': result.get('recommendations', {}),
+                'telemetry_data': device_info.dict(),
+                'model_version': 'v1.0'
+            }
+            
+            print(f"💾 [Maintenance] Saving to DB: {prediction}")  # Debug log
+            db_result = supabase.table('ml_predictions').insert(prediction).execute()
+            print(f"✅ [Maintenance] Saved to DB successfully!")  # Debug log
+            
+        except Exception as db_error:
+            print(f"❌ [Maintenance] Database save failed: {db_error}")
+            import traceback
+            traceback.print_exc()
         
-        supabase.table('ml_predictions').insert(prediction).execute()
-        
-        # Return response matching frontend format (UPDATED)
+        # Return response
         return jsonify({
             'maintenance_needed': result.get('needs_maintenance', False),
             'probability': float(result.get('probability', 0)),
@@ -139,24 +157,26 @@ def predict_maintenance():
     except RuntimeError as e:
         return jsonify({'error': str(e)}), 503
     except Exception as e:
-        print(f"Maintenance prediction error: {e}")
+        print(f"❌ [Maintenance] Error: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Maintenance prediction failed: {str(e)}'}), 500
 
+
 # ========== Activity Recognition ==========
 
 @ml_bp.route('/recognize/activity', methods=['POST'])
-@token_required  # Added auth
+@token_required
 def recognize_activity():
     """Recognize user activity from sensor data"""
     try:
         data = request.get_json()
+        print(f"🔍 [Activity] Received data: {data}")  # Debug log
         
         if not data:
             return jsonify({'error': 'Missing sensor data'}), 400
         
-        device_id = data.get('device_id')  # Changed from pop to get
+        device_id = data.get('device_id')
         
         if not device_id:
             return jsonify({'error': 'device_id is required'}), 400
@@ -170,26 +190,34 @@ def recognize_activity():
                 'details': e.errors()
             }), 400
         
-        # Call ML service (UNCHANGED - your actual ML model)
+        # Call ML service
         result = ml_service.recognize_activity(sensor_data.dict())
+        print(f"✅ [Activity] ML result: {result}")  # Debug log
         
-        # Save to ml_predictions table (UPDATED format)
-        supabase = get_supabase()
-        prediction = {
-            'device_id': device_id,
-            'prediction_type': 'activity',
-            'detected_activity': result.get('activity', ''),
-            'activity_confidence': result.get('confidence', 0),
-            'activity_intensity': result.get('intensity', 'low'),
-            'activity_probabilities': result.get('probabilities', {}),
-            'sensor_data': sensor_data.dict(),
-            'model_version': 'v1.0',
-            'created_at': 'now()'
-        }
+        # Save to ml_predictions table
+        try:
+            supabase = get_supabase()
+            prediction = {
+                'device_id': device_id,
+                'prediction_type': 'activity',
+                'detected_activity': result.get('activity', ''),
+                'activity_confidence': result.get('confidence', 0),
+                'activity_intensity': result.get('intensity', 'low'),
+                'activity_probabilities': result.get('probabilities', {}),
+                'sensor_data': sensor_data.dict(),
+                'model_version': 'v1.0'
+            }
+            
+            print(f"💾 [Activity] Saving to DB: {prediction}")  # Debug log
+            db_result = supabase.table('ml_predictions').insert(prediction).execute()
+            print(f"✅ [Activity] Saved to DB successfully!")  # Debug log
+            
+        except Exception as db_error:
+            print(f"❌ [Activity] Database save failed: {db_error}")
+            import traceback
+            traceback.print_exc()
         
-        supabase.table('ml_predictions').insert(prediction).execute()
-        
-        # Return response matching frontend format (UPDATED)
+        # Return response
         return jsonify({
             'activity': result.get('activity', ''),
             'confidence': float(result.get('confidence', 0)),
@@ -200,24 +228,18 @@ def recognize_activity():
     except RuntimeError as e:
         return jsonify({'error': str(e)}), 503
     except Exception as e:
-        print(f"Activity recognition error: {e}")
+        print(f"❌ [Activity] Error: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Activity recognition failed: {str(e)}'}), 500
 
-# ========== NEW: ML History Endpoints ==========
+
+# ========== ML History Endpoints ==========
 
 @ml_bp.route('/history', methods=['GET'])
+@token_required
 def get_ml_history():
-    """
-    Get ML prediction history
-    
-    Query params:
-    - device_id: Filter by device (optional)
-    - type: Filter by prediction type (anomaly, maintenance, activity)
-    - days: Number of days to look back (default: 7)
-    - limit: Max number of records (default: 100)
-    """
+    """Get ML prediction history"""
     try:
         device_id = request.args.get('device_id')
         prediction_type = request.args.get('type')
@@ -241,15 +263,11 @@ def get_ml_history():
         print(f"Error fetching history: {e}")
         return jsonify({'error': 'Failed to fetch history'}), 500
 
+
 @ml_bp.route('/statistics', methods=['GET'])
+@token_required
 def get_ml_statistics():
-    """
-    Get aggregated ML statistics
-    
-    Query params:
-    - device_id: Filter by device (optional)
-    - days: Number of days to look back (default: 7)
-    """
+    """Get aggregated ML statistics"""
     try:
         device_id = request.args.get('device_id')
         days = int(request.args.get('days', 7))
@@ -269,90 +287,20 @@ def get_ml_statistics():
         print(f"Error fetching statistics: {e}")
         return jsonify({'error': 'Failed to fetch statistics'}), 500
 
-# ========== Comprehensive Analysis (with DB save) ==========
 
-@ml_bp.route('/analyze/device', methods=['POST'])
-def analyze_device():
-    """Comprehensive device analysis with database storage"""
-    try:
-        data = request.get_json()
-        
-        if not data:
-            return jsonify({'error': 'Missing request data'}), 400
-        
-        # Get device_id
-        device_id = data.get('device_id')
-        
-        # Validate entire request
-        try:
-            analysis_request = DeviceAnalysisRequest(**data)
-        except ValidationError as e:
-            return jsonify({
-                'error': 'Invalid analysis request',
-                'details': e.errors()
-            }), 400
-        
-        analysis = {}
-        
-        # Anomaly detection
-        if analysis_request.telemetry:
-            try:
-                result = ml_service.detect_anomaly(analysis_request.telemetry.dict())
-                analysis['anomaly'] = AnomalyDetectionResponse(**result).dict()
-                
-                # Save to DB
-                if device_id:
-                    ml_storage.save_anomaly_prediction(
-                        device_id, result, analysis_request.telemetry.dict()
-                    )
-            except Exception as e:
-                analysis['anomaly'] = {'error': str(e)}
-        
-        # Maintenance prediction
-        if analysis_request.device_info:
-            try:
-                result = ml_service.predict_maintenance(analysis_request.device_info.dict())
-                analysis['maintenance'] = MaintenancePredictionResponse(**result).dict()
-                
-                # Save to DB
-                if device_id:
-                    ml_storage.save_maintenance_prediction(
-                        device_id, result, analysis_request.device_info.dict()
-                    )
-            except Exception as e:
-                analysis['maintenance'] = {'error': str(e)}
-        
-        # Activity recognition
-        if analysis_request.sensor_data:
-            try:
-                result = ml_service.recognize_activity(analysis_request.sensor_data.dict())
-                analysis['activity'] = ActivityRecognitionResponse(**result).dict()
-                
-                # Save to DB
-                if device_id:
-                    ml_storage.save_activity_prediction(
-                        device_id, result, analysis_request.sensor_data.dict()
-                    )
-            except Exception as e:
-                analysis['activity'] = {'error': str(e)}
-        
-        return jsonify(analysis), 200
-        
-    except Exception as e:
-        print(f"Analysis error: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': f'Analysis failed: {str(e)}'}), 500
-    
+# ========== Aliases for frontend compatibility ==========
+
 @ml_bp.route('/anomaly-detection', methods=['POST'])
 def detect_anomaly_alias():
     """Alias for /detect/anomaly to match frontend"""
     return detect_anomaly()
 
+
 @ml_bp.route('/activity-recognition', methods=['POST'])
 def recognize_activity_alias():
     """Alias for /recognize/activity to match frontend"""
     return recognize_activity()
+
 
 @ml_bp.route('/maintenance-prediction', methods=['POST'])
 def predict_maintenance_alias():
