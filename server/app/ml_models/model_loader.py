@@ -134,62 +134,87 @@
 #     return model_loader.load_model('maintenance_model')
 
 import os
-import pickle, joblib
+import pickle
 import traceback
 
 class ModelLoader:
-    def load_model(self, model_name, force_reload=False):
-        """Load a trained model from disk"""
-        # Return cached if available
-        if not force_reload and model_name in self._models_cache:
-            return {
-                'model': self._models_cache[model_name],
-                'scaler': self._scalers_cache.get(model_name),
-                'encoder': self._encoders_cache.get(model_name),
-                'metadata': self._metadata_cache.get(model_name)
-            }
+    def __init__(self):
+        self.models = {}
+        self.scalers = {}
+        self.model_dir = os.path.join(
+            os.path.dirname(__file__), 
+            'saved_models'
+        )
+        
+        # Create directory if it doesn't exist
+        os.makedirs(self.model_dir, exist_ok=True)
+    
+    def load_all_models(self):
+        """Load all trained models with error handling"""
+        model_names = [
+            'anomaly_model',
+            'activity_model', 
+            'maintenance_model'
+        ]
+        
+        loaded_count = 0
+        
+        for model_name in model_names:
+            try:
+                self._load_single_model(model_name)
+                print(f"✓ Loaded {model_name}")
+                loaded_count += 1
+            except FileNotFoundError:
+                print(f"⚠ Model not found: {model_name}")
+            except Exception as e:
+                print(f"⚠ Error loading {model_name}: {e}")
+                traceback.print_exc()
+        
+        if loaded_count == 0:
+            print("⚠ No models loaded - using fallback predictions")
+        else:
+            print(f"✓ Successfully loaded {loaded_count}/{len(model_names)} models")
+        
+        return loaded_count > 0
+    
+    def _load_single_model(self, model_name):
+        """Load a single model and its scaler"""
+        model_path = os.path.join(self.model_dir, f'{model_name}.pkl')
+        scaler_path = os.path.join(self.model_dir, f'{model_name}_scaler.pkl')
+        
+        # Check if files exist
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Model not found: {model_path}")
         
         # Load model
-        model_path = os.path.join(self.models_dir, f'{model_name}.pkl')
-        if not os.path.exists(model_path):
-            raise FileNotFoundError(f"Model '{model_name}' not found")
+        with open(model_path, 'rb') as f:
+            self.models[model_name] = pickle.load(f)
         
-        model = joblib.load(model_path)
-        self._models_cache[model_name] = model
-        
-        # Load scaler
-        scaler_path = os.path.join(self.models_dir, f'{model_name}_scaler.pkl')
+        # Load scaler if exists
         if os.path.exists(scaler_path):
-            scaler = joblib.load(scaler_path)
-            self._scalers_cache[model_name] = scaler
-        else:
-            scaler = None
-        
-        # Load encoder (for multiclass models)
-        encoder_path = os.path.join(self.models_dir, f'{model_name}_encoder.pkl')
-        if os.path.exists(encoder_path):
-            encoder = joblib.load(encoder_path)
-            self._encoders_cache[model_name] = encoder
-        else:
-            encoder = None
-        
-        # Load metadata
-        metadata_path = os.path.join(self.models_dir, f'{model_name}_metadata.pkl')
-        if os.path.exists(metadata_path):
-            metadata = joblib.load(metadata_path)
-            self._metadata_cache[model_name] = metadata
-        else:
-            metadata = {}
-        
-        print(f"✓ Loaded {model_name}")
-        
-        # RETURN A DICT, NOT JUST THE MODEL
-        return {
-            'model': model,
-            'scaler': scaler,
-            'encoder': encoder,
-            'metadata': metadata
-        }
+            with open(scaler_path, 'rb') as f:
+                self.scalers[model_name] = pickle.load(f)
+    
+    def get_model(self, model_name):
+        """Get a loaded model"""
+        if model_name not in self.models:
+            raise RuntimeError(
+                f"Model '{model_name}' not loaded. "
+                "Using fallback predictions."
+            )
+        return self.models[model_name]
+    
+    def get_scaler(self, model_name):
+        """Get a loaded scaler"""
+        return self.scalers.get(model_name)
+    
+    def has_model(self, model_name):
+        """Check if model is loaded"""
+        return model_name in self.models
+    
+    def load_model(self, model_name):
+        """Alias for get_model - for backward compatibility"""
+        return self.get_model(model_name)
 
 # Global instance
 model_loader = ModelLoader()

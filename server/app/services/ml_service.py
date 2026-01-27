@@ -8,8 +8,45 @@ class MLService:
         self._anomaly_model = None
         self._activity_model = None
         self._maintenance_model = None
-        self._load_models()
-    
+        self._models_loaded = False
+        print("ML service initialized (models load on first use)")
+
+    def _ensure_models_loaded(self):
+        """Load models if not already loaded"""
+        if self._models_loaded:
+            return
+        
+        print("Loading ML models...")
+        try:
+            # Load anomaly detection model
+            try:
+                anomaly_data = model_loader.load_model('anomaly_model')
+                self._anomaly_model = anomaly_data
+                print("✓ Anomaly detection model loaded")
+            except Exception as e:
+                print(f"⚠ Anomaly model not loaded: {e}")
+            
+            # Load activity recognition model
+            try:
+                activity_data = model_loader.load_model('activity_model')
+                self._activity_model = activity_data
+                print("✓ Activity recognition model loaded")
+            except Exception as e:
+                print(f"⚠ Activity model not loaded: {e}")
+            
+            # Load maintenance prediction model
+            try:
+                maintenance_data = model_loader.load_model('maintenance_model')
+                self._maintenance_model = maintenance_data
+                print("✓ Maintenance prediction model loaded")
+            except Exception as e:
+                print(f"⚠ Maintenance model not loaded: {e}")
+            
+            self._models_loaded = True
+            
+        except Exception as e:
+            print(f"Error loading models: {e}")
+
     def _load_models(self):
         """Load all trained models on initialization"""
         try:
@@ -43,6 +80,8 @@ class MLService:
             print(f"Error loading models: {e}")
     
     def detect_anomaly(self, telemetry_data):
+
+        self._ensure_models_loaded()
         """
         Detect anomalies in device telemetry
         
@@ -105,6 +144,8 @@ class MLService:
             raise
     
     def recognize_activity(self, sensor_data):
+
+        self._ensure_models_loaded()
         """
         Recognize user activity from sensor data
         
@@ -176,6 +217,8 @@ class MLService:
             raise
     
     def predict_maintenance(self, device_info):
+
+        self._ensure_models_loaded()
         """
         Predict if device needs maintenance
         
@@ -253,6 +296,14 @@ class MLService:
         """Reload all models (useful after retraining)"""
         model_loader.clear_cache()
         self._load_models()
+
+    def _ensure_models_loaded(self):
+        """Lazy load models on first use"""
+        if self._models_loaded:
+            return
+        
+        self._load_models()
+        self._models_loaded = True
 
 
 # Global instance

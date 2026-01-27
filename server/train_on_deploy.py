@@ -1,9 +1,3 @@
-#!/usr/bin/env python3
-"""
-Train ML models on deployment
-Ensures models are compatible with server environment
-"""
-
 import os
 import sys
 
