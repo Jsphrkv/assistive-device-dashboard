@@ -1,5 +1,6 @@
 import os
 from dotenv import load_dotenv
+from datetime import timedelta
 
 load_dotenv()
 
@@ -20,15 +21,15 @@ class Config:
       # Email Configuration ✅ NEW
     MAIL_SERVER = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
     MAIL_PORT = int(os.getenv('MAIL_PORT', 587))
-    MAIL_USE_TLS = os.getenv('MAIL_USE_TLS', 'True') == 'True'
-    MAIL_USE_SSL = False
-    MAIL_USERNAME = os.getenv('MAIL_USERNAME')
-    MAIL_PASSWORD = os.getenv('MAIL_PASSWORD')
+    MAIL_USE_TLS = os.getenv('MAIL_USE_TLS', 'True').lower() == 'true'
+    MAIL_USE_SSL = os.getenv('MAIL_USE_SSL', 'False').lower() == 'true'
+    MAIL_USERNAME = os.getenv('MAIL_USERNAME')  # ← Must be set in .env
+    MAIL_PASSWORD = os.getenv('MAIL_PASSWORD')  # ← Must be set in .env
     MAIL_DEFAULT_SENDER = os.getenv('MAIL_DEFAULT_SENDER', os.getenv('MAIL_USERNAME'))
-    MAIL_DISPLAY_NAME = os.getenv('MAIL_DISPLAY_NAME', 'Assistive Device')
+    MAIL_DISPLAY_NAME = os.getenv('MAIL_DISPLAY_NAME', 'Assistive Device Dashboard')
     
     # Frontend URL ✅ NEW
-    FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://assistive-device-dashboard.vercel.app')
+    FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://assistive-device-dashboard.vercel.app',  'http://localhost:5173')
     
     # Device
     DEVICE_API_KEY = os.getenv('DEVICE_API_KEY', 'device-api-key')
@@ -44,6 +45,8 @@ class Config:
     MODEL_PATH = os.getenv('MODEL_PATH', './models/model.tflite')
     CONFIDENCE_THRESHOLD = float(os.getenv('CONFIDENCE_THRESHOLD', 0.5))
     DISTANCE_THRESHOLD_CM = int(os.getenv('DISTANCE_THRESHOLD_CM', 100))
+
+    DEBUG = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
 
 class DevelopmentConfig(Config):
     """Development configuration"""

@@ -1,4 +1,4 @@
-from flask import Flask, request
+from flask import Flask, app, request
 from flask_cors import CORS
 from app.config import config
 from app.services.email_service import init_mail 
@@ -28,6 +28,15 @@ def create_app(config_name=None):
 
     # Initialize Flask-Mail ✅ NEW
     init_mail(app)
+
+    print("="*60)
+    print("MAIL CONFIGURATION:")
+    print(f"MAIL_SERVER: {app.config.get('MAIL_SERVER')}")
+    print(f"MAIL_PORT: {app.config.get('MAIL_PORT')}")
+    print(f"MAIL_USERNAME: {app.config.get('MAIL_USERNAME')}")
+    print(f"MAIL_PASSWORD: {'SET' if app.config.get('MAIL_PASSWORD') else 'NOT SET'}")
+    print(f"FRONTEND_URL: {app.config.get('FRONTEND_URL')}")
+    print("="*60)
 
      # Try to load ML models (don't crash if fails)
     try:
