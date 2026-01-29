@@ -11,24 +11,20 @@ def create_app(config_name=None):
         config_name = os.getenv('FLASK_ENV', 'development')
     
     app = Flask(__name__)
-    app.config.from_object(config[config_name])
+
+    app.config.from_object('app.config.Config')
     
     # Initialize CORS
-    CORS(app, resources={
-        r"/api/*": {
-            "origins": [
-                "https://assistive-device-dashboard.vercel.app",
-                "http://localhost:3000",
-                "http://localhost:5173",
-                "http://localhost:5000"  # Local backend testing
-            ],
-            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-            "allow_headers": ["Content-Type", "Authorization", "X-Device-Token"],
-            "expose_headers": ["Content-Type", "Authorization"],
-            "supports_credentials": True,
-            "max_age": 3600
-        }
-    })
+    CORS(app, 
+         origins=[
+             "https://assistive-device-dashboard.vercel.app",
+             "http://localhost:3000",
+             "http://localhost:5173"
+         ],
+         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+         allow_headers=["Content-Type", "Authorization", "X-Device-Token"],
+         supports_credentials=True,
+         max_age=3600)
 
     # Initialize Flask-Mail ✅ NEW
     init_mail(app)
@@ -59,12 +55,28 @@ def create_app(config_name=None):
     app.register_blueprint(statistics_bp, url_prefix='/api/statistics')
     app.register_blueprint(settings_bp, url_prefix='/api/settings')
 
+    @app.before_request
+    def handle_preflight():
+        if request.method == "OPTIONS":
+            response = app.make_default_options_response()
+            response.headers['Access-Control-Allow-Origin'] = request.headers.get('Origin', '*')
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Device-Token'
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            return response
+
     @app.after_request
     def after_request(response):
-        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Device-Token')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        origin = request.headers.get('Origin')
+        if origin in [
+            "https://assistive-device-dashboard.vercel.app",
+            "http://localhost:3000",
+            "http://localhost:5173"
+        ]:
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Device-Token'
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
         return response
 
     # Health check endpoint
@@ -83,6 +95,7 @@ def create_app(config_name=None):
     
     return app
 
+app = create_app()
+
 if __name__ == '__main__':
-    app = create_app()
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0', port=5000)

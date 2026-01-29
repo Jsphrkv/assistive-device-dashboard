@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, current_app, request, jsonify
 from app.utils.tokens import generate_email_token, verify_email_token
 from app.services.supabase_client import get_supabase
 from app.services.email_service import (
@@ -330,30 +330,44 @@ def forgot_password():
         
         # Always return success to prevent email enumeration
         if not user.data:
-            return jsonify({'message': 'If the email exists, a password reset link has been sent'}), 200
+            return jsonify({
+                'message': 'If the email exists, a password reset link has been sent'
+            }), 200
         
         user_data = user.data[0]
         
         # Generate reset token (24 hours expiry)
         reset_token = generate_email_token(email, salt='password-reset')
         
-        print(f"="*60)
-        print(f"PASSWORD RESET REQUESTED")
-        print(f"Email: {email}")
-        print(f"Username: {user_data['username']}")
-        print(f"Token (first 50 chars): {reset_token[:50]}...")
-        print(f"Token length: {len(reset_token)}")
-        print(f"="*60)
+        print(f"Password reset requested for: {email}")
         
-        # Send reset email
-        send_password_reset_email(email, user_data['username'], reset_token)
+        # ✅ Send email in background to avoid timeout
+        import threading
         
-        return jsonify({'message': 'If the email exists, a password reset link has been sent'}), 200
+        def send_email_background():
+            try:
+                with current_app.app_context():
+                    send_password_reset_email(email, user_data['username'], reset_token)
+                    print(f"✅ Email sent to {email}")
+            except Exception as e:
+                print(f"❌ Email error: {str(e)}")
+        
+        thread = threading.Thread(target=send_email_background)
+        thread.daemon = True
+        thread.start()
+        
+        # Return immediately
+        return jsonify({
+            'message': 'If the email exists, a password reset link has been sent'
+        }), 200
         
     except Exception as e:
         print(f"Forgot password error: {str(e)}")
+        import traceback
         traceback.print_exc()
-        return jsonify({'error': 'Failed to process request'}), 500
+        return jsonify({
+            'error': 'Unable to process request. Please try again later.'
+        }), 500
 
 @auth_bp.route('/verify-reset-token/<path:token>', methods=['GET'])
 def verify_reset_token_route(token):
