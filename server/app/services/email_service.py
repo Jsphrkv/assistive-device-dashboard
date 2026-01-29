@@ -21,7 +21,7 @@ def send_verification_email(email, username, token):
         verify_url = f"{FRONTEND_URL}/verify-email?token={token}"
         
         print(f"📧 Attempting to send verification email to {email}...")
-        print(f"📧 Using SendGrid from: {SENDGRID_FROM_EMAIL}")
+        print(f"📧 Using SendGrid from: {MAIL_DEFAULT_SENDER}")
         
         html_body = f"""
         <!DOCTYPE html>
@@ -65,7 +65,7 @@ def send_verification_email(email, username, token):
         """
         
         message = Mail(
-            from_email=Email(SENDGRID_FROM_EMAIL, SENDGRID_DISPLAY_NAME),
+            from_email=Email(MAIL_DEFAULT_SENDER, MAIL_DEFAULT_SENDER),
             to_emails=To(email),
             subject='Verify Your Email - Assistive Device Dashboard',
             html_content=Content("text/html", html_body)
@@ -93,7 +93,7 @@ def send_password_reset_email(email, username, token):
         reset_url = f"{FRONTEND_URL}/reset-password?token={token}"
         
         print(f"📧 Attempting to send password reset email to {email}...")
-        print(f"📧 Using SendGrid from: {SENDGRID_FROM_EMAIL}")
+        print(f"📧 Using SendGrid from: {MAIL_DEFAULT_SENDER}")
         
         html_body = f"""
         <!DOCTYPE html>
@@ -142,7 +142,7 @@ def send_password_reset_email(email, username, token):
         """
         
         message = Mail(
-            from_email=Email(SENDGRID_FROM_EMAIL, SENDGRID_DISPLAY_NAME),
+            from_email=Email(MAIL_DEFAULT_SENDER, MAIL_DEFAULT_SENDER),
             to_emails=To(email),
             subject='Reset Your Password - Assistive Device Dashboard',
             html_content=Content("text/html", html_body)
