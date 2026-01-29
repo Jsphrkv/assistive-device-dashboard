@@ -111,7 +111,6 @@ def register():
         email = data.get('email', '').lower().strip()
         username = data.get('username', '').strip()
         password = data.get('password')
-        # full_name = data.get('fullName', '').strip()  # ← Remove this
         
         # Validation
         if not all([email, username, password]):
@@ -133,12 +132,11 @@ def register():
         # Generate verification token
         verification_token = generate_email_token(email, salt='email-verification')
         
-        # Create user WITHOUT full_name
+        # Create user
         user_data = {
             'email': email,
             'username': username,
             'password_hash': password_hash,
-            # 'full_name': full_name,  # ← Remove this line
             'role': 'user',
             'email_verified': False,
             'verification_token': verification_token,
@@ -150,8 +148,23 @@ def register():
         if not response.data:
             return jsonify({'error': 'Registration failed'}), 500
         
-        # Send verification email
-        send_verification_email(email, username, verification_token)
+        # ✅ Send verification email with proper context
+        from flask import current_app
+        import threading
+        
+        app = current_app._get_current_object()
+        
+        def send_email_background(app_instance):
+            with app_instance.app_context():
+                try:
+                    send_verification_email(email, username, verification_token)
+                    print(f"✅ Verification email sent to {email}")
+                except Exception as e:
+                    print(f"❌ Email sending failed: {str(e)}")
+        
+        thread = threading.Thread(target=send_email_background, args=(app,))
+        thread.daemon = True
+        thread.start()
         
         return jsonify({
             'message': 'Registration successful! Please check your email to verify your account.'
@@ -159,6 +172,7 @@ def register():
         
     except Exception as e:
         print(f"Registration error: {str(e)}")
+        import traceback
         traceback.print_exc()
         return jsonify({'error': 'Registration failed'}), 500
 
@@ -216,7 +230,6 @@ def resend_verification():
         user = supabase.table('users').select('*').eq('email', email).execute()
         
         if not user.data:
-            # Don't reveal if email exists (security)
             return jsonify({'message': 'If the email exists, a verification link has been sent'}), 200
         
         user_data = user.data[0]
@@ -233,13 +246,29 @@ def resend_verification():
             .eq('email', email)\
             .execute()
         
-        # Send email
-        send_verification_email(email, user_data['username'], verification_token)
+        # ✅ Send email with proper context
+        from flask import current_app
+        import threading
+        
+        app = current_app._get_current_object()
+        
+        def send_email_background(app_instance):
+            with app_instance.app_context():
+                try:
+                    send_verification_email(email, user_data['username'], verification_token)
+                    print(f"✅ Verification email sent to {email}")
+                except Exception as e:
+                    print(f"❌ Email sending failed: {str(e)}")
+        
+        thread = threading.Thread(target=send_email_background, args=(app,))
+        thread.daemon = True
+        thread.start()
         
         return jsonify({'message': 'Verification email sent! Please check your inbox.'}), 200
         
     except Exception as e:
         print(f"Resend verification error: {str(e)}")
+        import traceback
         traceback.print_exc()
         return jsonify({'error': 'Failed to resend verification email'}), 500
 
@@ -341,18 +370,24 @@ def forgot_password():
         
         print(f"Password reset requested for: {email}")
         
-        # ✅ Send email in background to avoid timeout
+        # ✅ FIX: Get app instance and send email with proper context
+        from flask import current_app
         import threading
         
-        def send_email_background():
-            try:
-                with current_app.app_context():
-                    send_password_reset_email(email, user_data['username'], reset_token)
-                    print(f"✅ Email sent to {email}")
-            except Exception as e:
-                print(f"❌ Email error: {str(e)}")
+        app = current_app._get_current_object()  # Get actual app object
         
-        thread = threading.Thread(target=send_email_background)
+        def send_email_background(app_instance):
+            with app_instance.app_context():  # Create app context for thread
+                try:
+                    send_password_reset_email(email, user_data['username'], reset_token)
+                    print(f"✅ Password reset email sent to {email}")
+                except Exception as e:
+                    print(f"❌ Email sending failed: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
+        
+        # Start background thread with app instance
+        thread = threading.Thread(target=send_email_background, args=(app,))
         thread.daemon = True
         thread.start()
         
