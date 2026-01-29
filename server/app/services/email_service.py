@@ -1,31 +1,10 @@
-from flask import current_app, render_template_string
-from flask_mail import Mail, Message
-from itsdangerous import URLSafeTimedSerializer
+from flask import current_app
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail, Email, To, Content
 import traceback
 
-mail = Mail()
-
-def init_mail(app):
-    """Initialize Flask-Mail with app"""
-    mail.init_app(app)
-
-def generate_token(email, salt='email-verification'):
-    """Generate a time-sensitive token"""
-    serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
-    return serializer.dumps(email, salt=salt)
-
-def verify_token(token, salt='email-verification', max_age=3600):
-    """Verify token (default expires in 1 hour)"""
-    serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
-    try:
-        email = serializer.loads(token, salt=salt, max_age=max_age)
-        return email
-    except Exception as e:
-        print(f"Token verification error: {e}")
-        return None
-
 def send_verification_email(email, username, token):
-    """Send email verification link"""
+    """Send email verification link via SendGrid"""
     try:
         verify_url = f"{current_app.config['FRONTEND_URL']}/verify-email?token={token}"
         
@@ -70,24 +49,29 @@ def send_verification_email(email, username, token):
         </html>
         """
         
-        msg = Message(
-            subject="Verify Your Email - Assistive Device Dashboard",
-            recipients=[email],
-            html=html_body,
-            sender=(current_app.config['MAIL_DISPLAY_NAME'], current_app.config['MAIL_DEFAULT_SENDER'])
+        message = Mail(
+            from_email=Email(
+                current_app.config['MAIL_DEFAULT_SENDER'],
+                current_app.config['MAIL_DISPLAY_NAME']
+            ),
+            to_emails=To(email),
+            subject='Verify Your Email - Assistive Device Dashboard',
+            html_content=Content("text/html", html_body)
         )
         
-        mail.send(msg)
-        print(f"✓ Verification email sent to {email}")
+        sg = SendGridAPIClient(current_app.config['SENDGRID_API_KEY'])
+        response = sg.send(message)
+        
+        print(f"✅ Verification email sent to {email} (Status: {response.status_code})")
         return True
         
     except Exception as e:
-        print(f"✗ Failed to send verification email: {e}")
+        print(f"❌ Failed to send verification email: {e}")
         traceback.print_exc()
         return False
 
 def send_password_reset_email(email, username, token):
-    """Send password reset link"""
+    """Send password reset link via SendGrid"""
     try:
         reset_url = f"{current_app.config['FRONTEND_URL']}/reset-password?token={token}"
         
@@ -137,18 +121,23 @@ def send_password_reset_email(email, username, token):
         </html>
         """
         
-        msg = Message(
-            subject="Reset Your Password - Assistive Device Dashboard",
-            recipients=[email],
-            html=html_body,
-            sender=(current_app.config['MAIL_DISPLAY_NAME'], current_app.config['MAIL_DEFAULT_SENDER'])
+        message = Mail(
+            from_email=Email(
+                current_app.config['MAIL_DEFAULT_SENDER'],
+                current_app.config['MAIL_DISPLAY_NAME']
+            ),
+            to_emails=To(email),
+            subject='Reset Your Password - Assistive Device Dashboard',
+            html_content=Content("text/html", html_body)
         )
         
-        mail.send(msg)
-        print(f"✓ Password reset email sent to {email}")
+        sg = SendGridAPIClient(current_app.config['SENDGRID_API_KEY'])
+        response = sg.send(message)
+        
+        print(f"✅ Password reset email sent to {email} (Status: {response.status_code})")
         return True
         
     except Exception as e:
-        print(f"✗ Failed to send password reset email: {e}")
+        print(f"❌ Failed to send password reset email: {e}")
         traceback.print_exc()
         return False

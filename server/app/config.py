@@ -19,13 +19,17 @@ class Config:
     JWT_EXPIRATION_HOURS = int(os.getenv('JWT_EXPIRATION_HOURS', 24))
 
       # Email Configuration ✅ NEW
-    MAIL_SERVER = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
-    MAIL_PORT = int(os.getenv('MAIL_PORT', 587))
-    MAIL_USE_TLS = os.getenv('MAIL_USE_TLS', 'True').lower() == 'true'
-    MAIL_USE_SSL = os.getenv('MAIL_USE_SSL', 'False').lower() == 'true'
-    MAIL_USERNAME = os.getenv('MAIL_USERNAME')  # ← Must be set in .env
-    MAIL_PASSWORD = os.getenv('MAIL_PASSWORD')  # ← Must be set in .env
-    MAIL_DEFAULT_SENDER = os.getenv('MAIL_DEFAULT_SENDER', os.getenv('MAIL_USERNAME'))
+    # MAIL_SERVER = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
+    # MAIL_PORT = int(os.getenv('MAIL_PORT', 587))
+    # MAIL_USE_TLS = os.getenv('MAIL_USE_TLS', 'True').lower() == 'true'
+    # MAIL_USE_SSL = os.getenv('MAIL_USE_SSL', 'False').lower() == 'true'
+    # MAIL_USERNAME = os.getenv('MAIL_USERNAME')  # ← Must be set in .env
+    # MAIL_PASSWORD = os.getenv('MAIL_PASSWORD')  # ← Must be set in .env
+    # MAIL_DEFAULT_SENDER = os.getenv('MAIL_DEFAULT_SENDER', os.getenv('MAIL_USERNAME'))
+    # MAIL_DISPLAY_NAME = os.getenv('MAIL_DISPLAY_NAME', 'Assistive Device Dashboard')
+
+    SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY')
+    MAIL_DEFAULT_SENDER = os.getenv('MAIL_DEFAULT_SENDER', 'verzosaj08@gmail.com')
     MAIL_DISPLAY_NAME = os.getenv('MAIL_DISPLAY_NAME', 'Assistive Device Dashboard')
     
     # Frontend URL ✅ NEW

@@ -1,125 +1,96 @@
-# # # Web Framework
-# # Flask==3.1.0
-# # Flask-CORS==5.0.0
-
-# # # Database
-# # supabase==2.3.4
-
-# # # Authentication
-# # PyJWT==2.8.0
-# # bcrypt==4.1.2
-
-# # # Environment
-# # python-dotenv==1.0.1
-
-# # # Validation
-# # marshmallow==3.20.2
-
-# # # Production Server
-# # gunicorn==21.2.0
-
-# # # Utilities
-# # python-dateutil==2.8.2
-# # pytz==2024.1
-
-# # # HTTP requests (if needed for API calls)
-# # requests==2.31.0
-
-# # # ML Libraries
-# # scikit-learn==1.3.2
-# # joblib==1.3.2
-# # numpy==1.24.3
-# # pandas==2.0.3
-# # scipy==1.11.3
-
-# # Flask-Mail==0.9.1
-# # itsdangerous==2.1.2
-
-# # # For Raspberry Pi (install separately on Pi)
-# # # opencv-python==4.9.0.80
-# # # numpy==1.26.3
-# # # picamera2==0.3.16
-# # # gpiozero==2.0.1
-# # # RPi.GPIO==0.7.1
-
-# # # Optional: For ML models
-# # # tensorflow-lite==2.14.0
-# # # or
-# # # pytorch-mobile==1.13.0
-
-# ===========================before render============================
-
-
-
-# =========================
-# Web Framework
-# =========================
-Flask==3.0.0
-flask-cors==4.0.0
-flask-jwt-extended==4.6.0
-flask-mail==0.9.1
-werkzeug==3.0.1
-
-# =========================
-# Database
-# =========================
-supabase==2.16.0            # latest minor updates compatible with Python 3.11
-
-# =========================
-# Authentication
-# =========================
+annotated-types==0.7.0
+anyio==4.12.1
 bcrypt==4.1.2
-PyJWT==2.8.0
-itsdangerous==2.1.2
-python-dotenv==1.0.0
-
-# =========================
-# Environment
-# =========================
-# python-dotenv>=1.0.1
-
-# =========================
-# Validation
-# =========================
-marshmallow>=3.20.2
-
-# =========================
-# Production Server
-# =========================
-gunicorn==24.1.1
-
-# =========================
-# Utilities
-# =========================
-python-dateutil>=2.8.2
-pytz>=2024.1
-requests>=2.31.0
-
-# =========================
-# Machine Learning Libraries
-# =========================
-numpy==1.26.4
-scikit-learn==1.5.2
-xgboost==2.1.3
-pandas==2.2.3
-joblib==1.4.2
-imbalanced-learn==0.12.4
-scipy==1.14.1
-
-
-# =========================
-# Flask Extensions
-# =========================
-pydantic==2.6.0  
-email-validator==2.3.0   # compatible with Flask 3.1
-
-# =========================
-# Raspberry Pi / Optional ML (do not install on Render)
-# =========================
-# opencv-python==4.9.0
-# numpy==1.26.3
-# picamera2==0.3.16
-# gpiozero==2.0.1
-# RPi.GPIO==0.7.1
-# tensorflow-lite==2.14.0
-# pytorch-mobile==1.13.0
+bidict==0.23.1
+blinker==1.9.0
+cachetools==6.2.4
+certifi==2026.1.4
+cffi==2.0.0
+charset-normalizer==3.4.4
+click==8.3.1
+colorama==0.4.6
+cryptography==46.0.3
+deprecation==2.1.0
+dnspython==2.8.0
+email-validator==2.3.0
+Flask==3.1.0
+Flask-Cors==5.0.0
+Flask-JWT-Extended==4.7.1
+Flask-Mail==0.10.0
+Flask-SocketIO==5.6.0
+Flask-SQLAlchemy==3.1.1
+fsspec==2026.1.0
+greenlet==3.3.0
+gunicorn==21.2.0
+h11==0.16.0
+h2==4.3.0
+hpack==4.1.0
+httpcore==1.0.9
+httpx==0.28.1
+hyperframe==6.1.0
+idna==3.11
+imbalanced-learn==0.14.1
+itsdangerous==2.2.0
+Jinja2==3.1.6
+joblib==1.5.3
+lance-namespace==0.4.5
+lance-namespace-urllib3-client==0.4.5
+markdown-it-py==4.0.0
+MarkupSafe==3.0.3
+marshmallow==3.20.2
+mdurl==0.1.2
+mmh3==5.2.0
+multidict==6.7.0
+numpy==2.4.1
+packaging==25.0
+pandas==3.0.0
+postgrest==2.27.2
+propcache==0.4.1
+pyarrow==23.0.0
+pycparser==3.0
+pydantic==2.12.5
+pydantic_core==2.41.5
+Pygments==2.19.2
+pyiceberg==0.10.0
+PyJWT==2.10.1
+pylance==1.0.4
+pyparsing==3.3.2
+PyQt5==5.15.11
+PyQt5-Qt5==5.15.2
+PyQt5_sip==12.17.0
+pyroaring==1.0.3
+python-dateutil==2.8.2
+python-dotenv==1.0.1
+python-engineio==4.13.0
+python-http-client==3.3.7
+python-socketio==5.16.0
+pytz==2024.1
+realtime==2.27.2
+requests==2.31.0
+rich==14.2.0
+scikit-learn==1.8.0
+scipy==1.17.0
+sendgrid==6.12.5
+simple-websocket==1.1.0
+six==1.17.0
+sklearn-compat==0.1.5
+sniffio==1.3.1
+sortedcontainers==2.4.0
+SQLAlchemy==2.0.46
+storage3==2.27.2
+StrEnum==0.4.15
+strictyaml==1.7.3
+supabase==2.27.2
+supabase-auth==2.27.2
+supabase-functions==2.27.2
+tenacity==9.1.2
+threadpoolctl==3.6.0
+typing-inspection==0.4.2
+typing_extensions==4.15.0
+tzdata==2025.3
+urllib3==2.6.3
+websockets==16.0
+Werkzeug==3.1.5
+wsproto==1.3.2
+xgboost==3.1.3
+yarl==1.22.0

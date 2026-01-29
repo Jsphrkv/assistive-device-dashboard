@@ -2,10 +2,8 @@ from flask import Blueprint, current_app, request, jsonify
 from app.utils.tokens import generate_email_token, verify_email_token
 from app.services.supabase_client import get_supabase
 from app.services.email_service import (
-    send_verification_email, 
-    send_password_reset_email,
-    generate_token as generate_email_token,
-    verify_token as verify_email_token
+    send_verification_email,
+    send_password_reset_email
 )
 from app.utils.jwt_handler import generate_token
 from app.middleware.auth import token_required
