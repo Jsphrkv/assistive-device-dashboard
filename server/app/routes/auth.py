@@ -408,148 +408,94 @@ def forgot_password():
             'error': 'Unable to process request. Please try again later.'
         }), 500
 
-@auth_bp.route('/verify-reset-token/<path:token>', methods=['GET'])
-def verify_reset_token_route(token):
-    """Verify if reset token is valid"""
-    print(f"="*60)
-    print(f"VERIFY RESET TOKEN ENDPOINT HIT")
-    print(f"Received token: {token}")
-    print(f"="*60)
-    
+@auth_bp.route('/reset-password', methods=['POST'])
+def reset_password():
+    """Reset user password with token"""
     try:
-        from urllib.parse import unquote
-        from app.utils.tokens import verify_email_token
+        data = request.get_json()
+        token = data.get('token')
+        new_password = data.get('new_password')
         
-        # URL decode the token
-        decoded_token = unquote(token)
+        print(f"============================================================")
+        print(f"PASSWORD RESET ATTEMPT")
+        print(f"Token received: {token[:50]}..." if token else "No token")
+        print(f"============================================================")
         
-        print(f"After URL decode: {decoded_token}")
-        print(f"Token length: {len(decoded_token)}")
+        if not token or not new_password:
+            return jsonify({'error': 'Token and new password are required'}), 400
         
-        # Verify token with 24-hour expiry
-        email = verify_email_token(decoded_token, salt='password-reset', max_age=86400)
+        # Validate password length
+        if len(new_password) < 8:
+            return jsonify({'error': 'Password must be at least 8 characters'}), 400
+        
+        # Verify token using the same function as email verification
+        email = verify_email_token(token, salt='password-reset', max_age=3600)
         
         if not email:
-            print("❌ Token verification returned None")
-            print(f"="*60)
-            return jsonify({
-                'valid': False,
-                'error': 'Invalid or expired reset link'
-            }), 400
+            print("❌ Invalid or expired token")
+            return jsonify({'error': 'Reset link has expired or is invalid. Please request a new one.'}), 400
         
-        print(f"✅ Token VALID for email: {email}")
-        print(f"="*60)
+        print(f"✅ Token verified for email: {email}")
+        
+        # Find user by email in Supabase
+        supabase = get_supabase()
+        user_response = supabase.table('users').select('*').eq('email', email).execute()
+        
+        if not user_response.data:
+            print(f"❌ User not found for email: {email}")
+            return jsonify({'error': 'User not found'}), 404
+        
+        user = user_response.data[0]
+        
+        # Hash new password with bcrypt
+        new_password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        
+        # Update password in Supabase
+        update_response = supabase.table('users')\
+            .update({'password_hash': new_password_hash})\
+            .eq('email', email)\
+            .execute()
+        
+        if not update_response.data:
+            print(f"❌ Failed to update password for {email}")
+            return jsonify({'error': 'Failed to reset password'}), 500
+        
+        print(f"✅ Password reset successful for {email} (username: {user['username']})")
+        
+        return jsonify({
+            'message': 'Password reset successful! You can now login with your new password.'
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ Password reset error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Failed to reset password'}), 500
+
+
+# Optional: Add a verify-reset-token endpoint if you want to check token validity before showing the form
+@auth_bp.route('/verify-reset-token/<token>', methods=['GET'])
+def verify_reset_token_endpoint(token):
+    """Verify if a reset token is valid (optional endpoint)"""
+    try:
+        # Verify token using the same function as email verification
+        email = verify_email_token(token, salt='password-reset', max_age=3600)
+        
+        if not email:
+            return jsonify({'valid': False, 'error': 'Invalid or expired token'}), 400
+        
+        # Check if user exists in Supabase
+        supabase = get_supabase()
+        user_response = supabase.table('users').select('*').eq('email', email).execute()
+        
+        if not user_response.data:
+            return jsonify({'valid': False, 'error': 'User not found'}), 404
         
         return jsonify({
             'valid': True,
             'email': email
         }), 200
-        
+            
     except Exception as e:
-        print(f"❌ EXCEPTION in verify_reset_token_route:")
-        print(f"Exception type: {type(e).__name__}")
-        print(f"Exception message: {str(e)}")
-        
-        import traceback
-        print("Full traceback:")
-        traceback.print_exc()
-        print(f"="*60)
-        
-        return jsonify({
-            'valid': False,
-            'error': 'Token verification failed',
-            'details': str(e)  # Include error details in response
-        }), 500
-
-@auth_bp.route('/reset-password', methods=['POST'])
-def reset_password():
-    """Reset password with token"""
-    print(f"="*60)
-    print(f"PASSWORD RESET ENDPOINT HIT")
-    print(f"="*60)
-    
-    try:
-        from urllib.parse import unquote
-        from app.utils.tokens import verify_email_token
-        import bcrypt
-        from app.services.supabase_client import get_supabase
-        
-        data = request.get_json()
-        print(f"Received data: {data}")
-        
-        token = data.get('token')
-        new_password = data.get('password')
-        
-        print(f"Token present: {bool(token)}")
-        print(f"Password present: {bool(new_password)}")
-        
-        if not token or not new_password:
-            print("❌ Missing token or password")
-            return jsonify({'error': 'Token and new password are required'}), 400
-        
-        if len(new_password) < 8:
-            print("❌ Password too short")
-            return jsonify({'error': 'Password must be at least 8 characters'}), 400
-        
-        # URL decode the token
-        decoded_token = unquote(token)
-        print(f"Decoded token (first 50): {decoded_token[:50]}...")
-        
-        # Verify token (24 hours expiry)
-        email = verify_email_token(decoded_token, salt='password-reset', max_age=86400)
-        
-        if not email:
-            print("❌ Token verification failed")
-            return jsonify({'error': 'Invalid or expired reset link'}), 400
-        
-        print(f"✅ Token valid for: {email}")
-        
-        # Hash new password
-        password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-        print(f"✅ Password hashed")
-        
-        # Update password
-        supabase = get_supabase()
-        response = supabase.table('users')\
-            .update({
-                'password_hash': password_hash
-            })\
-            .eq('email', email)\
-            .execute()
-        
-        if not response.data:
-            print("❌ User not found in database")
-            return jsonify({'error': 'User not found'}), 404
-        
-        print(f"✅ Password updated in database")
-        
-        # Log activity
-        user = response.data[0]
-        try:
-            supabase.table('activity_logs').insert({
-                'user_id': user['id'],
-                'action': 'password_reset',
-                'description': f"Password reset for user {user['username']}"
-            }).execute()
-        except Exception as log_error:
-            print(f"Warning: Failed to log activity: {log_error}")
-        
-        print(f"✅ Password reset SUCCESSFUL for: {email}")
-        print(f"="*60)
-        
-        return jsonify({'message': 'Password reset successful! You can now login with your new password.'}), 200
-        
-    except Exception as e:
-        print(f"❌ PASSWORD RESET ERROR:")
-        print(f"Exception type: {type(e).__name__}")
-        print(f"Exception message: {str(e)}")
-        
-        import traceback
-        print("Full traceback:")
-        traceback.print_exc()
-        print(f"="*60)
-        
-        return jsonify({
-            'error': 'Password reset failed',
-            'details': str(e)
-        }), 500
+        print(f"Token verification error: {e}")
+        return jsonify({'valid': False, 'error': 'Verification failed'}), 500
