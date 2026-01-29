@@ -1,7 +1,6 @@
 from flask import Flask, app, request
 from flask_cors import CORS
 from app.config import config
-from app.services.email_service import init_mail 
 import os
 from app.ml_models.model_loader import model_loader
 
