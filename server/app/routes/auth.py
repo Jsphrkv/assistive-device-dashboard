@@ -56,31 +56,30 @@ def get_current_user():
         return jsonify({'error': 'Failed to get user info'}), 500
 
 @auth_bp.route('/logout', methods=['POST'])
-# @token_required
 def logout():
-    """User logout endpoint"""
+    """User logout endpoint (JWT-based)"""
     try:
         auth_header = request.headers.get('Authorization')
-        user_id = request.current_user['user_id']
-        username = request.current_user['username']
-        
+        user_id = None
+        username = None
+
         if auth_header and auth_header.startswith('Bearer '):
             token = auth_header.split(' ')[1]
-            # Decode without verifying expiration
+
             import jwt
             try:
                 payload = jwt.decode(
                     token,
                     current_app.config['JWT_SECRET_KEY'],
                     algorithms=[current_app.config['JWT_ALGORITHM']],
-                    options={'verify_exp': False}  # ✅ Don't verify expiration
+                    options={'verify_exp': False}  # allow expired tokens
                 )
                 user_id = payload.get('user_id')
                 username = payload.get('username')
-            except:
-                pass  # If token is completely invalid, just skip logging
-        
-        # Log activity if we got user info
+            except jwt.InvalidTokenError:
+                pass  # Token invalid → still allow logout
+
+        # Optional: log logout activity
         if user_id and username:
             supabase = get_supabase()
             supabase.table('activity_logs').insert({
@@ -88,13 +87,12 @@ def logout():
                 'action': 'logout',
                 'description': f"User {username} logged out"
             }).execute()
-        
+
         return jsonify({'message': 'Logged out successfully'}), 200
-        
+
     except Exception as e:
         print(f"Logout error: {str(e)}")
         traceback.print_exc()
-        # Still return success even if logging fails
         return jsonify({'message': 'Logged out successfully'}), 200
 
 # ============================================
