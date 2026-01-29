@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { authAPI } from "../services/api";
-import { Lock, CheckCircle, Eye, EyeOff, XCircle, Loader } from "lucide-react";
+import { Lock, CheckCircle, Eye, EyeOff, XCircle } from "lucide-react";
 
 const ResetPassword = ({ onShowLogin }) => {
   const [token, setToken] = useState("");
@@ -10,8 +10,6 @@ const ResetPassword = ({ onShowLogin }) => {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [verifying, setVerifying] = useState(true);
-  const [tokenValid, setTokenValid] = useState(false);
 
   useEffect(() => {
     // Get token from URL query parameter
@@ -22,50 +20,11 @@ const ResetPassword = ({ onShowLogin }) => {
 
     if (!tokenParam) {
       setError("No reset token found in URL");
-      setVerifying(false);
-      setTokenValid(false);
       return;
     }
 
     setToken(tokenParam);
-
-    // Verify token with backend
-    verifyToken(tokenParam);
   }, []);
-
-  const verifyToken = async (tokenToVerify) => {
-    try {
-      console.log("Verifying token..."); // Debug log
-
-      const response = await fetch(
-        `https://assistive-device-dashboard.onrender.com/api/auth/verify-reset-token/${encodeURIComponent(tokenToVerify)}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        },
-      );
-
-      const data = await response.json();
-
-      console.log("Verification response:", data); // Debug log
-
-      if (response.ok && data.valid) {
-        setTokenValid(true);
-        console.log("Token is valid for:", data.email);
-      } else {
-        setTokenValid(false);
-        setError(data.error || "Invalid or expired reset link");
-      }
-    } catch (err) {
-      console.error("Token verification error:", err);
-      setTokenValid(false);
-      setError("Failed to verify reset link. Please try again.");
-    } finally {
-      setVerifying(false);
-    }
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -96,35 +55,24 @@ const ResetPassword = ({ onShowLogin }) => {
     try {
       await authAPI.resetPassword(token, password);
       setSuccess(true);
+
+      // Auto-redirect to login after 3 seconds
+      setTimeout(() => {
+        onShowLogin();
+      }, 3000);
     } catch (err) {
       console.error("Reset password error:", err);
-      setError(err.response?.data?.error || "Failed to reset password");
+      setError(
+        err.response?.data?.error ||
+          "Failed to reset password. The link may have expired.",
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  // Loading/Verifying state
-  if (verifying) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-md text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
-            <Loader className="w-8 h-8 text-blue-600 animate-spin" />
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Verifying Reset Link
-          </h1>
-          <p className="text-gray-600">
-            Please wait while we verify your reset link...
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  // Invalid token state
-  if (!tokenValid) {
+  // Invalid token state (no token in URL)
+  if (!token && !success) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-100 flex items-center justify-center p-4">
         <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-md text-center">
@@ -133,11 +81,11 @@ const ResetPassword = ({ onShowLogin }) => {
           </div>
 
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Verification Failed
+            Invalid Reset Link
           </h1>
 
           <p className="text-gray-600 mb-6">
-            {error || "Invalid or expired verification link"}
+            {error || "No reset token found in the URL"}
           </p>
 
           <button
@@ -149,7 +97,7 @@ const ResetPassword = ({ onShowLogin }) => {
 
           <div className="mt-4">
             <button
-              onClick={() => (window.location.href = "/")}
+              onClick={() => (window.location.href = "/?view=forgot-password")}
               className="text-sm text-blue-600 hover:text-blue-700"
             >
               Request a new reset link
@@ -178,18 +126,22 @@ const ResetPassword = ({ onShowLogin }) => {
             your new password.
           </p>
 
+          <p className="text-sm text-gray-500 mb-4">
+            Redirecting to login in 3 seconds...
+          </p>
+
           <button
             onClick={onShowLogin}
             className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium"
           >
-            Go to Login
+            Go to Login Now
           </button>
         </div>
       </div>
     );
   }
 
-  // Reset password form (token is valid)
+  // Reset password form (token is present)
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
       <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
@@ -222,6 +174,7 @@ const ResetPassword = ({ onShowLogin }) => {
                 className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="Enter new password (min 8 characters)"
                 disabled={loading}
+                required
               />
               <button
                 type="button"
@@ -248,6 +201,7 @@ const ResetPassword = ({ onShowLogin }) => {
               className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="Confirm new password"
               disabled={loading}
+              required
             />
           </div>
 

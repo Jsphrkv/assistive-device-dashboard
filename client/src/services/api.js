@@ -63,20 +63,18 @@ export const authAPI = {
 
   forgotPassword: (email) => api.post("/auth/forgot-password", { email }),
 
-  // resetPassword: (token, password) =>
-  //   api.post("/auth/reset-password", { token, password }),
-
   logout: () => api.post("/auth/logout"),
 
   getCurrentUser: () => api.get("/auth/me"),
 
+  // Fixed resetPassword to send new_password instead of password
   resetPassword: async (token, password) => {
     const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ token, password }),
+      body: JSON.stringify({ token, new_password: password }), // ← Changed here
     });
 
     if (!response.ok) {
