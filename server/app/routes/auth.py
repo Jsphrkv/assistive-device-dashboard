@@ -359,6 +359,7 @@ def forgot_password():
         
         # Always return success to prevent email enumeration
         if not user.data:
+            print(f"⚠️ No user found with email: {email}")
             return jsonify({
                 'message': 'If the email exists, a password reset link has been sent'
             }), 200
@@ -368,33 +369,38 @@ def forgot_password():
         # Generate reset token (24 hours expiry)
         reset_token = generate_email_token(email, salt='password-reset')
         
-        print(f"Password reset requested for: {email}")
+        print(f"="*60)
+        print(f"PASSWORD RESET REQUESTED")
+        print(f"Email: {email}")
+        print(f"Username: {user_data['username']}")
+        print(f"Token generated: {reset_token[:50]}...")
+        print(f"="*60)
         
-        # ✅ FIX: Get app instance and send email with proper context
-        from flask import current_app
-        import threading
+        # ✅ Send email SYNCHRONOUSLY (not in background thread)
+        try:
+            print("📧 Attempting to send password reset email...")
+            send_password_reset_email(email, user_data['username'], reset_token)
+            print(f"✅ Email sent successfully!")
+        except Exception as email_error:
+            print(f"="*60)
+            print(f"❌ EMAIL SENDING FAILED!")
+            print(f"Error: {str(email_error)}")
+            import traceback
+            traceback.print_exc()
+            print(f"="*60)
+            # Still return success to user (security - don't reveal if email exists)
         
-        app = current_app._get_current_object()  # Get actual app object
-        
-        def send_email_background(app_instance):
-            with app_instance.app_context():  # Create app context for thread
-                try:
-                    send_password_reset_email(email, user_data['username'], reset_token)
-                    print(f"✅ Password reset email sent to {email}")
-                except Exception as e:
-                    print(f"❌ Email sending failed: {str(e)}")
-                    import traceback
-                    traceback.print_exc()
-        
-        # Start background thread with app instance
-        thread = threading.Thread(target=send_email_background, args=(app,))
-        thread.daemon = True
-        thread.start()
-        
-        # Return immediately
         return jsonify({
             'message': 'If the email exists, a password reset link has been sent'
         }), 200
+        
+    except Exception as e:
+        print(f"❌ Forgot password error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'error': 'Unable to process request. Please try again later.'
+        }), 500
         
     except Exception as e:
         print(f"Forgot password error: {str(e)}")
