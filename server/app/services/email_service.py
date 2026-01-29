@@ -1,12 +1,27 @@
+import os
 from flask import current_app
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail, Email, To, Content
 import traceback
 
+# Load environment variables at module level
+SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY')
+SENDGRID_FROM_EMAIL = os.getenv('SENDGRID_FROM_EMAIL', 'noreply@assistivedevice.com')
+SENDGRID_DISPLAY_NAME = os.getenv('SENDGRID_DISPLAY_NAME', 'Assistive Device Dashboard')
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://assistive-device-dashboard.vercel.app')
+
 def send_verification_email(email, username, token):
     """Send email verification link via SendGrid"""
     try:
-        verify_url = f"{current_app.config['FRONTEND_URL']}/verify-email?token={token}"
+        # Verify API key is present
+        if not SENDGRID_API_KEY:
+            print("❌ SENDGRID_API_KEY not found in environment variables!")
+            return False
+        
+        verify_url = f"{FRONTEND_URL}/verify-email?token={token}"
+        
+        print(f"📧 Attempting to send verification email to {email}...")
+        print(f"📧 Using SendGrid from: {SENDGRID_FROM_EMAIL}")
         
         html_body = f"""
         <!DOCTYPE html>
@@ -50,16 +65,13 @@ def send_verification_email(email, username, token):
         """
         
         message = Mail(
-            from_email=Email(
-                current_app.config['MAIL_DEFAULT_SENDER'],
-                current_app.config['MAIL_DISPLAY_NAME']
-            ),
+            from_email=Email(SENDGRID_FROM_EMAIL, SENDGRID_DISPLAY_NAME),
             to_emails=To(email),
             subject='Verify Your Email - Assistive Device Dashboard',
             html_content=Content("text/html", html_body)
         )
         
-        sg = SendGridAPIClient(current_app.config['SENDGRID_API_KEY'])
+        sg = SendGridAPIClient(SENDGRID_API_KEY)
         response = sg.send(message)
         
         print(f"✅ Verification email sent to {email} (Status: {response.status_code})")
@@ -73,7 +85,15 @@ def send_verification_email(email, username, token):
 def send_password_reset_email(email, username, token):
     """Send password reset link via SendGrid"""
     try:
-        reset_url = f"{current_app.config['FRONTEND_URL']}/reset-password?token={token}"
+        # Verify API key is present
+        if not SENDGRID_API_KEY:
+            print("❌ SENDGRID_API_KEY not found in environment variables!")
+            return False
+        
+        reset_url = f"{FRONTEND_URL}/reset-password?token={token}"
+        
+        print(f"📧 Attempting to send password reset email to {email}...")
+        print(f"📧 Using SendGrid from: {SENDGRID_FROM_EMAIL}")
         
         html_body = f"""
         <!DOCTYPE html>
@@ -122,16 +142,13 @@ def send_password_reset_email(email, username, token):
         """
         
         message = Mail(
-            from_email=Email(
-                current_app.config['MAIL_DEFAULT_SENDER'],
-                current_app.config['MAIL_DISPLAY_NAME']
-            ),
+            from_email=Email(SENDGRID_FROM_EMAIL, SENDGRID_DISPLAY_NAME),
             to_emails=To(email),
             subject='Reset Your Password - Assistive Device Dashboard',
             html_content=Content("text/html", html_body)
         )
         
-        sg = SendGridAPIClient(current_app.config['SENDGRID_API_KEY'])
+        sg = SendGridAPIClient(SENDGRID_API_KEY)
         response = sg.send(message)
         
         print(f"✅ Password reset email sent to {email} (Status: {response.status_code})")
