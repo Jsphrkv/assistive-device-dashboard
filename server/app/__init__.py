@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, request
 from flask_cors import CORS
 from app.config import config
 from app.services.email_service import init_mail 
@@ -14,7 +14,21 @@ def create_app(config_name=None):
     app.config.from_object(config[config_name])
     
     # Initialize CORS
-    CORS(app, origins="https://assistive-device-dashboard.vercel.app", supports_credentials=True)
+    CORS(app, resources={
+        r"/api/*": {
+            "origins": [
+                "https://assistive-device-dashboard.vercel.app",
+                "http://localhost:3000",
+                "http://localhost:5173",
+                "http://localhost:5000"  # Local backend testing
+            ],
+            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization", "X-Device-Token"],
+            "expose_headers": ["Content-Type", "Authorization"],
+            "supports_credentials": True,
+            "max_age": 3600
+        }
+    })
 
     # Initialize Flask-Mail ✅ NEW
     init_mail(app)
@@ -44,7 +58,15 @@ def create_app(config_name=None):
     app.register_blueprint(ml_bp, url_prefix='/api/ml')
     app.register_blueprint(statistics_bp, url_prefix='/api/statistics')
     app.register_blueprint(settings_bp, url_prefix='/api/settings')
-    
+
+    @app.after_request
+    def after_request(response):
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Device-Token')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+
     # Health check endpoint
     @app.route('/health')
     def health_check():
@@ -60,3 +82,7 @@ def create_app(config_name=None):
         return {'error': 'Internal server error'}, 500
     
     return app
+
+if __name__ == '__main__':
+    app = create_app()
+    app.run(debug=True)
