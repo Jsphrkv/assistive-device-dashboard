@@ -29,7 +29,7 @@ class Config:
     MAIL_DISPLAY_NAME = os.getenv('MAIL_DISPLAY_NAME', 'Assistive Device Dashboard')
     
     # Frontend URL ✅ NEW
-    FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://assistive-device-dashboard.vercel.app',  'http://localhost:5173')
+    FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://assistive-device-dashboard.vercel.app')
     
     # Device
     DEVICE_API_KEY = os.getenv('DEVICE_API_KEY', 'device-api-key')
