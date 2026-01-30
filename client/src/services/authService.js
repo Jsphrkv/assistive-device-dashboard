@@ -56,7 +56,9 @@ export const getCurrentUser = () => {
 };
 
 export const isAuthenticated = () => {
-  return !!getCurrentUser() && !!storage.get("token");
+  const token = storage.get("token");
+  const user = storage.get("currentUser");
+  return Boolean(token && user);
 };
 
 export const isAdmin = () => {

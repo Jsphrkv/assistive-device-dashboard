@@ -50,8 +50,17 @@ api.interceptors.response.use(
 
 // API methods
 export const authAPI = {
-  login: (username, password) =>
-    api.post("/auth/login", { username, password }),
+  login: (username, password) => {
+    const params = new URLSearchParams();
+    params.append("username", username);
+    params.append("password", password);
+
+    return axios.post("/api/auth/login", params, {
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+    });
+  },
 
   register: (username, email, password) =>
     api.post("/auth/register", { username, email, password }),
