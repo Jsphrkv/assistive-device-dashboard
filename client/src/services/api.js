@@ -50,14 +50,8 @@ api.interceptors.response.use(
 
 // API methods
 export const authAPI = {
-  login: (username, password) => {
-    const formData = new FormData();
-    formData.append("username", username);
-    formData.append("password", password);
-
-    return axios.post("/api/auth/login", formData);
-  },
-
+  login: (username, password) =>
+    api.post("/auth/login", { username, password }),
   register: (username, email, password) =>
     api.post("/auth/register", { username, email, password }),
 
