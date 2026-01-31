@@ -412,7 +412,7 @@ def reset_password():
     try:
         data = request.get_json()
         token = data.get('token')
-        new_password = data.get('new_password')
+        new_password = data.get('new_password') or data.get('password') 
         
         print(f"============================================================")
         print(f"PASSWORD RESET ATTEMPT")

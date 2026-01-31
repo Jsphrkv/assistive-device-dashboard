@@ -1,11 +1,10 @@
 from flask import Blueprint, request, jsonify
 from app.services.supabase_client import get_supabase
-from app.middleware.auth import token_required
-from app.middleware.auth import admin_required
+from app.middleware.auth import token_required, admin_required
 
 settings_bp = Blueprint('settings', __name__, url_prefix='/api/settings')
 
-@settings_bp.route('/', methods=['GET'])
+@settings_bp.route('', methods=['GET'])  # ✅ No trailing slash
 @token_required
 def get_settings():
     """Get user settings"""
@@ -19,23 +18,45 @@ def get_settings():
             .execute()
         
         if not response.data:
-            return jsonify({'error': 'Settings not found'}), 404
-        
-        settings = response.data[0]
+            # Create default settings for new user
+            default_settings = {
+                'user_id': user_id,
+                'sensitivity': 75,
+                'distance_threshold': 100,
+                'alert_mode': 'both',
+                'ultrasonic_enabled': True,
+                'camera_enabled': True,
+                'created_at': 'now()',
+                'updated_by': user_id
+            }
+            
+            insert_response = supabase.table('settings').insert(default_settings).execute()
+            
+            if not insert_response.data:
+                return jsonify({'error': 'Failed to create settings'}), 500
+            
+            settings = insert_response.data[0]
+        else:
+            settings = response.data[0]
         
         return jsonify({
-            'sensitivity': settings['sensitivity'],
-            'distanceThreshold': settings['distance_threshold'],
-            'alertMode': settings['alert_mode'],
-            'ultrasonicEnabled': settings['ultrasonic_enabled'],
-            'cameraEnabled': settings['camera_enabled']
+            'data': {
+                'sensitivity': settings['sensitivity'],
+                'distanceThreshold': settings['distance_threshold'],
+                'alertMode': settings['alert_mode'],
+                'ultrasonicEnabled': settings['ultrasonic_enabled'],
+                'cameraEnabled': settings['camera_enabled']
+            }
         }), 200
         
     except Exception as e:
         print(f"Get settings error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': 'Failed to get settings'}), 500
 
-@settings_bp.route('/', methods=['PUT'])
+
+@settings_bp.route('', methods=['PUT'])  # ✅ No trailing slash
 @token_required
 def update_settings():
     """Update user settings"""
@@ -51,7 +72,6 @@ def update_settings():
         admin_only_fields = ['distanceThreshold', 'ultrasonicEnabled', 'cameraEnabled']
         
         if user_role == 'user':
-            # Check if user is trying to modify admin-only fields
             attempted_admin_fields = [field for field in admin_only_fields if field in data]
             
             if attempted_admin_fields:
@@ -112,6 +132,7 @@ def update_settings():
         traceback.print_exc()
         return jsonify({'error': 'Failed to update settings'}), 500
 
+
 @settings_bp.route('/reset', methods=['POST'])
 @token_required
 def reset_settings():
@@ -148,7 +169,10 @@ def reset_settings():
         
     except Exception as e:
         print(f"Reset settings error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': 'Failed to reset settings'}), 500
+
 
 @settings_bp.route('/global', methods=['GET'])
 @token_required
@@ -165,4 +189,6 @@ def get_global_settings():
         
     except Exception as e:
         print(f"Get global settings error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': 'Failed to get global settings'}), 500

@@ -12,6 +12,8 @@ def create_app(config_name=None):
     app = Flask(__name__)
 
     app.config.from_object('app.config.Config')
+
+    app.url_map.strict_slashes = False
     
     # Initialize CORS
     CORS(app, 

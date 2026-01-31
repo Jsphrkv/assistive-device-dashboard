@@ -11,18 +11,18 @@ export const useSettings = (userId, userRole) => {
   const [error, setError] = useState(null);
 
   const fetchSettings = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const { data, error } = await getUserSettings(userId);
-
-      if (error) {
-        setError(error);
-      } else {
-        setSettings(data);
-        setError(null);
+      const response = await settingsAPI.get();
+      // ✅ Handle both formats
+      const settingsData = response.data?.data || response.data;
+      if (settingsData) {
+        setSettings(settingsData);
       }
-    } catch (err) {
-      setError(err.message);
+    } catch (error) {
+      console.error("Error fetching settings:", error);
+      // ✅ Show error to user
+      setMessage("Failed to load settings. Using defaults.");
     } finally {
       setLoading(false);
     }
