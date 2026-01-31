@@ -33,10 +33,9 @@ const DeviceSystemTab = () => {
       const response = await deviceAPI.getAll();
       const devices = response.data.data || [];
 
-      // Get the first (and should be only) device
       if (devices.length > 0) {
         setDevice(devices[0]);
-        fetchSystemInfo();
+        await fetchSystemInfo();
       } else {
         setDevice(null);
         setSystemInfo(null);
@@ -58,7 +57,9 @@ const DeviceSystemTab = () => {
       }
     } catch (error) {
       console.error("Error fetching system info:", error);
-      setSystemInfo(null);
+      if (error.response?.status === 404) {
+        setSystemInfo(null);
+      }
     }
   };
 
@@ -202,10 +203,15 @@ const DeviceSystemTab = () => {
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label
+                    htmlFor="deviceName"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
                     Device Name
                   </label>
                   <input
+                    id="deviceName"
+                    name="deviceName"
                     type="text"
                     value={newDevice.deviceName}
                     onChange={(e) =>
@@ -217,10 +223,15 @@ const DeviceSystemTab = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label
+                    htmlFor="deviceModel"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
                     Raspberry Pi Model
                   </label>
                   <select
+                    id="deviceModel"
+                    name="deviceModel"
                     value={newDevice.deviceModel}
                     onChange={(e) =>
                       setNewDevice({
@@ -280,7 +291,7 @@ const DeviceSystemTab = () => {
       </div>
 
       {/* Device Information Card */}
-      <div className="bg-white rounded-lg shadow-lg p-6">
+      <div className="bg-white rounded-lg shadow p-6">
         <div className="flex items-start justify-between mb-6">
           <div>
             <h3 className="text-xl font-semibold text-gray-900 mb-1">
@@ -310,17 +321,26 @@ const DeviceSystemTab = () => {
 
         {/* Device Token */}
         <div className="bg-gray-50 p-4 rounded-lg mb-4">
-          <p className="text-xs font-medium text-gray-700 mb-2">
+          <label
+            htmlFor="deviceToken"
+            className="text-xs font-medium text-gray-700 mb-2 block"
+          >
             Device Token:
-          </p>
+          </label>
           <div className="flex items-center gap-2">
-            <code className="text-xs font-mono text-gray-800 truncate flex-1 bg-white px-3 py-2 rounded border border-gray-200">
-              {device.device_token.substring(0, 40)}...
-            </code>
+            <input
+              id="deviceToken"
+              name="deviceToken"
+              type="text"
+              readOnly
+              value={device.device_token.substring(0, 40) + "..."}
+              className="text-xs font-mono text-gray-800 flex-1 bg-white px-3 py-2 rounded border border-gray-200"
+            />
             <button
               onClick={() => copyToClipboard(device.device_token)}
               className="p-2 hover:bg-gray-200 rounded transition-colors"
               title="Copy token"
+              aria-label="Copy device token"
             >
               {copiedToken ? (
                 <Check className="w-4 h-4 text-green-600" />
@@ -350,28 +370,40 @@ const DeviceSystemTab = () => {
         </div>
       </div>
 
-      {/* System Information */}
-      <div className="bg-white rounded-lg shadow-lg p-6">
+      {/* System Information Section */}
+      <div className="bg-white rounded-lg shadow p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">
           System Information
         </h3>
 
         {!systemInfo ? (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5" />
-              <div className="text-sm">
-                <p className="font-medium text-yellow-900 mb-1">
-                  Waiting for Device Connection
-                </p>
-                <p className="text-yellow-800">
-                  System information will appear once your Raspberry Pi connects
-                  and sends its first update.
-                </p>
+          // Show waiting message with preview cards
+          <>
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                <div className="text-sm">
+                  <p className="font-medium text-yellow-900 mb-1">
+                    Waiting for Device Connection
+                  </p>
+                  <p className="text-yellow-800">
+                    System information will appear once your Raspberry Pi
+                    connects and sends its first update.
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
+
+            {/* Preview cards while waiting */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 opacity-50">
+              <SystemCard label="Raspberry Pi Model" value="--" color="blue" />
+              <SystemCard label="Software Version" value="--" color="green" />
+              <SystemCard label="Last Reboot Time" value="--" color="yellow" />
+              <SystemCard label="CPU Temperature" value="--°C" color="gray" />
+            </div>
+          </>
         ) : (
+          // Show actual system information
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               <SystemCard
