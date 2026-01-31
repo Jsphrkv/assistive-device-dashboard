@@ -318,7 +318,7 @@ def login():
         supabase.table('activity_logs').insert({
             'user_id': user['id'],
             'action': 'login',
-            'description': f"User {user['username']} logged in"
+            'description': f"User {user['username']} loggedad in"
         }).execute()
         
         return jsonify({

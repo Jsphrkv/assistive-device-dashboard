@@ -81,8 +81,10 @@ def register_device():
             .eq('user_id', user_id)\
             .execute()
         
-        if existing.count >= 5:
-            return jsonify({'error': 'Maximum 5 devices per user'}), 400
+        if existing.count >= 1:
+            return jsonify({
+                'error': 'You can only register one device per account. Please delete your existing device first.'
+            }), 400
         
         # Create device
         new_device = {

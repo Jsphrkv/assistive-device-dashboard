@@ -16,8 +16,8 @@ const Navigation = ({ activeTab, onTabChange }) => {
     { id: "mlhistory", label: "ML History", icon: Clock },
     { id: "camera", label: "Live Camera", icon: Camera },
     { id: "settings", label: "Settings", icon: Settings },
-    { id: "system", label: "System Info", icon: Info },
-    { id: "devices", label: "Devices", icon: Info },
+    { id: "device", label: "My Device", icon: Info },
+    // { id: "devices", label: "Devices", icon: Info },
   ];
 
   return (

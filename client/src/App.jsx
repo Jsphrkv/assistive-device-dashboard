@@ -10,8 +10,7 @@ import DetectionLogsTab from "./components/logs/DetectionLogsTab";
 import StatisticsTab from "./components/statistics/StatisticsTab";
 import CameraTab from "./components/camera/CameraTab";
 import SettingsTab from "./components/settings/SettingsTab";
-import SystemInfoTab from "./components/system/SystemInfoTab";
-import DevicesTab from "./components/devices/DevicesTab";
+import DeviceSystemTab from "./components/system/DeviceSystemTab";
 import HistoricalDataTab from "./components/ml/HistoricalDataTab";
 import { useAuth } from "./contexts/AuthContext";
 import NotificationSystem from "./components/notifications/NotificationSystem";
@@ -133,10 +132,10 @@ function App() {
         return <CameraTab />;
       case "settings":
         return <SettingsTab currentUser={currentUser} />;
-      case "system":
-        return <SystemInfoTab />;
-      case "devices":
-        return <DevicesTab />;
+      case "device":
+        return <DeviceSystemTab />;
+      // case "devices":
+      //   return <DevicesTab />;
       default:
         return <DashboardTab />;
     }

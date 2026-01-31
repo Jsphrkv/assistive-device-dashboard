@@ -52,7 +52,7 @@ export const NAV_TABS = [
   { id: "statistics", label: "Statistics" },
   { id: "camera", label: "Live Camera" },
   { id: "settings", label: "Settings" },
-  { id: "system", label: "System Info" },
+  { id: "device", label: "My Device" },
 ];
 
 // Table Pagination
