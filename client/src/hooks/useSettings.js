@@ -13,7 +13,7 @@ export const useSettings = (userId, userRole) => {
   const fetchSettings = async () => {
     setLoading(true);
     try {
-      const response = await settingsAPI.get();
+      const response = await settingsAPI.getSettings();
       // ✅ Handle both formats
       const settingsData = response.data?.data || response.data;
       if (settingsData) {

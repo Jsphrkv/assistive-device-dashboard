@@ -4,7 +4,7 @@ from app.middleware.auth import token_required, admin_required
 
 settings_bp = Blueprint('settings', __name__, url_prefix='/api/settings')
 
-@settings_bp.route('', methods=['GET'])  # ✅ No trailing slash
+@settings_bp.route('', methods=['GET'])   
 @token_required
 def get_settings():
     """Get user settings"""
@@ -26,7 +26,6 @@ def get_settings():
                 'alert_mode': 'both',
                 'ultrasonic_enabled': True,
                 'camera_enabled': True,
-                'created_at': 'now()',
                 'updated_by': user_id
             }
             
@@ -56,7 +55,7 @@ def get_settings():
         return jsonify({'error': 'Failed to get settings'}), 500
 
 
-@settings_bp.route('', methods=['PUT'])  # ✅ No trailing slash
+@settings_bp.route('', methods=['PUT'])  
 @token_required
 def update_settings():
     """Update user settings"""
@@ -83,7 +82,7 @@ def update_settings():
         supabase = get_supabase()
         
         # Prepare update data based on role
-        update_data = {'updated_at': 'now()', 'updated_by': user_id}
+        update_data = { 'updated_by': user_id}
         
         # Users can only update sensitivity and alert mode
         if user_role == 'user':
@@ -147,7 +146,6 @@ def reset_settings():
         default_settings = {
             'sensitivity': 75,
             'alert_mode': 'both',
-            'updated_at': 'now()',
             'updated_by': user_id
         }
         
