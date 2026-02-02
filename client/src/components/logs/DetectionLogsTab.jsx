@@ -5,23 +5,27 @@ import {
   Download,
   Search,
   AlertTriangle,
+  CheckCircle,
   Activity,
   Wrench,
   Clock,
   RefreshCw,
   BarChart3,
 } from "lucide-react";
-import { useMLHistory } from "../../contexts/MLHistoryContext"; // ✅ Use global context
+import { useMLHistory } from "../../hooks/ml/useMLHistory";
 
-const DetectionLogsTab = () => {
+const DetectionLogsTab = ({ deviceId }) => {
   const [filteredLogs, setFilteredLogs] = useState([]);
   const [filterType, setFilterType] = useState("all");
   const [filterSeverity, setFilterSeverity] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [dateRange, setDateRange] = useState("all");
 
-  // ✅ Get data from global context
-  const { history, loading, refresh } = useMLHistory();
+  // Get real ML history from the hook
+  const { history, loading, refresh } = useMLHistory(
+    deviceId || "default",
+    500,
+  );
 
   useEffect(() => {
     applyFilters();
@@ -33,15 +37,15 @@ const DetectionLogsTab = () => {
       return;
     }
 
-    // ✅ Convert backend data to log format
+    // Convert history to log format
     let logs = history.map((item) => ({
-      id: item.id || item.timestamp,
-      timestamp: new Date(item.timestamp),
-      type: item.log_type || detectLogType(item),
-      severity: item.severity || "low",
+      id: item.timestamp || Date.now(),
+      timestamp: new Date(item.timestamp || Date.now()),
+      type: detectLogType(item),
+      severity: item.severity || (item.is_anomaly ? "medium" : "low"),
       status: item.is_anomaly ? "alert" : "normal",
       message: item.message || "Detection logged",
-      confidence: item.confidence || 0.85,
+      confidence: item.confidence || item.anomaly_score || 0.85,
       details: item,
     }));
 
@@ -92,11 +96,26 @@ const DetectionLogsTab = () => {
     const msg = item.message?.toLowerCase() || "";
     const source = item.source?.toLowerCase() || "";
 
+    // Check source first for ML Statistics
     if (source === "ml_statistics" || msg.includes("statistical analysis")) {
       return "statistics";
     }
-    if (msg.includes("maintenance")) return "maintenance";
-    if (msg.includes("activity") || msg.includes("walking")) return "activity";
+
+    if (
+      msg.includes("maintenance") ||
+      msg.includes("repair") ||
+      msg.includes("service")
+    ) {
+      return "maintenance";
+    }
+    if (
+      msg.includes("activity") ||
+      msg.includes("walking") ||
+      msg.includes("resting") ||
+      msg.includes("using")
+    ) {
+      return "activity";
+    }
     return "anomaly";
   };
 

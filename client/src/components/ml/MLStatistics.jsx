@@ -21,11 +21,13 @@ import {
   RefreshCw,
   BarChart3,
 } from "lucide-react";
-import { useMLHistory } from "../../contexts/MLHistoryContext"; // ✅ Use global context
+import { useMLHistory } from "../../hooks/ml/useMLHistory";
 
-const MLStatistics = () => {
-  // ✅ Get data from global context
-  const { history, loading, refresh, addToHistory } = useMLHistory();
+const MLStatistics = ({ deviceId }) => {
+  const { history, loading, refresh, addToHistory } = useMLHistory(
+    deviceId || "default",
+    500,
+  );
   const [lastAnalysisTime, setLastAnalysisTime] = useState(null);
 
   // Process real data into chart formats
@@ -45,14 +47,22 @@ const MLStatistics = () => {
 
     // Helper to detect log type
     const detectLogType = (item) => {
-      // Use log_type from backend if available
-      if (item.log_type) return item.log_type;
-
       const msg = item.message?.toLowerCase() || "";
-      if (msg.includes("maintenance")) return "maintenance";
-      if (msg.includes("activity") || msg.includes("walking"))
+      if (
+        msg.includes("maintenance") ||
+        msg.includes("repair") ||
+        msg.includes("service")
+      ) {
+        return "maintenance";
+      }
+      if (
+        msg.includes("activity") ||
+        msg.includes("walking") ||
+        msg.includes("resting") ||
+        msg.includes("using")
+      ) {
         return "activity";
-      if (msg.includes("statistical")) return "statistics";
+      }
       return "anomaly";
     };
 
@@ -187,47 +197,49 @@ const MLStatistics = () => {
   useEffect(() => {
     if (history.length === 0) return;
 
-    // Only log analysis every 5 minutes
+    // Only log analysis every 5 minutes or when first loaded
     const now = Date.now();
     if (lastAnalysisTime && now - lastAnalysisTime < 5 * 60 * 1000) {
       return;
     }
 
-    // Calculate counts
+    // Log statistical analysis summary
     const anomalyCount = history.filter((item) => {
-      const type = item.log_type || "";
       const msg = item.message?.toLowerCase() || "";
       return (
-        type === "anomaly" ||
-        (!type && !msg.includes("maintenance") && !msg.includes("activity"))
+        !msg.includes("maintenance") &&
+        !msg.includes("activity") &&
+        !msg.includes("walking") &&
+        !msg.includes("resting")
       );
     }).length;
 
-    const activityCount = history.filter(
-      (item) =>
-        item.log_type === "activity" ||
-        item.message?.toLowerCase().includes("activity"),
-    ).length;
+    const activityCount = history.filter((item) => {
+      const msg = item.message?.toLowerCase() || "";
+      return (
+        msg.includes("activity") ||
+        msg.includes("walking") ||
+        msg.includes("resting")
+      );
+    }).length;
 
-    const maintenanceCount = history.filter(
-      (item) =>
-        item.log_type === "maintenance" ||
-        item.message?.toLowerCase().includes("maintenance"),
-    ).length;
+    const maintenanceCount = history.filter((item) => {
+      const msg = item.message?.toLowerCase() || "";
+      return msg.includes("maintenance");
+    }).length;
 
     // Add summary log entry
     addToHistory({
       message: `Statistical Analysis: ${anomalyCount} anomalies, ${activityCount} activities, ${maintenanceCount} maintenance events analyzed`,
-      log_type: "statistics",
       severity: "low",
       confidence: 0.95,
       is_anomaly: false,
-      timestamp: new Date().toISOString(),
+      timestamp: now,
       source: "ml_statistics",
     });
 
     setLastAnalysisTime(now);
-  }, [history.length, addToHistory, lastAnalysisTime]);
+  }, [history.length, addToHistory]);
 
   if (loading) {
     return (
@@ -271,8 +283,9 @@ const MLStatistics = () => {
                 No Analytics Data Yet
               </h3>
               <p className="text-blue-800">
-                Statistics and charts will appear here automatically as your
-                device sends detection data.
+                Statistics and charts will appear here automatically as ML
+                components collect data. Visit the Dashboard tab to see ML
+                components in action, then return here for insights.
               </p>
             </div>
           </div>
