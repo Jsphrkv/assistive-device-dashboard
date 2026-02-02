@@ -16,7 +16,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import { useMLHistory } from "../../hooks/ml/useMLHistory";
+import { useMLHistory } from "../../contexts/MLHistoryContext";
 
 const HistoricalDataTab = ({ deviceId }) => {
   const [dateRange, setDateRange] = useState("7days");

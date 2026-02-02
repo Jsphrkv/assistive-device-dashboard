@@ -53,12 +53,14 @@ def create_app(config_name=None):
     from app.routes.ml_routes import ml_bp
     from app.routes.statistics import statistics_bp
     from app.routes.settings import settings_bp
+    from app.routes.logs_routes import logs_bp
     
     
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(devices_bp, url_prefix='/api/devices') 
     app.register_blueprint(device_bp, url_prefix='/api/device')
     app.register_blueprint(detections_bp, url_prefix='/api/detections')
+    app.register_blueprint(logs_bp, url_prefix='/api/logs')
     app.register_blueprint(ml_bp, url_prefix='/api/ml')
     app.register_blueprint(statistics_bp, url_prefix='/api/statistics')
     app.register_blueprint(settings_bp, url_prefix='/api/settings')

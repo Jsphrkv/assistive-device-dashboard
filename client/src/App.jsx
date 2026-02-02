@@ -12,6 +12,7 @@ import CameraTab from "./components/camera/CameraTab";
 import SettingsTab from "./components/settings/SettingsTab";
 import DeviceSystemTab from "./components/system/DeviceSystemTab";
 import HistoricalDataTab from "./components/ml/HistoricalDataTab";
+import { MLHistoryProvideruse } from "./contexts/MLHistoryContext.jsx";
 import { useAuth } from "./contexts/AuthContext";
 import NotificationSystem from "./components/notifications/NotificationSystem";
 
@@ -142,15 +143,17 @@ function App() {
   };
 
   return (
-    <Layout
-      currentUser={currentUser}
-      activeTab={activeTab}
-      onTabChange={setActiveTab}
-      onLogout={handleLogout}
-    >
-      <NotificationSystem />
-      {renderActiveTab()}
-    </Layout>
+    <MLHistoryProvider>
+      <Layout
+        currentUser={currentUser}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onLogout={handleLogout}
+      >
+        <NotificationSystem />
+        {renderActiveTab()}
+      </Layout>
+    </MLHistoryProvider>
   );
 }
 
