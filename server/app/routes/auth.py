@@ -35,10 +35,12 @@ def test_db():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-@auth_bp.route('/me', methods=['GET'])
+@auth_bp.route('/me', methods=['GET', 'OPTIONS'])
 @token_required
 def get_current_user():
     """Get current user info"""
+    if request.method == 'OPTIONS':
+        return '', 200  # Handle preflight
     try:
         user_id = request.current_user['user_id']
         
