@@ -144,16 +144,19 @@ export const useMLHistory = (options = {}) => {
 
   // ✅ Add to history (for real-time updates)
   const addToHistory = useCallback(
-    (prediction) => {
-      setHistory((prev) => {
-        const updated = [prediction, ...prev].slice(0, limit);
-        // ✅ Update cache too
-        cache.data = updated;
-        cache.timestamp = Date.now();
-        return updated;
-      });
+    async (prediction) => {
+      // Update local state
+      setHistory((prev) => [...prev, prediction]);
+
+      // ✅ Save to Supabase
+      if (deviceId) {
+        await api.post("/logs/detections", {
+          device_id: deviceId,
+          ...prediction,
+        });
+      }
     },
-    [limit],
+    [deviceId],
   );
 
   // ✅ Clear history and cache
