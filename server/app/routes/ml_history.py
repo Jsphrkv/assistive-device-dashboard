@@ -111,7 +111,7 @@ def get_ml_history():
         # ✅ Fetch from detection_logs table
         if source in ['all', 'detections'] and prediction_type in [None, 'detection']:
             det_query = supabase.table('detection_logs')\
-                .select('*, user_devices(device_name)')
+                .select('*, user_devices!detection_logs_device_id_fkey(device_name)')
             
             if device_ids:
                 det_query = det_query.in_('device_id', device_ids)

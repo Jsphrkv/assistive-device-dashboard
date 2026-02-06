@@ -408,7 +408,10 @@ def get_system_info():
             .execute()
         
         if not device.data:
-            return jsonify({'error': 'No active device found'}), 404
+            return jsonify({
+                'error': 'No active device found',
+                'hasDevice': False
+            }), 200  # Changed from 404 to 200 with error flag
         
         device_id = device.data[0]['id']
         
@@ -420,19 +423,24 @@ def get_system_info():
             .execute()
         
         if not response.data:
-            return jsonify({'error': 'No system info found'}), 404
+            return jsonify({
+                'error': 'No system info available yet',
+                'hasDevice': True,
+                'deviceId': device_id
+            }), 200  # Changed from 404 to 200 with error flag
         
         info = response.data[0]
         
         return jsonify({
-            'raspberryPiModel': info['raspberry_pi_model'],
-            'softwareVersion': info['software_version'],
-            'lastRebootTime': info['last_reboot_time'],
-            'cpuTemperature': info['cpu_temperature'],
-            'cpuModel': info['cpu_model'],
-            'ramSize': info['ram_size'],
-            'storageSize': info['storage_size'],
-            'osVersion': info['os_version']
+            'hasDevice': True,
+            'raspberryPiModel': info.get('raspberry_pi_model'),
+            'softwareVersion': info.get('software_version'),
+            'lastRebootTime': info.get('last_reboot_time'),
+            'cpuTemperature': info.get('cpu_temperature'),
+            'cpuModel': info.get('cpu_model'),
+            'ramSize': info.get('ram_size'),
+            'storageSize': info.get('storage_size'),
+            'osVersion': info.get('os_version')
         }), 200
         
     except Exception as e:
