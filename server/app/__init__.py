@@ -55,14 +55,23 @@ def create_app(config_name=None):
     from app.routes.settings import settings_bp
     
     
-    app.register_blueprint(auth_bp, url_prefix='/api/auth')
-    app.register_blueprint(devices_bp, url_prefix='/api/devices') 
-    app.register_blueprint(device_bp, url_prefix='/api/device')
-    app.register_blueprint(detections_bp, url_prefix='/api/detections')
-    app.register_blueprint(ml_bp, url_prefix='/api/ml')
-    app.register_blueprint(ml_history_bp, url_prefix='/api/ml/history')
-    app.register_blueprint(statistics_bp, url_prefix='/api/statistics')
-    app.register_blueprint(settings_bp, url_prefix='/api/settings')
+    # app.register_blueprint(auth_bp, url_prefix='/api/auth')
+    # app.register_blueprint(devices_bp, url_prefix='/api/devices') 
+    # app.register_blueprint(device_bp, url_prefix='/api/device')
+    # app.register_blueprint(detections_bp, url_prefix='/api/detections')
+    # app.register_blueprint(ml_bp, url_prefix='/api/ml')
+    # app.register_blueprint(ml_history_bp, url_prefix='/api/ml/history')
+    # app.register_blueprint(statistics_bp, url_prefix='/api/statistics')
+    # app.register_blueprint(settings_bp, url_prefix='/api/settings')
+
+    app.register_blueprint(auth_bp)           # Already has url_prefix='/api/auth'
+    app.register_blueprint(devices_bp)        # Already has url_prefix='/api/devices' 
+    app.register_blueprint(device_bp)         # Already has url_prefix='/api/device'
+    app.register_blueprint(detections_bp)     # Already has url_prefix='/api/detections'
+    app.register_blueprint(ml_bp)             # Already has url_prefix='/api/ml'
+    app.register_blueprint(ml_history_bp)     # ✅ Already has url_prefix='/api/ml-history'
+    app.register_blueprint(statistics_bp)     # Already has url_prefix='/api/statistics'
+    app.register_blueprint(settings_bp)
 
     @app.before_request
     def handle_preflight():
