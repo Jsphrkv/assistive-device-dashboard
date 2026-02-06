@@ -464,10 +464,11 @@ const DeviceSystemTab = () => {
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl animate-slideIn">
-            <div className="flex items-start justify-between mb-4">
+          <div className="bg-white rounded-lg w-full max-w-md shadow-xl animate-slideIn overflow-hidden">
+            {/* Header with close button */}
+            <div className="flex items-start justify-between p-6 pb-4">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
                   <AlertCircle className="w-6 h-6 text-red-600" />
                 </div>
                 <div>
@@ -481,39 +482,41 @@ const DeviceSystemTab = () => {
               </div>
               <button
                 onClick={() => setShowDeleteModal(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
+                className="text-gray-400 hover:text-gray-600 transition-colors -mt-1"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="mb-6">
+            {/* Content */}
+            <div className="px-6 pb-6">
               <p className="text-gray-700 mb-3">
                 Are you sure you want to delete{" "}
                 <strong>{device.device_name}</strong>?
               </p>
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-6">
                 <p className="text-sm text-red-800">
                   <strong>Warning:</strong> All detection logs, system data, and
                   settings associated with this device will be permanently
                   removed.
                 </p>
               </div>
-            </div>
 
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowDeleteModal(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDeleteDevice}
-                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
-              >
-                Delete Device
-              </button>
+              {/* Buttons */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowDeleteModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteDevice}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+                >
+                  Delete Device
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -522,10 +525,11 @@ const DeviceSystemTab = () => {
       {/* Regenerate Token Confirmation Modal */}
       {showRegenerateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl animate-slideIn">
-            <div className="flex items-start justify-between mb-4">
+          <div className="bg-white rounded-lg w-full max-w-md shadow-xl animate-slideIn overflow-hidden">
+            {/* Header with close button */}
+            <div className="flex items-start justify-between p-6 pb-4">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
+                <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center flex-shrink-0">
                   <RefreshCw className="w-6 h-6 text-yellow-600" />
                 </div>
                 <div>
@@ -539,37 +543,39 @@ const DeviceSystemTab = () => {
               </div>
               <button
                 onClick={() => setShowRegenerateModal(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
+                className="text-gray-400 hover:text-gray-600 transition-colors -mt-1"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="mb-6">
+            {/* Content */}
+            <div className="px-6 pb-6">
               <p className="text-gray-700 mb-3">
                 This will invalidate the current device token.
               </p>
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-6">
                 <p className="text-sm text-yellow-800">
                   <strong>Important:</strong> Your Raspberry Pi will need to be
                   reconfigured with the new token to continue working.
                 </p>
               </div>
-            </div>
 
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowRegenerateModal(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleRegenerateToken}
-                className="flex-1 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors font-medium"
-              >
-                Regenerate Token
-              </button>
+              {/* Buttons */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowRegenerateModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleRegenerateToken}
+                  className="flex-1 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors font-medium"
+                >
+                  Regenerate Token
+                </button>
+              </div>
             </div>
           </div>
         </div>
