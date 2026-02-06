@@ -126,7 +126,7 @@ def register_device():
         traceback.print_exc()
         return jsonify({'error': 'Failed to register device'}), 500
 
-@devices_bp.route('/<int:device_id>', methods=['PUT'])
+@devices_bp.route('/<device_id>', methods=['PUT'])
 @token_required
 def update_device(device_id):
     """Update device details"""
@@ -174,7 +174,7 @@ def update_device(device_id):
         print(f"Update device error: {e}")
         return jsonify({'error': 'Failed to update device'}), 500
 
-@devices_bp.route('/<int:device_id>', methods=['DELETE'])
+@devices_bp.route('/<device_id>', methods=['DELETE'])
 @token_required
 def delete_device(device_id):
     """Delete/unregister a device"""
@@ -213,7 +213,7 @@ def delete_device(device_id):
         print(f"Delete device error: {e}")
         return jsonify({'error': 'Failed to delete device'}), 500
 
-@devices_bp.route('/<int:device_id>/regenerate-token', methods=['POST'])
+@devices_bp.route('/<device_id>/regenerate-token', methods=['POST'])
 @token_required
 def regenerate_device_token(device_id):
     """Regenerate device token (if compromised)"""
