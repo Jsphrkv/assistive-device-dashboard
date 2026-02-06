@@ -466,7 +466,7 @@ const DeviceSystemTab = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fadeIn">
           <div className="bg-white rounded-lg w-full max-w-md shadow-xl animate-slideIn overflow-hidden">
             {/* Header with close button */}
-            <div className="flex items-start justify-between p-6 pb-4">
+            <div className="flex items-start justify-between px-6 pt-5 pb-4">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
                   <AlertCircle className="w-6 h-6 text-red-600" />
@@ -482,7 +482,7 @@ const DeviceSystemTab = () => {
               </div>
               <button
                 onClick={() => setShowDeleteModal(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors -mt-1"
+                className="text-gray-400 hover:text-gray-600 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -527,7 +527,7 @@ const DeviceSystemTab = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fadeIn">
           <div className="bg-white rounded-lg w-full max-w-md shadow-xl animate-slideIn overflow-hidden">
             {/* Header with close button */}
-            <div className="flex items-start justify-between p-6 pb-4">
+            <div className="flex items-start justify-between px-6 pt-5 pb-4">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center flex-shrink-0">
                   <RefreshCw className="w-6 h-6 text-yellow-600" />
@@ -543,7 +543,7 @@ const DeviceSystemTab = () => {
               </div>
               <button
                 onClick={() => setShowRegenerateModal(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors -mt-1"
+                className="text-gray-400 hover:text-gray-600 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
