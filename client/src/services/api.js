@@ -131,12 +131,32 @@ export const mlAPI = {
     api.post("/ml/predict/maintenance", deviceData),
 
   // ML History (when backend is ready)
-  getHistory: (deviceId, limit = 100) =>
-    api.get(`/ml/history/${deviceId}?limit=${limit}`),
+  // getHistory: (deviceId, limit = 100) =>
+  //   api.get(`/ml/history/${deviceId}?limit=${limit}`),
 
-  // ML Statistics (when backend is ready)
-  getStatistics: (deviceId, timeRange = "24h") =>
-    api.get(`/ml/statistics/${deviceId}?range=${timeRange}`),
+  // // ML Statistics (when backend is ready)
+  // getStatistics: (deviceId, timeRange = "24h") =>
+  //   api.get(`/ml/statistics/${deviceId}?range=${timeRange}`),
+  // ✅ UPDATED: Change from /ml/history to /ml-history
+  getHistory: (params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.limit) queryParams.append("limit", params.limit);
+    if (params.offset) queryParams.append("offset", params.offset);
+    if (params.type) queryParams.append("type", params.type);
+    if (params.anomalies_only)
+      queryParams.append("anomalies_only", params.anomalies_only);
+    if (params.start_date) queryParams.append("start_date", params.start_date);
+    if (params.end_date) queryParams.append("end_date", params.end_date);
+
+    // ✅ Changed from /ml/history to /ml-history
+    return api.get(`/ml-history?${queryParams.toString()}`);
+  },
+
+  // ✅ Changed from /ml/history/anomalies to /ml-history/anomalies
+  getAnomalies: (limit = 20) => api.get(`/ml-history/anomalies?limit=${limit}`),
+
+  // ✅ Changed from /ml/history/stats to /ml-history/stats
+  getStats: (days = 7) => api.get(`/ml-history/stats?days=${days}`),
 };
 
 export default api;

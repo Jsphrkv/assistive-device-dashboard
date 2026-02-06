@@ -236,56 +236,56 @@ def recognize_activity():
 
 # ========== ML History Endpoints ==========
 
-@ml_bp.route('/history', methods=['GET'])
-@token_required
-def get_ml_history():
-    """Get ML prediction history"""
-    try:
-        device_id = request.args.get('device_id')
-        prediction_type = request.args.get('type')
-        days = int(request.args.get('days', 7))
-        limit = int(request.args.get('limit', 100))
+# @ml_bp.route('/history', methods=['GET'])
+# @token_required
+# def get_ml_history():
+#     """Get ML prediction history"""
+#     try:
+#         device_id = request.args.get('device_id')
+#         prediction_type = request.args.get('type')
+#         days = int(request.args.get('days', 7))
+#         limit = int(request.args.get('limit', 100))
         
-        history = ml_storage.get_ml_history(
-            device_id=device_id,
-            prediction_type=prediction_type,
-            limit=limit,
-            days=days
-        )
+#         history = ml_storage.get_ml_history(
+#             device_id=device_id,
+#             prediction_type=prediction_type,
+#             limit=limit,
+#             days=days
+#         )
         
-        return jsonify({
-            'success': True,
-            'count': len(history),
-            'data': history
-        }), 200
+#         return jsonify({
+#             'success': True,
+#             'count': len(history),
+#             'data': history
+#         }), 200
         
-    except Exception as e:
-        print(f"Error fetching history: {e}")
-        return jsonify({'error': 'Failed to fetch history'}), 500
+#     except Exception as e:
+#         print(f"Error fetching history: {e}")
+#         return jsonify({'error': 'Failed to fetch history'}), 500
 
 
-@ml_bp.route('/statistics', methods=['GET'])
-@token_required
-def get_ml_statistics():
-    """Get aggregated ML statistics"""
-    try:
-        device_id = request.args.get('device_id')
-        days = int(request.args.get('days', 7))
+# @ml_bp.route('/statistics', methods=['GET'])
+# @token_required
+# def get_ml_statistics():
+#     """Get aggregated ML statistics"""
+#     try:
+#         device_id = request.args.get('device_id')
+#         days = int(request.args.get('days', 7))
         
-        stats = ml_storage.get_statistics(
-            device_id=device_id,
-            days=days
-        )
+#         stats = ml_storage.get_statistics(
+#             device_id=device_id,
+#             days=days
+#         )
         
-        return jsonify({
-            'success': True,
-            'period_days': days,
-            'statistics': stats
-        }), 200
+#         return jsonify({
+#             'success': True,
+#             'period_days': days,
+#             'statistics': stats
+#         }), 200
         
-    except Exception as e:
-        print(f"Error fetching statistics: {e}")
-        return jsonify({'error': 'Failed to fetch statistics'}), 500
+#     except Exception as e:
+#         print(f"Error fetching statistics: {e}")
+#         return jsonify({'error': 'Failed to fetch statistics'}), 500
 
 
 # ========== Aliases for frontend compatibility ==========
