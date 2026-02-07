@@ -46,7 +46,7 @@ const Navigation = ({ activeTab, onTabChange }) => {
 
   return (
     <>
-      <nav className="bg-white border-y border-gray-200 sticky top-[73px] md:top-[89px] z-40 shadow-sm">
+      <nav className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4">
           {/* Mobile: Burger + Active Tab */}
           <div className="md:hidden flex items-center justify-between py-3">
@@ -84,8 +84,8 @@ const Navigation = ({ activeTab, onTabChange }) => {
                   onClick={() => onTabChange(tab.id)}
                   className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-all whitespace-nowrap ${
                     activeTab === tab.id
-                      ? "border-blue-600 text-blue-600 bg-blue-50"
-                      : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                      ? "border-blue-600 text-blue-600"
+                      : "border-transparent text-gray-600 hover:text-gray-900"
                   }`}
                 >
                   <Icon className="w-4 h-4" />
