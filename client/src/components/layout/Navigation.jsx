@@ -119,7 +119,7 @@ const Navigation = ({ activeTab, onTabChange }) => {
             <div className="p-6">
               {/* Header */}
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-bold text-gray-900">Navigation</h2>
+                <h2 className="text-lg font-bold text-gray-900">Menu</h2>
                 <button
                   onClick={() => setIsMobileNavOpen(false)}
                   className="p-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
