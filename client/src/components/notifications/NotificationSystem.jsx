@@ -20,8 +20,8 @@ const NotificationSystem = () => {
   const [shownNotifications, setShownNotifications] = useState(new Set());
 
   useEffect(() => {
-    // Check for ML anomalies every 5 seconds
-    const anomalyInterval = setInterval(checkForAnomalies, 5000);
+    // Check for ML anomalies every 10 seconds
+    const anomalyInterval = setInterval(checkForAnomalies, 10000);
 
     // Check device status every 60 seconds
     const statusInterval = setInterval(checkDeviceStatus, 60000);
