@@ -244,14 +244,14 @@ const NotificationSystem = () => {
     });
 
     // Auto-remove timing based on type
-    let timeout = 15000; // Default: 15 seconds
+    let timeout = 10000; // Default: 15 seconds
 
     if (["detection", "anomaly"].includes(notification.type)) {
-      timeout = 15000; // 15 seconds for urgent alerts
+      timeout = 10000; // 10 seconds for urgent alerts
     } else if (["maintenance", "device"].includes(notification.type)) {
-      timeout = 30000; // 30 seconds for maintenance/device issues
+      timeout = 15000; // 15 seconds for maintenance/device issues
     } else if (["battery", "camera"].includes(notification.type)) {
-      timeout = 45000; // 45 seconds for hardware issues
+      timeout = 20000; // 20 seconds for hardware issues
     }
 
     setTimeout(() => {
