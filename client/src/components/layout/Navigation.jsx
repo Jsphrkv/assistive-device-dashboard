@@ -46,7 +46,7 @@ const Navigation = ({ activeTab, onTabChange }) => {
 
   return (
     <>
-      <nav className="bg-white border-b border-gray-200 sticky top-[73px] md:top-[89px] z-40">
+      <nav className="bg-white border-y border-gray-200 sticky top-[73px] md:top-[89px] z-40 shadow-sm">
         <div className="max-w-7xl mx-auto px-4">
           {/* Mobile: Burger + Active Tab */}
           <div className="md:hidden flex items-center justify-between py-3">
@@ -119,7 +119,7 @@ const Navigation = ({ activeTab, onTabChange }) => {
             <div className="p-6">
               {/* Header */}
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-bold text-gray-900">Menu</h2>
+                <h2 className="text-lg font-bold text-gray-900">Navigation</h2>
                 <button
                   onClick={() => setIsMobileNavOpen(false)}
                   className="p-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
