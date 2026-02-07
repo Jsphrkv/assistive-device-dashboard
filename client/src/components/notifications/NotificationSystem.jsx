@@ -8,6 +8,7 @@ import {
   Camera,
   Activity,
 } from "lucide-react";
+import { storage } from "../../utils/helpers";
 
 // Import API_BASE_URL - matches your api.js configuration
 const API_BASE_URL =
@@ -37,7 +38,8 @@ const NotificationSystem = () => {
 
   const checkForAnomalies = async () => {
     try {
-      const token = localStorage.getItem("token");
+      // Use storage.get() to match your api.js
+      const token = storage.get("token");
       if (!token) return;
 
       // Note: API_BASE_URL already includes /api, so just add the endpoint path
@@ -50,7 +52,10 @@ const NotificationSystem = () => {
         },
       );
 
-      if (!response.ok) return;
+      if (!response.ok) {
+        console.log("Anomalies check failed:", response.status);
+        return;
+      }
 
       const result = await response.json();
       const anomalies = result.data || [];
@@ -85,7 +90,8 @@ const NotificationSystem = () => {
 
   const checkDeviceStatus = async () => {
     try {
-      const token = localStorage.getItem("token");
+      // Use storage.get() to match your api.js
+      const token = storage.get("token");
       if (!token) return;
 
       // Note: API_BASE_URL already includes /api
@@ -95,7 +101,10 @@ const NotificationSystem = () => {
         },
       });
 
-      if (!response.ok) return;
+      if (!response.ok) {
+        console.log("Device status check failed:", response.status);
+        return;
+      }
 
       const status = await response.json();
 
