@@ -104,6 +104,7 @@ const DeviceSystemTab = () => {
   };
 
   const copyToClipboard = (text) => {
+    if (!text) return;
     navigator.clipboard.writeText(text);
     setCopiedToken(true);
     setTimeout(() => setCopiedToken(false), 2000);
@@ -325,7 +326,11 @@ const DeviceSystemTab = () => {
               name="deviceToken"
               type="text"
               readOnly
-              value={device.device_token.substring(0, 40) + "..."}
+              value={
+                device.device_token
+                  ? device.device_token.substring(0, 40) + "..."
+                  : "No token available"
+              }
               className="text-xs font-mono text-gray-800 flex-1 bg-white px-3 py-2 rounded border border-gray-200"
             />
             <button
@@ -333,6 +338,7 @@ const DeviceSystemTab = () => {
               className="p-2 hover:bg-gray-200 rounded transition-colors"
               title="Copy token"
               aria-label="Copy device token"
+              disabled={!device.device_token}
             >
               {copiedToken ? (
                 <Check className="w-4 h-4 text-green-600" />
