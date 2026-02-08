@@ -235,6 +235,7 @@ const DeviceSystemTab = () => {
                     <option>Raspberry Pi 5</option>
                     <option>Raspberry Pi 4</option>
                     <option>Raspberry Pi 3 B+</option>
+                    <option>Raspberry Pi 3 B</option>
                     <option>Raspberry Pi Zero W</option>
                   </select>
                 </div>
