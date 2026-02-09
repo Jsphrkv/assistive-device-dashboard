@@ -2,7 +2,9 @@ export const config = {
   api: {
     baseUrl:
       import.meta.env.VITE_API_URL ||
-      "https://assistive-device-dashboard.onrender.com/api",
+      (import.meta.env.MODE === "development"
+        ? "http://localhost:5000/api"
+        : "https://assistive-device-dashboard.onrender.com/api"),
   },
   app: {
     name: import.meta.env.VITE_APP_NAME || "Assistive Device Dashboard",

@@ -3,7 +3,9 @@ import { storage } from "../utils/helpers";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
-  "https://assistive-device-dashboard.onrender.com/api";
+  (import.meta.env.MODE === "development"
+    ? "http://localhost:5000/api"
+    : "https://assistive-device-dashboard.onrender.com/api");
 
 // Create axios instance
 const api = axios.create({
