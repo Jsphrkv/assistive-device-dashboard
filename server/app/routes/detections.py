@@ -79,8 +79,6 @@ def create_detection():
         
         # Handle image upload to Supabase Storage
         image_url = None
-        image_data_to_store = None  # ← ADD THIS
-        
         if 'image_data' in data and data['image_data']:
             try:
                 # Decode base64 image
@@ -101,44 +99,72 @@ def create_detection():
                 image_url = supabase.storage.from_('detection-image').get_public_url(filename)
                 
                 print(f"✅ Image uploaded: {filename}")
+                print(f"✅ Image URL: {image_url}")  # ← ADD THIS to see the URL
                 
             except Exception as img_error:
                 print(f"⚠️ Image upload failed: {img_error}")
-                # FALLBACK: Store base64 directly if upload fails
-                image_data_to_store = data['image_data']  # ← ADD THIS
-                image_url = data.get('image_url')  # ← ADD THIS (use filename from Pi)
-                print(f"💾 Storing base64 as fallback")
+                import traceback
+                traceback.print_exc()  # ← ADD THIS to see full error
+                # Continue without image - don't fail the whole request
         
-        # Insert detection log with image_url AND image_data
+        # Insert detection log with image_url
         insert_data = {
             'obstacle_type': data['obstacle_type'],
-            'distance_cm': data['distance_cm'],
+            'distance_cm': float(data['distance_cm']),  # ← Ensure it's a float
             'danger_level': data['danger_level'],
             'alert_type': data['alert_type'],
             'device_id': device_id,
-            'proximity_value': data.get('proximity_value', 0),
-            'ambient_light': data.get('ambient_light', 0),
-            'camera_enabled': data.get('camera_enabled', False),
-            'image_url': image_url,
-            'image_data': image_data_to_store  # ← ADD THIS
+            'proximity_value': int(data.get('proximity_value', 0)),  # ← Ensure it's an int
+            'ambient_light': int(data.get('ambient_light', 0)),  # ← Ensure it's an int
+            'camera_enabled': bool(data.get('camera_enabled', False)),  # ← Ensure it's a bool
+            'image_url': image_url  # Store URL
         }
         
-        response = supabase.table('detection_logs').insert(insert_data).execute()
+        print(f"🔍 Inserting data: {insert_data}")  # ← ADD THIS to see what's being inserted
         
-    except Exception as status_error:
-        print(f"Warning: Could not update device_status: {status_error}")
+        # TRY THE INSERT WITH BETTER ERROR HANDLING
+        try:
+            response = supabase.table('detection_logs').insert(insert_data).execute()
+            print(f"✅ Database insert successful")  # ← ADD THIS
+        except Exception as db_error:
+            print(f"❌ Database insert failed: {db_error}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': f'Database insert failed: {str(db_error)}'}), 500
         
+        # Update device status with last obstacle
+        try:
+            status_check = supabase.table('device_status').select('id').limit(1).execute()
+            
+            if status_check.data and len(status_check.data) > 0:
+                status_id = status_check.data[0]['id']
+                supabase.table('device_status').update({
+                    'last_obstacle': data['obstacle_type'],
+                    'last_detection_time': 'now()',
+                    'updated_at': 'now()'
+                }).eq('id', status_id).execute()
+            else:
+                supabase.table('device_status').insert({
+                    'device_online': True,
+                    'camera_status': 'Active',
+                    'battery_level': 100,
+                    'last_obstacle': data['obstacle_type'],
+                    'last_detection_time': 'now()'
+                }).execute()
+        except Exception as status_error:
+            print(f"Warning: Could not update device_status: {status_error}")
+        
+        # MAKE SURE THIS RETURN IS PROPERLY INDENTED
         return jsonify({
-            # 'message': 'Detection logged successfully',
             'data': response.data,
-            'image_url': image_url  # Return URL to Pi (optional)
+            'image_url': image_url
         }), 201
         
     except Exception as e:
-        print(f"Create detection error: {e}")
+        print(f"❌ Create detection error: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({'error': 'Failed to create detection'}), 500
+        return jsonify({'error': f'Failed to create detection: {str(e)}'}), 500
 
 @detections_bp.route('/by-date', methods=['GET'])
 @token_required

@@ -476,3 +476,64 @@ def update_temperature():
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'Failed to update temperature'}), 500
+    
+@devices_bp.route('/system-info', methods=['POST'])
+@device_token_required
+def update_system_info():
+    """Update system information (called by Raspberry Pi on first boot)"""
+    try:
+        device_id = request.current_device['id']
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        supabase = get_supabase()
+        
+        # Prepare system info data
+        system_data = {
+            'device_id': device_id,
+            'raspberry_pi_model': data.get('raspberryPiModel'),
+            'software_version': data.get('softwareVersion'),
+            'cpu_model': data.get('cpuModel'),
+            'ram_size': data.get('ramSize'),
+            'storage_size': data.get('storageSize'),
+            'os_version': data.get('osVersion'),
+            'cpu_temperature': data.get('cpuTemperature'),
+            'last_reboot_time': data.get('lastRebootTime'),
+            'updated_at': 'now()'
+        }
+        
+        # Check if system info already exists
+        existing = supabase.table('system_info')\
+            .select('id')\
+            .eq('device_id', device_id)\
+            .limit(1)\
+            .execute()
+        
+        if existing.data and len(existing.data) > 0:
+            # Update existing
+            response = supabase.table('system_info')\
+                .update(system_data)\
+                .eq('device_id', device_id)\
+                .execute()
+        else:
+            # Insert new
+            response = supabase.table('system_info').insert(system_data).execute()
+        
+        # Update device status to 'active' since it's now connected
+        supabase.table('user_devices')\
+            .update({'status': 'active', 'last_seen': 'now()'})\
+            .eq('id', device_id)\
+            .execute()
+        
+        return jsonify({
+            'message': 'System info updated successfully',
+            'data': response.data
+        }), 200
+        
+    except Exception as e:
+        print(f"Update system info error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Failed to update system info'}), 500
