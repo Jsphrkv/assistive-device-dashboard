@@ -59,8 +59,8 @@ def device_token_required(f):
             .select('*')\
             .eq('device_token', token)\
             .eq('is_active', True)\
-            .single()\
-            .execute()
+            .maybe_single()\
+            .execute()  # Changed .single() to .maybe_single()
         
         if not device.data:
             return jsonify({'error': 'Invalid or inactive device token'}), 401
