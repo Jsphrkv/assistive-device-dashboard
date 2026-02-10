@@ -142,7 +142,7 @@ def create_detection():
             print(f"Warning: Could not update device_status: {status_error}")
         
         return jsonify({
-            'message': 'Detection logged successfully',
+            # 'message': 'Detection logged successfully',
             'data': response.data,
             'image_url': image_url  # Return URL to Pi (optional)
         }), 201
