@@ -2,6 +2,9 @@ from flask import Blueprint, request, jsonify
 from app.services.supabase_client import get_supabase
 from app.middleware.auth import token_required, device_token_required
 from app.middleware.auth import check_permission
+import base64
+import uuid
+from datetime import datetime
 
 detections_bp = Blueprint('detections', __name__, url_prefix='/api/detections')
 
@@ -74,34 +77,53 @@ def create_detection():
         
         supabase = get_supabase()
         
-        # Insert detection log with ALL fields
+        # Handle image upload to Supabase Storage
+        image_url = None
+        if 'image_data' in data and data['image_data']:
+            try:
+                # Decode base64 image
+                image_bytes = base64.b64decode(data['image_data'])
+                
+                # Generate unique filename: device_id/timestamp_uuid.jpg
+                timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+                filename = f"{device_id}/{timestamp}_{uuid.uuid4().hex[:8]}.jpg"
+                
+                # Upload to Supabase Storage
+                upload_response = supabase.storage.from_('detection-images').upload(
+                    path=filename,
+                    file=image_bytes,
+                    file_options={"content-type": "image/jpeg"}
+                )
+                
+                # Get public URL
+                image_url = supabase.storage.from_('detection-images').get_public_url(filename)
+                
+                print(f"✅ Image uploaded: {filename}")
+                
+            except Exception as img_error:
+                print(f"⚠️ Image upload failed: {img_error}")
+                # Continue without image - don't fail the whole request
+        
+        # Insert detection log with image_url
         insert_data = {
             'obstacle_type': data['obstacle_type'],
             'distance_cm': data['distance_cm'],
             'danger_level': data['danger_level'],
             'alert_type': data['alert_type'],
             'device_id': device_id,
-            # NEW: Optional fields with defaults
             'proximity_value': data.get('proximity_value', 0),
             'ambient_light': data.get('ambient_light', 0),
-            'camera_enabled': data.get('camera_enabled', False)
+            'camera_enabled': data.get('camera_enabled', False),
+            'image_url': image_url  # ✅ Store URL instead of base64
         }
-        
-        # Handle image data if present
-        if 'image_data' in data and data['image_data']:
-            insert_data['image_data'] = data['image_data']
-            # If you have cloud storage, upload and set image_url here
-            # insert_data['image_url'] = upload_to_storage(data['image_data'])
         
         response = supabase.table('detection_logs').insert(insert_data).execute()
         
         # Update device status with last obstacle
         try:
-            # Check if device_status row exists
             status_check = supabase.table('device_status').select('id').limit(1).execute()
             
             if status_check.data and len(status_check.data) > 0:
-                # Update existing row
                 status_id = status_check.data[0]['id']
                 supabase.table('device_status').update({
                     'last_obstacle': data['obstacle_type'],
@@ -109,7 +131,6 @@ def create_detection():
                     'updated_at': 'now()'
                 }).eq('id', status_id).execute()
             else:
-                # Insert new row if none exists
                 supabase.table('device_status').insert({
                     'device_online': True,
                     'camera_status': 'Active',
@@ -118,12 +139,12 @@ def create_detection():
                     'last_detection_time': 'now()'
                 }).execute()
         except Exception as status_error:
-            # Don't fail the whole request if status update fails
             print(f"Warning: Could not update device_status: {status_error}")
         
         return jsonify({
             'message': 'Detection logged successfully',
-            'data': response.data
+            'data': response.data,
+            'image_url': image_url  # Return URL to Pi (optional)
         }), 201
         
     except Exception as e:
