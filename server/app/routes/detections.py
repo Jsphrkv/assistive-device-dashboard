@@ -140,8 +140,8 @@ def create_detection():
                 status_id = status_check.data[0]['id']
                 supabase.table('device_status').update({
                     'last_obstacle': data['obstacle_type'],
-                    'last_detection_time': 'now()',
-                    'updated_at': 'now()'
+                    'last_detection_time': datetime.utcnow().isoformat(),  # ✅ Correct
+                    'updated_at': datetime.utcnow().isoformat()  # ✅ Correct
                 }).eq('id', status_id).execute()
             else:
                 supabase.table('device_status').insert({
@@ -149,7 +149,7 @@ def create_detection():
                     'camera_status': 'Active',
                     'battery_level': 100,
                     'last_obstacle': data['obstacle_type'],
-                    'last_detection_time': 'now()'
+                    'last_detection_time': datetime.utcnow().isoformat()  # ✅ Correct
                 }).execute()
         except Exception as status_error:
             print(f"Warning: Could not update device_status: {status_error}")
