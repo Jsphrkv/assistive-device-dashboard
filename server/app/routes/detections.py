@@ -79,6 +79,8 @@ def create_detection():
         
         # Handle image upload to Supabase Storage
         image_url = None
+        image_data_to_store = None  # ← ADD THIS
+        
         if 'image_data' in data and data['image_data']:
             try:
                 # Decode base64 image
@@ -102,9 +104,12 @@ def create_detection():
                 
             except Exception as img_error:
                 print(f"⚠️ Image upload failed: {img_error}")
-                # Continue without image - don't fail the whole request
+                # FALLBACK: Store base64 directly if upload fails
+                image_data_to_store = data['image_data']  # ← ADD THIS
+                image_url = data.get('image_url')  # ← ADD THIS (use filename from Pi)
+                print(f"💾 Storing base64 as fallback")
         
-        # Insert detection log with image_url
+        # Insert detection log with image_url AND image_data
         insert_data = {
             'obstacle_type': data['obstacle_type'],
             'distance_cm': data['distance_cm'],
@@ -114,32 +119,14 @@ def create_detection():
             'proximity_value': data.get('proximity_value', 0),
             'ambient_light': data.get('ambient_light', 0),
             'camera_enabled': data.get('camera_enabled', False),
-            'image_url': image_url  # ✅ Store URL instead of base64
+            'image_url': image_url,
+            'image_data': image_data_to_store  # ← ADD THIS
         }
         
         response = supabase.table('detection_logs').insert(insert_data).execute()
         
-        # Update device status with last obstacle
-        try:
-            status_check = supabase.table('device_status').select('id').limit(1).execute()
-            
-            if status_check.data and len(status_check.data) > 0:
-                status_id = status_check.data[0]['id']
-                supabase.table('device_status').update({
-                    'last_obstacle': data['obstacle_type'],
-                    'last_detection_time': 'now()',
-                    'updated_at': 'now()'
-                }).eq('id', status_id).execute()
-            else:
-                supabase.table('device_status').insert({
-                    'device_online': True,
-                    'camera_status': 'Active',
-                    'battery_level': 100,
-                    'last_obstacle': data['obstacle_type'],
-                    'last_detection_time': 'now()'
-                }).execute()
-        except Exception as status_error:
-            print(f"Warning: Could not update device_status: {status_error}")
+    except Exception as status_error:
+        print(f"Warning: Could not update device_status: {status_error}")
         
         return jsonify({
             # 'message': 'Detection logged successfully',
