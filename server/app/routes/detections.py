@@ -74,14 +74,24 @@ def create_detection():
         
         supabase = get_supabase()
         
-        # Insert detection log
+        # Insert detection log with ALL fields
         insert_data = {
             'obstacle_type': data['obstacle_type'],
             'distance_cm': data['distance_cm'],
             'danger_level': data['danger_level'],
             'alert_type': data['alert_type'],
-            'device_id': device_id  # ← Link to device
+            'device_id': device_id,
+            # NEW: Optional fields with defaults
+            'proximity_value': data.get('proximity_value', 0),
+            'ambient_light': data.get('ambient_light', 0),
+            'camera_enabled': data.get('camera_enabled', False)
         }
+        
+        # Handle image data if present
+        if 'image_data' in data and data['image_data']:
+            insert_data['image_data'] = data['image_data']
+            # If you have cloud storage, upload and set image_url here
+            # insert_data['image_url'] = upload_to_storage(data['image_data'])
         
         response = supabase.table('detection_logs').insert(insert_data).execute()
         
