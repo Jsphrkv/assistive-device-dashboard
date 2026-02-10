@@ -89,14 +89,14 @@ def create_detection():
                 filename = f"{device_id}/{timestamp}_{uuid.uuid4().hex[:8]}.jpg"
                 
                 # Upload to Supabase Storage
-                upload_response = supabase.storage.from_('detection-images').upload(
+                upload_response = supabase.storage.from_('detection-image').upload(
                     path=filename,
                     file=image_bytes,
                     file_options={"content-type": "image/jpeg"}
                 )
                 
                 # Get public URL
-                image_url = supabase.storage.from_('detection-images').get_public_url(filename)
+                image_url = supabase.storage.from_('detection-image').get_public_url(filename)
                 
                 print(f"✅ Image uploaded: {filename}")
                 
