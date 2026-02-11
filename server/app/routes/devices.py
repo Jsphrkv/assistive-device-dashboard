@@ -545,17 +545,86 @@ def update_system_info():
         traceback.print_exc()
         return jsonify({'error': 'Failed to update system info'}), 500
     
+# ============================================
+# IMPROVEMENT 1 & 2: Secure Two-Step Pairing
+# ============================================
+
+def check_rate_limit(ip_address, serial_number=None):
+    """Check if IP or serial has exceeded pairing attempts (5 per minute)"""
+    supabase = get_supabase()
+    one_minute_ago = (datetime.utcnow() - timedelta(minutes=1)).isoformat()
+    
+    # Check IP-based rate limit
+    ip_attempts = supabase.table('pairing_attempts')\
+        .select('*', count='exact')\
+        .eq('ip_address', ip_address)\
+        .gte('attempted_at', one_minute_ago)\
+        .execute()
+    
+    if ip_attempts.count >= 5:
+        return False, "Too many pairing attempts from this IP. Try again in 1 minute."
+    
+    # Check serial-based rate limit if provided
+    if serial_number:
+        serial_attempts = supabase.table('pairing_attempts')\
+            .select('*', count='exact')\
+            .eq('serial_number', serial_number)\
+            .gte('attempted_at', one_minute_ago)\
+            .execute()
+        
+        if serial_attempts.count >= 5:
+            return False, "Too many pairing attempts for this device. Try again in 1 minute."
+    
+    return True, None
+
+def log_pairing_attempt(ip_address, serial_number=None, success=False):
+    """Log pairing attempt for rate limiting"""
+    try:
+        supabase = get_supabase()
+        supabase.table('pairing_attempts').insert({
+            'ip_address': ip_address,
+            'serial_number': serial_number,
+            'attempted_at': datetime.utcnow().isoformat(),
+            'success': success
+        }).execute()
+    except:
+        pass  # Don't fail if logging fails
+
 @devices_bp.route('/pair', methods=['POST'])
 def pair_device():
-    """Raspberry Pi sends pairing code to activate and get credentials"""
+    """STEP 1: RPi sends pairing code + serial → Get session token"""
     try:
         data = request.get_json()
         pairing_code = data.get('pairing_code', '').upper().strip()
+        serial_number = data.get('serial_number', '').strip()
         
         if not pairing_code:
             return jsonify({'error': 'Pairing code required'}), 400
         
+        if not serial_number:
+            return jsonify({'error': 'Device serial number required'}), 400
+        
+        # Get client IP
+        ip_address = request.remote_addr
+        
+        # IMPROVEMENT 5: Rate limiting
+        allowed, error_msg = check_rate_limit(ip_address, serial_number)
+        if not allowed:
+            log_pairing_attempt(ip_address, serial_number, False)
+            return jsonify({'error': error_msg}), 429
+        
         supabase = get_supabase()
+        
+        # IMPROVEMENT 3: Check if serial already paired
+        existing_device = supabase.table('user_devices')\
+            .select('*')\
+            .eq('serial_number', serial_number)\
+            .eq('status', 'active')\
+            .execute()
+        
+        if existing_device.data and len(existing_device.data) > 0:
+            log_pairing_attempt(ip_address, serial_number, False)
+            return jsonify({'error': 'This device is already paired to an account'}), 400
         
         # Find device by pairing code
         response = supabase.table('user_devices')\
@@ -565,25 +634,94 @@ def pair_device():
             .execute()
         
         if not response.data or len(response.data) == 0:
-            return jsonify({'error': 'Invalid or expired pairing code'}), 404
+            log_pairing_attempt(ip_address, serial_number, False)
+            return jsonify({'error': 'Invalid pairing code'}), 404
         
         device = response.data[0]
         
         # Check if pairing code expired
         expires_at = datetime.fromisoformat(device['pairing_expires_at'].replace('Z', '+00:00'))
         if datetime.utcnow() > expires_at.replace(tzinfo=None):
-            return jsonify({'error': 'Pairing code expired. Please generate a new device registration.'}), 400
+            log_pairing_attempt(ip_address, serial_number, False)
+            return jsonify({'error': 'Pairing code expired'}), 400
         
-        # Activate device
+        # IMPROVEMENT 1: Generate temporary session token (15 min expiry)
+        session_token = secrets.token_urlsafe(32)
+        session_expires = datetime.utcnow() + timedelta(minutes=15)
+        
+        # Update device with session token and serial
+        supabase.table('user_devices').update({
+            'pairing_session_token': session_token,
+            'session_expires_at': session_expires.isoformat(),
+            'serial_number': serial_number,
+            'pairing_attempts': device.get('pairing_attempts', 0) + 1,
+            'last_pairing_attempt': datetime.utcnow().isoformat()
+        }).eq('id', device['id']).execute()
+        
+        log_pairing_attempt(ip_address, serial_number, True)
+        
+        # IMPROVEMENT 1: Return ONLY session token (not device token)
+        return jsonify({
+            'success': True,
+            'session_token': session_token,
+            'expires_in': 900,  # 15 minutes in seconds
+            'device_name': device['device_name']
+        }), 200
+        
+    except Exception as e:
+        print(f"Pairing error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Pairing failed'}), 500
+
+@devices_bp.route('/activate', methods=['POST'])
+def activate_device():
+    """STEP 2: RPi exchanges session token → Get permanent device token"""
+    try:
+        data = request.get_json()
+        session_token = data.get('session_token', '').strip()
+        serial_number = data.get('serial_number', '').strip()
+        
+        if not session_token:
+            return jsonify({'error': 'Session token required'}), 400
+        
+        if not serial_number:
+            return jsonify({'error': 'Serial number required'}), 400
+        
+        supabase = get_supabase()
+        
+        # Find device by session token and serial
+        response = supabase.table('user_devices')\
+            .select('*')\
+            .eq('pairing_session_token', session_token)\
+            .eq('serial_number', serial_number)\
+            .eq('status', 'pending')\
+            .execute()
+        
+        if not response.data or len(response.data) == 0:
+            return jsonify({'error': 'Invalid session'}), 404
+        
+        device = response.data[0]
+        
+        # Check if session expired
+        session_expires = datetime.fromisoformat(device['session_expires_at'].replace('Z', '+00:00'))
+        if datetime.utcnow() > session_expires.replace(tzinfo=None):
+            return jsonify({'error': 'Session expired. Start pairing again.'}), 400
+        
+        # IMPROVEMENT 4: Clear pairing code and session token
+        # IMPROVEMENT 8: Activate device (separate from system-info)
         supabase.table('user_devices').update({
             'status': 'active',
             'paired_at': datetime.utcnow().isoformat(),
-            'last_seen': datetime.utcnow().isoformat()
+            'last_seen': datetime.utcnow().isoformat(),
+            'pairing_code': None,  # Clear pairing code
+            'pairing_session_token': None,  # Clear session token
+            'session_expires_at': None
         }).eq('id', device['id']).execute()
         
-        print(f"✅ Device paired: {device['device_name']} (ID: {device['id']})")
+        print(f"✅ Device activated: {device['device_name']} (Serial: {serial_number})")
         
-        # Return credentials to Raspberry Pi
+        # Return permanent device token
         return jsonify({
             'success': True,
             'device_id': device['id'],
@@ -592,7 +730,46 @@ def pair_device():
         }), 200
         
     except Exception as e:
-        print(f"Device pairing error: {e}")
+        print(f"Activation error: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({'error': 'Failed to pair device'}), 500
+        return jsonify({'error': 'Activation failed'}), 500
+
+@devices_bp.route('/pair-status/<serial_number>', methods=['GET'])
+def check_pair_status(serial_number):
+    """IMPROVEMENT 2: Polling endpoint - check if device has been paired"""
+    try:
+        supabase = get_supabase()
+        
+        # Find device by serial
+        response = supabase.table('user_devices')\
+            .select('id, device_name, status, paired_at')\
+            .eq('serial_number', serial_number)\
+            .execute()
+        
+        if not response.data or len(response.data) == 0:
+            return jsonify({
+                'paired': False,
+                'status': 'waiting',
+                'message': 'Waiting for pairing code...'
+            }), 200
+        
+        device = response.data[0]
+        
+        if device['status'] == 'active':
+            return jsonify({
+                'paired': True,
+                'status': 'active',
+                'device_name': device['device_name'],
+                'paired_at': device['paired_at']
+            }), 200
+        else:
+            return jsonify({
+                'paired': False,
+                'status': 'pending',
+                'message': 'Pairing in progress...'
+            }), 200
+        
+    except Exception as e:
+        print(f"Pair status error: {e}")
+        return jsonify({'error': 'Failed to check status'}), 500
