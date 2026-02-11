@@ -773,3 +773,47 @@ def check_pair_status(serial_number):
     except Exception as e:
         print(f"Pair status error: {e}")
         return jsonify({'error': 'Failed to check status'}), 500
+    
+@devices_bp.route('/complete-pairing', methods=['POST'])
+def complete_pairing():
+    """User enters pairing code to activate device"""
+    try:
+        data = request.get_json()
+        pairing_code = data.get('pairingCode')
+        device_id = data.get('deviceId')
+        
+        if not pairing_code:
+            return jsonify({'error': 'Pairing code required'}), 400
+        
+        supabase = get_supabase()
+        
+        # Find device with this pairing code
+        device_response = supabase.table('devices').select('*').eq('id', device_id).single().execute()
+        
+        if not device_response.data:
+            return jsonify({'error': 'Device not found'}), 404
+        
+        device = device_response.data
+        
+        # Verify pairing code matches
+        if device['pairing_code'] != pairing_code:
+            return jsonify({'error': 'Invalid pairing code'}), 400
+        
+        # Check if code expired (1 hour)
+        created_at = datetime.fromisoformat(device['created_at'].replace('Z', '+00:00'))
+        if datetime.now(timezone.utc) - created_at > timedelta(hours=1):
+            return jsonify({'error': 'Pairing code expired'}), 400
+        
+        # Mark as ready for Pi to connect (don't change status yet - Pi will do that)
+        supabase.table('devices').update({
+            'updated_at': datetime.utcnow().isoformat()
+        }).eq('id', device_id).execute()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Code verified! Your Pi can now connect.'
+        }), 200
+        
+    except Exception as e:
+        print(f"Complete pairing error: {e}")
+        return jsonify({'error': 'Failed to complete pairing'}), 500

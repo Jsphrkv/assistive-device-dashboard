@@ -96,6 +96,7 @@ export const deviceAPI = {
   delete: (deviceId) => api.delete(`/devices/${deviceId}`),
   regenerateToken: (deviceId) =>
     api.post(`/devices/${deviceId}/regenerate-token`),
+  completePairing: (data) => api.post("/devices/complete-pairing", data),
 };
 
 export const detectionsAPI = {

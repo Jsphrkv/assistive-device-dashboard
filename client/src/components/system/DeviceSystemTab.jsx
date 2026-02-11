@@ -19,9 +19,12 @@ const DeviceSystemTab = () => {
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showPairingCodeModal, setShowPairingCodeModal] = useState(false);
+  const [showPairingInputModal, setShowPairingInputModal] = useState(false); // NEW
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showRegenerateModal, setShowRegenerateModal] = useState(false);
   const [pairingCode, setPairingCode] = useState(null);
+  const [userInputCode, setUserInputCode] = useState(""); // NEW
+  const [pairingError, setPairingError] = useState(""); // NEW
   const [newDevice, setNewDevice] = useState({
     deviceName: "",
     deviceModel: "Raspberry Pi 4",
@@ -143,8 +146,58 @@ const DeviceSystemTab = () => {
 
   const closePairingModal = () => {
     setShowPairingCodeModal(false);
-    setPairingCode(null);
+    // Don't clear pairingCode yet - we need it for validation
     setCopiedCode(false);
+    // Show the input modal next
+    setShowPairingInputModal(true);
+  };
+
+  const handlePairDevice = async () => {
+    // Validate input
+    if (!userInputCode.trim()) {
+      setPairingError("Please enter the pairing code");
+      return;
+    }
+
+    if (userInputCode.toUpperCase() !== pairingCode.toUpperCase()) {
+      setPairingError("Code doesn't match! Please check and try again.");
+      return;
+    }
+
+    try {
+      // Send pairing code to backend
+      const response = await deviceAPI.completePairing({
+        deviceId: device?.id,
+        pairingCode: userInputCode.toUpperCase(),
+        serial: "0000000018B182CD", // You might want to store this
+      });
+
+      if (response.data.success) {
+        // Success! Close modal and refresh
+        setShowPairingInputModal(false);
+        setPairingCode(null);
+        setUserInputCode("");
+        setPairingError("");
+        await fetchDevice();
+        alert(
+          "✅ Device paired successfully! You can now run python main.py on your Raspberry Pi.",
+        );
+      }
+    } catch (error) {
+      console.error("Pairing error:", error);
+      setPairingError(
+        error.response?.data?.error ||
+          "Failed to pair device. Please try again.",
+      );
+    }
+  };
+
+  const cancelPairing = () => {
+    setShowPairingInputModal(false);
+    setPairingCode(null);
+    setUserInputCode("");
+    setPairingError("");
+    fetchDevice(); // Refresh to show current status
   };
 
   const getStatusColor = (status) => {
@@ -387,6 +440,82 @@ const DeviceSystemTab = () => {
               >
                 I've Saved the Code - Close Window
               </button>
+            </div>
+          </div>
+        )}
+        {/* Step 2: Pairing Input Modal */}
+        {showPairingInputModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md">
+              <h3 className="text-xl font-bold mb-4 text-center">
+                📱 Pair Your Device
+              </h3>
+
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
+                <p className="text-sm text-gray-700 mb-3">
+                  To complete pairing, enter the 6-digit code that was shown in
+                  the previous step.
+                </p>
+                <p className="text-xs text-gray-600">
+                  💡 This step verifies you have the code before your Raspberry
+                  Pi connects.
+                </p>
+              </div>
+
+              {/* Input Form */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Enter 6-Digit Pairing Code:
+                </label>
+                <input
+                  type="text"
+                  value={userInputCode}
+                  onChange={(e) => {
+                    setUserInputCode(e.target.value.toUpperCase());
+                    setPairingError(""); // Clear error on change
+                  }}
+                  maxLength={6}
+                  placeholder="LFU46J"
+                  className={`w-full px-4 py-3 text-center text-2xl font-mono font-bold tracking-widest border-2 rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                    pairingError
+                      ? "border-red-300 bg-red-50"
+                      : "border-gray-300 bg-white"
+                  }`}
+                />
+                {pairingError && (
+                  <p className="mt-2 text-sm text-red-600 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4" />
+                    {pairingError}
+                  </p>
+                )}
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                <p className="text-xs text-blue-800">
+                  <strong>Next Steps:</strong> After pairing, run{" "}
+                  <code className="bg-blue-100 px-1 rounded">
+                    python main.py
+                  </code>{" "}
+                  on your Raspberry Pi to start the assistive device system.
+                </p>
+              </div>
+
+              {/* Buttons */}
+              <div className="flex gap-3">
+                <button
+                  onClick={cancelPairing}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handlePairDevice}
+                  disabled={!userInputCode.trim() || userInputCode.length !== 6}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                >
+                  Pair Device
+                </button>
+              </div>
             </div>
           </div>
         )}
