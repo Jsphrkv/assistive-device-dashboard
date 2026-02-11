@@ -72,7 +72,7 @@ const DeviceSystemTab = () => {
       setDevice(response.data.device);
       setShowAddModal(false);
       setNewDevice({ deviceName: "", deviceModel: "Raspberry Pi 4" });
-      copyToClipboard(response.data.device.token);
+      // Don't copy token anymore - show pairing code instead
     } catch (error) {
       console.error("Error adding device:", error);
       alert(error.response?.data?.error || "Failed to add device");
@@ -188,22 +188,17 @@ const DeviceSystemTab = () => {
         </div>
 
         {/* Add Device Modal */}
-        {showAddModal && (
+        {showAddModal && !device && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-md">
               <h3 className="text-lg font-bold mb-4">Register Raspberry Pi</h3>
 
               <div className="space-y-4">
                 <div>
-                  <label
-                    htmlFor="deviceName"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Device Name
                   </label>
                   <input
-                    id="deviceName"
-                    name="deviceName"
                     type="text"
                     value={newDevice.deviceName}
                     onChange={(e) =>
@@ -215,15 +210,10 @@ const DeviceSystemTab = () => {
                 </div>
 
                 <div>
-                  <label
-                    htmlFor="deviceModel"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Raspberry Pi Model
                   </label>
                   <select
-                    id="deviceModel"
-                    name="deviceModel"
                     value={newDevice.deviceModel}
                     onChange={(e) =>
                       setNewDevice({
@@ -240,13 +230,6 @@ const DeviceSystemTab = () => {
                     <option>Raspberry Pi Zero W</option>
                   </select>
                 </div>
-
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <p className="text-sm text-blue-800">
-                    📋 After registration, you'll receive a device token. Copy
-                    it to your Raspberry Pi's .env file to connect.
-                  </p>
-                </div>
               </div>
 
               <div className="flex gap-2 mt-6">
@@ -261,9 +244,76 @@ const DeviceSystemTab = () => {
                   disabled={!newDevice.deviceName.trim()}
                   className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  Register Device
+                  Generate Pairing Code
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Pairing Code Display Modal */}
+        {device && device.status === "pending" && device.pairing_code && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-lg">
+              <h3 className="text-xl font-bold mb-4 text-center">
+                Device Pairing Code
+              </h3>
+
+              <div className="bg-blue-50 p-8 rounded-lg mb-6">
+                <p className="text-center text-sm text-gray-600 mb-2">
+                  Your Pairing Code:
+                </p>
+                <p className="text-center text-5xl font-mono font-bold tracking-widest text-blue-600">
+                  {device.pairing_code || device.device.pairing_code}
+                </p>
+                <p className="text-center text-xs text-gray-500 mt-2">
+                  Expires in 1 hour
+                </p>
+              </div>
+
+              <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                <p className="font-semibold mb-3 flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5 text-blue-600" />
+                  Setup Instructions:
+                </p>
+                <ol className="space-y-2 text-sm">
+                  <li className="flex gap-2">
+                    <span className="font-bold text-blue-600">1.</span>
+                    <span>
+                      Turn ON your Raspberry Pi and connect to internet
+                    </span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="font-bold text-blue-600">2.</span>
+                    <span>
+                      Run:{" "}
+                      <code className="bg-gray-200 px-2 py-1 rounded">
+                        python pair_device.py
+                      </code>
+                    </span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="font-bold text-blue-600">3.</span>
+                    <span>Enter the pairing code above when prompted</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="font-bold text-blue-600">4.</span>
+                    <span>
+                      Run:{" "}
+                      <code className="bg-gray-200 px-2 py-1 rounded">
+                        python main.py
+                      </code>
+                    </span>
+                  </li>
+                </ol>
+              </div>
+
+              <button
+                onClick={() => fetchDevice()}
+                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                I've Paired My Device
+              </button>
             </div>
           </div>
         )}

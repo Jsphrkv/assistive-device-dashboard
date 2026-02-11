@@ -3,6 +3,8 @@ from app.services.supabase_client import get_supabase
 from app.middleware.auth import token_required, device_token_required, admin_required, check_permission
 from app.utils.jwt_handler import generate_device_token
 import secrets
+import string
+from datetime import datetime, timedelta
 
 devices_bp = Blueprint('devices', __name__, url_prefix='/api/devices')
 
@@ -70,12 +72,13 @@ def register_device():
         device_name = data['deviceName']
         device_model = data.get('deviceModel', 'Raspberry Pi')
         
-        # Generate unique device token
+        # Generate unique device token AND pairing code
         device_token = generate_device_token(f"{user_id}-{device_name}")
+        pairing_code = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(6))
         
         supabase = get_supabase()
         
-        # Check device limit (max 5 devices per user)
+        # Check device limit (max 1 device per user)
         existing = supabase.table('user_devices')\
             .select('*', count='exact')\
             .eq('user_id', user_id)\
@@ -86,13 +89,15 @@ def register_device():
                 'error': 'You can only register one device per account. Please delete your existing device first.'
             }), 400
         
-        # Create device
+        # Create device with pairing code
         new_device = {
             'user_id': user_id,
             'device_name': device_name,
             'device_model': device_model,
             'device_token': device_token,
-            'status': 'pending'  # Waiting for Pi to connect
+            'pairing_code': pairing_code,  # ← ADD THIS
+            'pairing_expires_at': (datetime.utcnow() + timedelta(hours=1)).isoformat(),  # ← ADD THIS
+            'status': 'pending'  # Will become 'active' after pairing
         }
         
         response = supabase.table('user_devices').insert(new_device).execute()
@@ -109,13 +114,15 @@ def register_device():
             'description': f'Registered device: {device_name}'
         }).execute()
         
+        # Return pairing code (NOT the full token)
         return jsonify({
             'message': 'Device registered successfully',
             'device': {
                 'id': device['id'],
                 'name': device['device_name'],
                 'model': device['device_model'],
-                'token': device['device_token'],
+                'pairing_code': pairing_code,  # ← CHANGED: Return code instead of token
+                'expires_in': '1 hour',
                 'status': device['status']
             }
         }), 201
@@ -537,3 +544,55 @@ def update_system_info():
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'Failed to update system info'}), 500
+    
+@devices_bp.route('/pair', methods=['POST'])
+def pair_device():
+    """Raspberry Pi sends pairing code to activate and get credentials"""
+    try:
+        data = request.get_json()
+        pairing_code = data.get('pairing_code', '').upper().strip()
+        
+        if not pairing_code:
+            return jsonify({'error': 'Pairing code required'}), 400
+        
+        supabase = get_supabase()
+        
+        # Find device by pairing code
+        response = supabase.table('user_devices')\
+            .select('*')\
+            .eq('pairing_code', pairing_code)\
+            .eq('status', 'pending')\
+            .execute()
+        
+        if not response.data or len(response.data) == 0:
+            return jsonify({'error': 'Invalid or expired pairing code'}), 404
+        
+        device = response.data[0]
+        
+        # Check if pairing code expired
+        expires_at = datetime.fromisoformat(device['pairing_expires_at'].replace('Z', '+00:00'))
+        if datetime.utcnow() > expires_at.replace(tzinfo=None):
+            return jsonify({'error': 'Pairing code expired. Please generate a new device registration.'}), 400
+        
+        # Activate device
+        supabase.table('user_devices').update({
+            'status': 'active',
+            'paired_at': datetime.utcnow().isoformat(),
+            'last_seen': datetime.utcnow().isoformat()
+        }).eq('id', device['id']).execute()
+        
+        print(f"✅ Device paired: {device['device_name']} (ID: {device['id']})")
+        
+        # Return credentials to Raspberry Pi
+        return jsonify({
+            'success': True,
+            'device_id': device['id'],
+            'device_token': device['device_token'],
+            'device_name': device['device_name']
+        }), 200
+        
+    except Exception as e:
+        print(f"Device pairing error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Failed to pair device'}), 500
