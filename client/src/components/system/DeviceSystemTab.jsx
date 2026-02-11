@@ -554,92 +554,6 @@ const DeviceSystemTab = () => {
           {device.status}
         </span>
       </div>
-
-      {/* Device Information Card */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex items-start justify-between mb-6">
-          <div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-1">
-              {device.device_name}
-            </h3>
-            <p className="text-gray-600">{device.device_model}</p>
-          </div>
-          <Server className="w-8 h-8 text-blue-600" />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          <div className="text-sm">
-            <span className="text-gray-600">Registered:</span>
-            <p className="text-gray-900 font-medium">
-              {new Date(device.created_at).toLocaleDateString()}
-            </p>
-          </div>
-          {device.last_seen && (
-            <div className="text-sm">
-              <span className="text-gray-600">Last Seen:</span>
-              <p className="text-gray-900 font-medium">
-                {new Date(device.last_seen).toLocaleString()}
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Device Token */}
-        <div className="bg-gray-50 p-4 rounded-lg mb-4">
-          <label
-            htmlFor="deviceToken"
-            className="text-xs font-medium text-gray-700 mb-2 block"
-          >
-            Device Token:
-          </label>
-          <div className="flex items-center gap-2">
-            <input
-              id="deviceToken"
-              name="deviceToken"
-              type="text"
-              readOnly
-              value={
-                device.device_token
-                  ? device.device_token.substring(0, 40) + "..."
-                  : "No token available"
-              }
-              className="text-xs font-mono text-gray-800 flex-1 bg-white px-3 py-2 rounded border border-gray-200"
-            />
-            <button
-              onClick={() => copyToClipboard(device.device_token)}
-              className="p-2 hover:bg-gray-200 rounded transition-colors"
-              title="Copy token"
-              aria-label="Copy device token"
-              disabled={!device.device_token}
-            >
-              {copiedToken ? (
-                <Check className="w-4 h-4 text-green-600" />
-              ) : (
-                <Copy className="w-4 h-4 text-gray-600" />
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex gap-3">
-          <button
-            onClick={() => setShowRegenerateModal(true)}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm bg-yellow-50 text-yellow-700 rounded-lg hover:bg-yellow-100 transition-colors"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Regenerate Token
-          </button>
-          <button
-            onClick={() => setShowDeleteModal(true)}
-            className="flex items-center justify-center gap-2 px-4 py-2 text-sm bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors"
-          >
-            <Trash2 className="w-4 h-4" />
-            Delete Device
-          </button>
-        </div>
-      </div>
-
       {/* System Information Section */}
       <div className="bg-white rounded-lg shadow p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">
@@ -734,6 +648,90 @@ const DeviceSystemTab = () => {
             </div>
           </>
         )}
+      </div>
+      {/* Device Information Card */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <div className="flex items-start justify-between mb-6">
+          <div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-1">
+              {device.device_name}
+            </h3>
+            <p className="text-gray-600">{device.device_model}</p>
+          </div>
+          <Server className="w-8 h-8 text-blue-600" />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div className="text-sm">
+            <span className="text-gray-600">Registered:</span>
+            <p className="text-gray-900 font-medium">
+              {new Date(device.created_at).toLocaleDateString()}
+            </p>
+          </div>
+          {device.last_seen && (
+            <div className="text-sm">
+              <span className="text-gray-600">Last Seen:</span>
+              <p className="text-gray-900 font-medium">
+                {new Date(device.last_seen).toLocaleString()}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Device Token */}
+        <div className="bg-gray-50 p-4 rounded-lg mb-4">
+          <label
+            htmlFor="deviceToken"
+            className="text-xs font-medium text-gray-700 mb-2 block"
+          >
+            Device Token:
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              id="deviceToken"
+              name="deviceToken"
+              type="text"
+              readOnly
+              value={
+                device.device_token
+                  ? device.device_token.substring(0, 40) + "..."
+                  : "No token available"
+              }
+              className="text-xs font-mono text-gray-800 flex-1 bg-white px-3 py-2 rounded border border-gray-200"
+            />
+            <button
+              onClick={() => copyToClipboard(device.device_token)}
+              className="p-2 hover:bg-gray-200 rounded transition-colors"
+              title="Copy token"
+              aria-label="Copy device token"
+              disabled={!device.device_token}
+            >
+              {copiedToken ? (
+                <Check className="w-4 h-4 text-green-600" />
+              ) : (
+                <Copy className="w-4 h-4 text-gray-600" />
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex gap-3">
+          <button
+            onClick={() => setShowRegenerateModal(true)}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm bg-yellow-50 text-yellow-700 rounded-lg hover:bg-yellow-100 transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Regenerate Token
+          </button>
+          <button
+            onClick={() => setShowDeleteModal(true)}
+            className="flex items-center justify-center gap-2 px-4 py-2 text-sm bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors"
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete Device
+          </button>
+        </div>
       </div>
 
       {/* Delete Confirmation Modal */}

@@ -109,10 +109,10 @@ const DashboardTab = () => {
             <p className="text-xs text-gray-400 mt-1">No data available</p>
           </div>
           <StatusCard
-            title="Last Obstacle"
+            title="Device Health"
             value="--"
-            icon={AlertTriangle}
-            color="red"
+            icon={Activity}
+            color="blue"
             empty
           />
         </div>
@@ -172,19 +172,18 @@ const DashboardTab = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <StatusCard
+            title="Device Health"
+            value={deviceStatus?.batteryLevel > 50 ? "Good" : "Warning"}
+            icon={Activity}
+            color="blue"
+          />
+          <StatusCard
             title="Camera Status"
             value={deviceStatus?.cameraStatus || "Unknown"}
             icon={Camera}
             color="blue"
           />
           <BatteryIndicator level={deviceStatus?.batteryLevel || 0} />
-          <StatusCard
-            title="Last Obstacle"
-            value={deviceStatus?.lastObstacle || "None"}
-            icon={AlertTriangle}
-            color="red"
-            subtitle={formatRelativeTime(deviceStatus?.lastDetectionTime)}
-          />
         </div>
       </div>
 
@@ -218,11 +217,11 @@ const DashboardTab = () => {
       />
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white rounded-lg shadow p-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+        <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Total Detections</p>
+              <p className="text-sm text-gray-600 mb-1">Total Detections</p>
               <p className="text-2xl font-bold text-gray-900">
                 {totalDetections}
               </p>
@@ -231,10 +230,10 @@ const DashboardTab = () => {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-4">
+        <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Uptime</p>
+              <p className="text-sm text-gray-600 mb-1">Uptime</p>
               <p className="text-2xl font-bold text-gray-900">
                 {deviceStatus?.uptime || "N/A"}
               </p>
@@ -243,15 +242,20 @@ const DashboardTab = () => {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-4">
+        <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Device Health</p>
+              <p className="text-sm text-gray-600 mb-1">Last Obstacle</p>
               <p className="text-2xl font-bold text-gray-900">
-                {deviceStatus?.batteryLevel > 50 ? "Good" : "Warning"}
+                {deviceStatus?.lastObstacle || "None"}
               </p>
+              {deviceStatus?.lastDetectionTime && (
+                <p className="text-xs text-gray-500 mt-1">
+                  {formatRelativeTime(deviceStatus?.lastDetectionTime)}
+                </p>
+              )}
             </div>
-            <Activity className="w-8 h-8 text-blue-500" />
+            <AlertTriangle className="w-8 h-8 text-red-500" />
           </div>
         </div>
       </div>
