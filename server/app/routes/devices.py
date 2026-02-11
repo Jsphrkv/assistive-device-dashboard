@@ -260,6 +260,55 @@ def update_device(device_id):
     except Exception as e:
         print(f"Update device error: {e}")
         return jsonify({'error': 'Failed to update device'}), 500
+
+@devices_bp.route('/pending-for-serial/<serial_number>', methods=['GET'])
+def get_pending_for_serial(serial_number):
+    """Check if there's a pending pairing code (for automatic pairing)"""
+    try:
+        supabase = get_supabase()
+        
+        # Find the MOST RECENT pending device (not yet paired to this serial)
+        # We look for devices where status='pending' and serial_number is NULL
+        response = supabase.table('user_devices')\
+            .select('id, device_name, pairing_code, pairing_expires_at')\
+            .eq('status', 'pending')\
+            .is_('serial_number', 'null')\
+            .order('created_at', desc=True)\
+            .limit(1)\
+            .execute()
+        
+        if not response.data or len(response.data) == 0:
+            return jsonify({
+                'has_pending': False,
+                'message': 'No pending pairing codes available'
+            }), 404
+        
+        device = response.data[0]
+        
+        # Check if expired
+        try:
+            expires_at = datetime.fromisoformat(device['pairing_expires_at'].replace('Z', '+00:00'))
+            if datetime.utcnow() > expires_at.replace(tzinfo=None):
+                return jsonify({
+                    'has_pending': False,
+                    'message': 'Pairing code expired'
+                }), 404
+        except:
+            pass
+        
+        # Return the pending pairing code
+        return jsonify({
+            'has_pending': True,
+            'pairing_code': device['pairing_code'],
+            'device_name': device['device_name'],
+            'device_id': device['id']
+        }), 200
+        
+    except Exception as e:
+        print(f"Get pending error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Failed to check pending devices'}), 500
     
 # ============================================
 # DEVICE MANAGEMENT (User-facing)
