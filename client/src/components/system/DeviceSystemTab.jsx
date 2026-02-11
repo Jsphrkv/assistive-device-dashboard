@@ -28,7 +28,7 @@ const DeviceSystemTab = () => {
   const [pairingError, setPairingError] = useState("");
   const [newDevice, setNewDevice] = useState({
     deviceName: "",
-    deviceModel: "Raspberry Pi 4",
+    deviceModel: "Raspberry Pi 3 B",
   });
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedToken, setCopiedToken] = useState(false);
@@ -104,7 +104,7 @@ const DeviceSystemTab = () => {
         setCurrentDeviceId(deviceId); // ✅ Save device ID
         setShowAddModal(false);
         setShowPairingCodeModal(true);
-        setNewDevice({ deviceName: "", deviceModel: "Raspberry Pi 4" });
+        setNewDevice({ deviceName: "", deviceModel: "Raspberry Pi 3 B" });
       } else {
         // Missing code or ID - try fetching
         await fetchDevice();
