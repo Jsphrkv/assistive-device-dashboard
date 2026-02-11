@@ -20,6 +20,7 @@ const DeviceSystemTab = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showRegenerateModal, setShowRegenerateModal] = useState(false);
+  const [showPairingCode, setShowPairingCode] = useState(false);
   const [newDevice, setNewDevice] = useState({
     deviceName: "",
     deviceModel: "Raspberry Pi 4",
@@ -71,6 +72,7 @@ const DeviceSystemTab = () => {
       const response = await deviceAPI.create(newDevice);
       setDevice(response.data.device);
       setShowAddModal(false);
+      setShowPairingCode(true);
       setNewDevice({ deviceName: "", deviceModel: "Raspberry Pi 4" });
       // Don't copy token anymore - show pairing code instead
     } catch (error) {
@@ -633,6 +635,77 @@ const DeviceSystemTab = () => {
                   Regenerate Token
                 </button>
               </div>
+              {/* Pairing Code Modal - Shows after device registration */}
+              {showPairingCode && device && device.pairing_code && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                  <div className="bg-white rounded-lg p-6 w-full max-w-lg">
+                    <h3 className="text-xl font-bold mb-4 text-center">
+                      Device Pairing Code
+                    </h3>
+
+                    <div className="bg-blue-50 p-8 rounded-lg mb-6">
+                      <p className="text-center text-sm text-gray-600 mb-2">
+                        Your Pairing Code:
+                      </p>
+                      <p className="text-center text-5xl font-mono font-bold tracking-widest text-blue-600">
+                        {device.pairing_code}
+                      </p>
+                      <p className="text-center text-xs text-gray-500 mt-2">
+                        Expires in 1 hour
+                      </p>
+                    </div>
+
+                    <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                      <p className="font-semibold mb-3 flex items-center gap-2">
+                        <AlertCircle className="w-5 h-5 text-blue-600" />
+                        Setup Instructions:
+                      </p>
+                      <ol className="space-y-2 text-sm">
+                        <li className="flex gap-2">
+                          <span className="font-bold text-blue-600">1.</span>
+                          <span>
+                            Turn ON your Raspberry Pi and connect to internet
+                          </span>
+                        </li>
+                        <li className="flex gap-2">
+                          <span className="font-bold text-blue-600">2.</span>
+                          <span>
+                            Run:{" "}
+                            <code className="bg-gray-200 px-2 py-1 rounded">
+                              sudo python pair_device.py
+                            </code>
+                          </span>
+                        </li>
+                        <li className="flex gap-2">
+                          <span className="font-bold text-blue-600">3.</span>
+                          <span>
+                            Enter the pairing code above when prompted
+                          </span>
+                        </li>
+                        <li className="flex gap-2">
+                          <span className="font-bold text-blue-600">4.</span>
+                          <span>
+                            Run:{" "}
+                            <code className="bg-gray-200 px-2 py-1 rounded">
+                              python main.py
+                            </code>
+                          </span>
+                        </li>
+                      </ol>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setShowPairingCode(false);
+                        fetchDevice();
+                      }}
+                      className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      Done
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
