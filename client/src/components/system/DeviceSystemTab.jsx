@@ -72,10 +72,17 @@ const DeviceSystemTab = () => {
   const handleAddDevice = async () => {
     try {
       const response = await deviceAPI.create(newDevice);
-      const createdDevice = response.data.device || response.data;
+      console.log("Device creation response:", response); // Debug log
 
-      // Extract pairing code
-      const code = createdDevice.pairing_code;
+      // Try multiple possible locations for pairing code
+      const createdDevice = response.data.device || response.data;
+      const code =
+        createdDevice.pairing_code ||
+        response.data.pairing_code ||
+        createdDevice.pairingCode ||
+        response.data.pairingCode;
+
+      console.log("Extracted pairing code:", code); // Debug log
 
       if (code) {
         setPairingCode(code);
@@ -83,11 +90,13 @@ const DeviceSystemTab = () => {
         setShowPairingCodeModal(true);
         setNewDevice({ deviceName: "", deviceModel: "Raspberry Pi 4" });
       } else {
-        alert("Device created but no pairing code received");
+        // If no code in response, fetch device to get it
+        await fetchDevice();
+        alert(
+          "Device created! Check console for pairing code or contact support.",
+        );
+        console.error("No pairing code found in response:", response);
       }
-
-      // Refresh device list
-      await fetchDevice();
     } catch (error) {
       console.error("Error adding device:", error);
       alert(error.response?.data?.error || "Failed to add device");
