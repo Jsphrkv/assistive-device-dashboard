@@ -18,13 +18,15 @@ const DeviceSystemTab = () => {
   const [systemInfo, setSystemInfo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showPairingCodeModal, setShowPairingCodeModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showRegenerateModal, setShowRegenerateModal] = useState(false);
-  const [showPairingCode, setShowPairingCode] = useState(false);
+  const [pairingCode, setPairingCode] = useState(null);
   const [newDevice, setNewDevice] = useState({
     deviceName: "",
     deviceModel: "Raspberry Pi 4",
   });
+  const [copiedCode, setCopiedCode] = useState(false);
   const [copiedToken, setCopiedToken] = useState(false);
 
   useEffect(() => {
@@ -70,11 +72,22 @@ const DeviceSystemTab = () => {
   const handleAddDevice = async () => {
     try {
       const response = await deviceAPI.create(newDevice);
-      setDevice(response.data.device);
-      setShowAddModal(false);
-      setShowPairingCode(true);
-      setNewDevice({ deviceName: "", deviceModel: "Raspberry Pi 4" });
-      // Don't copy token anymore - show pairing code instead
+      const createdDevice = response.data.device || response.data;
+
+      // Extract pairing code
+      const code = createdDevice.pairing_code;
+
+      if (code) {
+        setPairingCode(code);
+        setShowAddModal(false);
+        setShowPairingCodeModal(true);
+        setNewDevice({ deviceName: "", deviceModel: "Raspberry Pi 4" });
+      } else {
+        alert("Device created but no pairing code received");
+      }
+
+      // Refresh device list
+      await fetchDevice();
     } catch (error) {
       console.error("Error adding device:", error);
       alert(error.response?.data?.error || "Failed to add device");
@@ -105,11 +118,24 @@ const DeviceSystemTab = () => {
     }
   };
 
+  const copyPairingCode = () => {
+    if (!pairingCode) return;
+    navigator.clipboard.writeText(pairingCode);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
+  };
+
   const copyToClipboard = (text) => {
     if (!text) return;
     navigator.clipboard.writeText(text);
     setCopiedToken(true);
     setTimeout(() => setCopiedToken(false), 2000);
+  };
+
+  const closePairingModal = () => {
+    setShowPairingCodeModal(false);
+    setPairingCode(null);
+    setCopiedCode(false);
   };
 
   const getStatusColor = (status) => {
@@ -190,10 +216,18 @@ const DeviceSystemTab = () => {
         </div>
 
         {/* Add Device Modal */}
-        {showAddModal && !device && (
+        {showAddModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-md">
-              <h3 className="text-lg font-bold mb-4">Register Raspberry Pi</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold">Register Raspberry Pi</h3>
+                <button
+                  onClick={() => setShowAddModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
 
               <div className="space-y-4">
                 <div>
@@ -253,56 +287,84 @@ const DeviceSystemTab = () => {
           </div>
         )}
 
-        {/* Pairing Code Display Modal */}
-        {device && device.status === "pending" && device.pairing_code && (
+        {/* Pairing Code Display Modal - ONE TIME SHOW */}
+        {showPairingCodeModal && pairingCode && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-lg">
               <h3 className="text-xl font-bold mb-4 text-center">
-                Device Pairing Code
+                🎉 Device Created Successfully!
               </h3>
 
               <div className="bg-blue-50 p-8 rounded-lg mb-6">
                 <p className="text-center text-sm text-gray-600 mb-2">
-                  Your Pairing Code:
+                  Your 6-Digit Pairing Code:
                 </p>
-                <p className="text-center text-5xl font-mono font-bold tracking-widest text-blue-600">
-                  {device.pairing_code || device.device.pairing_code}
-                </p>
+                <div className="flex items-center justify-center gap-3">
+                  <p className="text-center text-5xl font-mono font-bold tracking-widest text-blue-600">
+                    {pairingCode}
+                  </p>
+                  <button
+                    onClick={copyPairingCode}
+                    className="p-2 hover:bg-blue-100 rounded transition-colors"
+                    title="Copy code"
+                  >
+                    {copiedCode ? (
+                      <Check className="w-6 h-6 text-green-600" />
+                    ) : (
+                      <Copy className="w-6 h-6 text-blue-600" />
+                    )}
+                  </button>
+                </div>
                 <p className="text-center text-xs text-gray-500 mt-2">
-                  Expires in 1 hour
+                  ⏰ Expires in 1 hour
                 </p>
+              </div>
+
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                  <div className="text-sm text-yellow-900">
+                    <p className="font-semibold mb-1">⚠️ Important:</p>
+                    <p>
+                      This code will only be shown ONCE. Make sure to copy it
+                      before closing this window!
+                    </p>
+                  </div>
+                </div>
               </div>
 
               <div className="bg-gray-50 p-4 rounded-lg mb-4">
                 <p className="font-semibold mb-3 flex items-center gap-2">
-                  <AlertCircle className="w-5 h-5 text-blue-600" />
+                  <Server className="w-5 h-5 text-blue-600" />
                   Setup Instructions:
                 </p>
                 <ol className="space-y-2 text-sm">
                   <li className="flex gap-2">
-                    <span className="font-bold text-blue-600">1.</span>
-                    <span>
-                      Turn ON your Raspberry Pi and connect to internet
+                    <span className="font-bold text-blue-600 min-w-[20px]">
+                      1.
                     </span>
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="font-bold text-blue-600">2.</span>
                     <span>
-                      Run:{" "}
-                      <code className="bg-gray-200 px-2 py-1 rounded">
-                        python pair_device.py
+                      On your Raspberry Pi, run:{" "}
+                      <code className="bg-gray-200 px-2 py-1 rounded font-mono text-xs">
+                        sudo python pair_device.py
                       </code>
                     </span>
                   </li>
                   <li className="flex gap-2">
-                    <span className="font-bold text-blue-600">3.</span>
-                    <span>Enter the pairing code above when prompted</span>
+                    <span className="font-bold text-blue-600 min-w-[20px]">
+                      2.
+                    </span>
+                    <span>
+                      Enter the 6-digit code: <strong>{pairingCode}</strong>
+                    </span>
                   </li>
                   <li className="flex gap-2">
-                    <span className="font-bold text-blue-600">4.</span>
+                    <span className="font-bold text-blue-600 min-w-[20px]">
+                      3.
+                    </span>
                     <span>
-                      Run:{" "}
-                      <code className="bg-gray-200 px-2 py-1 rounded">
+                      After pairing, run:{" "}
+                      <code className="bg-gray-200 px-2 py-1 rounded font-mono text-xs">
                         python main.py
                       </code>
                     </span>
@@ -311,10 +373,10 @@ const DeviceSystemTab = () => {
               </div>
 
               <button
-                onClick={() => fetchDevice()}
-                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                onClick={closePairingModal}
+                className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
               >
-                I've Paired My Device
+                I've Saved the Code - Close Window
               </button>
             </div>
           </div>
@@ -427,7 +489,6 @@ const DeviceSystemTab = () => {
         </h3>
 
         {!systemInfo ? (
-          // Show waiting message with preview cards
           <>
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
               <div className="flex items-start gap-3">
@@ -444,7 +505,6 @@ const DeviceSystemTab = () => {
               </div>
             </div>
 
-            {/* Preview cards while waiting */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 opacity-50">
               <SystemCard label="Raspberry Pi Model" value="--" color="blue" />
               <SystemCard label="Software Version" value="--" color="green" />
@@ -453,7 +513,6 @@ const DeviceSystemTab = () => {
             </div>
           </>
         ) : (
-          // Show actual system information
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               <SystemCard
@@ -484,7 +543,6 @@ const DeviceSystemTab = () => {
               />
             </div>
 
-            {/* Hardware Specifications */}
             <div className="pt-6 border-t border-gray-200">
               <h4 className="text-sm font-medium text-gray-700 mb-3">
                 Hardware Specifications
@@ -524,7 +582,6 @@ const DeviceSystemTab = () => {
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fadeIn">
           <div className="bg-white rounded-lg w-full max-w-md shadow-xl animate-slideIn overflow-hidden">
-            {/* Header with close button */}
             <div className="flex items-start justify-between px-6 pt-5 pb-4">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
@@ -547,7 +604,6 @@ const DeviceSystemTab = () => {
               </button>
             </div>
 
-            {/* Content */}
             <div className="px-6 pb-6">
               <p className="text-gray-700 mb-3">
                 Are you sure you want to delete{" "}
@@ -561,7 +617,6 @@ const DeviceSystemTab = () => {
                 </p>
               </div>
 
-              {/* Buttons */}
               <div className="flex gap-3">
                 <button
                   onClick={() => setShowDeleteModal(false)}
@@ -585,7 +640,6 @@ const DeviceSystemTab = () => {
       {showRegenerateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fadeIn">
           <div className="bg-white rounded-lg w-full max-w-md shadow-xl animate-slideIn overflow-hidden">
-            {/* Header with close button */}
             <div className="flex items-start justify-between px-6 pt-5 pb-4">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center flex-shrink-0">
@@ -608,7 +662,6 @@ const DeviceSystemTab = () => {
               </button>
             </div>
 
-            {/* Content */}
             <div className="px-6 pb-6">
               <p className="text-gray-700 mb-3">
                 This will invalidate the current device token.
@@ -620,7 +673,6 @@ const DeviceSystemTab = () => {
                 </p>
               </div>
 
-              {/* Buttons */}
               <div className="flex gap-3">
                 <button
                   onClick={() => setShowRegenerateModal(false)}
@@ -635,77 +687,6 @@ const DeviceSystemTab = () => {
                   Regenerate Token
                 </button>
               </div>
-              {/* Pairing Code Modal - Shows after device registration */}
-              {showPairingCode && device && device.pairing_code && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                  <div className="bg-white rounded-lg p-6 w-full max-w-lg">
-                    <h3 className="text-xl font-bold mb-4 text-center">
-                      Device Pairing Code
-                    </h3>
-
-                    <div className="bg-blue-50 p-8 rounded-lg mb-6">
-                      <p className="text-center text-sm text-gray-600 mb-2">
-                        Your Pairing Code:
-                      </p>
-                      <p className="text-center text-5xl font-mono font-bold tracking-widest text-blue-600">
-                        {device.pairing_code}
-                      </p>
-                      <p className="text-center text-xs text-gray-500 mt-2">
-                        Expires in 1 hour
-                      </p>
-                    </div>
-
-                    <div className="bg-gray-50 p-4 rounded-lg mb-4">
-                      <p className="font-semibold mb-3 flex items-center gap-2">
-                        <AlertCircle className="w-5 h-5 text-blue-600" />
-                        Setup Instructions:
-                      </p>
-                      <ol className="space-y-2 text-sm">
-                        <li className="flex gap-2">
-                          <span className="font-bold text-blue-600">1.</span>
-                          <span>
-                            Turn ON your Raspberry Pi and connect to internet
-                          </span>
-                        </li>
-                        <li className="flex gap-2">
-                          <span className="font-bold text-blue-600">2.</span>
-                          <span>
-                            Run:{" "}
-                            <code className="bg-gray-200 px-2 py-1 rounded">
-                              sudo python pair_device.py
-                            </code>
-                          </span>
-                        </li>
-                        <li className="flex gap-2">
-                          <span className="font-bold text-blue-600">3.</span>
-                          <span>
-                            Enter the pairing code above when prompted
-                          </span>
-                        </li>
-                        <li className="flex gap-2">
-                          <span className="font-bold text-blue-600">4.</span>
-                          <span>
-                            Run:{" "}
-                            <code className="bg-gray-200 px-2 py-1 rounded">
-                              python main.py
-                            </code>
-                          </span>
-                        </li>
-                      </ol>
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        setShowPairingCode(false);
-                        fetchDevice();
-                      }}
-                      className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                    >
-                      Done
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </div>
