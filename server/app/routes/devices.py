@@ -8,56 +8,6 @@ from datetime import datetime, timedelta, timezone
 
 devices_bp = Blueprint('devices', __name__, url_prefix='/api/devices')
 
-# ============================================
-# DEVICE MANAGEMENT (User-facing)
-# ============================================
-
-@devices_bp.route('/', methods=['GET'])
-@token_required
-def get_user_devices():
-    """Get all devices for current user with their status"""
-    try:
-        user_id = request.current_user['user_id']
-        user_role = request.current_user['role']
-        
-        supabase = get_supabase()
-        
-        # Admins can see all devices, users only see their own
-        if user_role == 'admin':
-            response = supabase.table('user_devices')\
-                .select('*, users(username, email)')\
-                .order('created_at', desc=True)\
-                .execute()
-        else:
-            response = supabase.table('user_devices')\
-                .select('*')\
-                .eq('user_id', user_id)\
-                .order('created_at', desc=True)\
-                .execute()
-        
-        # Enrich with current status from device_status table
-        devices = response.data
-        for device in devices:
-            # Get latest status for this device if it's active
-            if device.get('status') == 'active':
-                status_response = supabase.table('device_status')\
-                    .select('*')\
-                    .eq('device_id', device['id'])\
-                    .order('updated_at', desc=True)\
-                    .limit(1)\
-                    .execute()
-                
-                if status_response.data:
-                    device['current_status'] = status_response.data[0]
-        
-        return jsonify({'data': devices}), 200
-        
-    except Exception as e:
-        print(f"Get devices error: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': 'Failed to get devices'}), 500
-
 @devices_bp.route('/', methods=['POST'])
 @token_required
 def register_device():
@@ -208,6 +158,60 @@ def complete_pairing():
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Failed to complete pairing: {str(e)}'}), 500
+    
+@devices_bp.route('/pair-status-by-code/<pairing_code>', methods=['GET'])
+def check_pair_status_by_code(pairing_code):
+    """Polling endpoint - check if pairing code exists and device is ready"""
+    try:
+        pairing_code = pairing_code.upper().strip()
+        
+        if not pairing_code or len(pairing_code) != 6:
+            return jsonify({'error': 'Invalid pairing code format'}), 400
+        
+        supabase = get_supabase()
+        
+        # Find device by pairing code
+        response = supabase.table('user_devices')\
+            .select('id, device_name, status, pairing_code, pairing_expires_at, created_at')\
+            .eq('pairing_code', pairing_code)\
+            .execute()
+        
+        if not response.data or len(response.data) == 0:
+            return jsonify({
+                'exists': False,
+                'message': 'Pairing code not found'
+            }), 200
+        
+        device = response.data[0]
+        
+        # Check if expired
+        try:
+            expires_at = datetime.fromisoformat(device['pairing_expires_at'].replace('Z', '+00:00'))
+            if datetime.utcnow() > expires_at.replace(tzinfo=None):
+                return jsonify({
+                    'exists': True,
+                    'expired': True,
+                    'message': 'Pairing code expired'
+                }), 200
+        except:
+            pass  # If expiration check fails, continue
+        
+        # Return device info
+        return jsonify({
+            'exists': True,
+            'expired': False,
+            'device_id': device['id'],
+            'device_name': device['device_name'],
+            'pairing_code': device['pairing_code'],
+            'status': device['status'],
+            'message': 'Pairing code is valid'
+        }), 200
+        
+    except Exception as e:
+        print(f"Pair status check error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Failed to check pairing status'}), 500
 
 @devices_bp.route('/<device_id>', methods=['PUT'])
 @token_required
@@ -256,6 +260,57 @@ def update_device(device_id):
     except Exception as e:
         print(f"Update device error: {e}")
         return jsonify({'error': 'Failed to update device'}), 500
+    
+# ============================================
+# DEVICE MANAGEMENT (User-facing)
+# ============================================
+
+@devices_bp.route('/', methods=['GET'])
+@token_required
+def get_user_devices():
+    """Get all devices for current user with their status"""
+    try:
+        user_id = request.current_user['user_id']
+        user_role = request.current_user['role']
+        
+        supabase = get_supabase()
+        
+        # Admins can see all devices, users only see their own
+        if user_role == 'admin':
+            response = supabase.table('user_devices')\
+                .select('*, users(username, email)')\
+                .order('created_at', desc=True)\
+                .execute()
+        else:
+            response = supabase.table('user_devices')\
+                .select('*')\
+                .eq('user_id', user_id)\
+                .order('created_at', desc=True)\
+                .execute()
+        
+        # Enrich with current status from device_status table
+        devices = response.data
+        for device in devices:
+            # Get latest status for this device if it's active
+            if device.get('status') == 'active':
+                status_response = supabase.table('device_status')\
+                    .select('*')\
+                    .eq('device_id', device['id'])\
+                    .order('updated_at', desc=True)\
+                    .limit(1)\
+                    .execute()
+                
+                if status_response.data:
+                    device['current_status'] = status_response.data[0]
+        
+        return jsonify({'data': devices}), 200
+        
+    except Exception as e:
+        print(f"Get devices error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Failed to get devices'}), 500
+
 
 @devices_bp.route('/<device_id>', methods=['DELETE'])
 @token_required
