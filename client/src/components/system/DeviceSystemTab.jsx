@@ -19,12 +19,13 @@ const DeviceSystemTab = () => {
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showPairingCodeModal, setShowPairingCodeModal] = useState(false);
-  const [showPairingInputModal, setShowPairingInputModal] = useState(false); // NEW
+  const [showPairingInputModal, setShowPairingInputModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showRegenerateModal, setShowRegenerateModal] = useState(false);
   const [pairingCode, setPairingCode] = useState(null);
-  const [userInputCode, setUserInputCode] = useState(""); // NEW
-  const [pairingError, setPairingError] = useState(""); // NEW
+  const [currentDeviceId, setCurrentDeviceId] = useState(null);
+  const [userInputCode, setUserInputCode] = useState("");
+  const [pairingError, setPairingError] = useState("");
   const [newDevice, setNewDevice] = useState({
     deviceName: "",
     deviceModel: "Raspberry Pi 4",
@@ -75,30 +76,49 @@ const DeviceSystemTab = () => {
   const handleAddDevice = async () => {
     try {
       const response = await deviceAPI.create(newDevice);
-      console.log("Device creation response:", response); // Debug log
+      console.log("Device creation response:", response);
 
-      // Try multiple possible locations for pairing code
+      // Extract device data from response
       const createdDevice = response.data.device || response.data;
+
+      // Extract pairing code from multiple possible locations
       const code =
         createdDevice.pairing_code ||
         response.data.pairing_code ||
         createdDevice.pairingCode ||
         response.data.pairingCode;
 
-      console.log("Extracted pairing code:", code); // Debug log
+      // Extract device ID from multiple possible locations
+      const deviceId =
+        createdDevice.id ||
+        response.data.id ||
+        createdDevice.device_id ||
+        response.data.device_id;
 
-      if (code) {
+      console.log("Extracted pairing code:", code);
+      console.log("Extracted device ID:", deviceId);
+
+      // Validate both code and ID exist
+      if (code && deviceId) {
         setPairingCode(code);
+        setCurrentDeviceId(deviceId); // ✅ Save device ID
         setShowAddModal(false);
         setShowPairingCodeModal(true);
         setNewDevice({ deviceName: "", deviceModel: "Raspberry Pi 4" });
       } else {
-        // If no code in response, fetch device to get it
+        // Missing code or ID - try fetching
         await fetchDevice();
-        alert(
-          "Device created! Check console for pairing code or contact support.",
-        );
-        console.error("No pairing code found in response:", response);
+
+        if (!code) {
+          console.error("No pairing code found in response:", response);
+          alert(
+            "Device created but no pairing code received. Check Supabase database.",
+          );
+        }
+        if (!deviceId) {
+          console.error("No device ID found in response:", response);
+          alert("Device created but no device ID received.");
+        }
       }
     } catch (error) {
       console.error("Error adding device:", error);
@@ -153,7 +173,6 @@ const DeviceSystemTab = () => {
   };
 
   const handlePairDevice = async () => {
-    // Validate input
     if (!userInputCode.trim()) {
       setPairingError("Please enter the pairing code");
       return;
@@ -165,17 +184,17 @@ const DeviceSystemTab = () => {
     }
 
     try {
-      // Send pairing code to backend
+      console.log("Pairing with device ID:", currentDeviceId); // Debug log
+
       const response = await deviceAPI.completePairing({
-        deviceId: device?.id,
+        deviceId: currentDeviceId, // ✅ Use saved device ID
         pairingCode: userInputCode.toUpperCase(),
-        serial: "0000000018B182CD", // You might want to store this
       });
 
       if (response.data.success) {
-        // Success! Close modal and refresh
         setShowPairingInputModal(false);
         setPairingCode(null);
+        setCurrentDeviceId(null); // Clear saved ID
         setUserInputCode("");
         setPairingError("");
         await fetchDevice();
@@ -195,9 +214,10 @@ const DeviceSystemTab = () => {
   const cancelPairing = () => {
     setShowPairingInputModal(false);
     setPairingCode(null);
+    setCurrentDeviceId(null); // ✅ Clear saved ID
     setUserInputCode("");
     setPairingError("");
-    fetchDevice(); // Refresh to show current status
+    fetchDevice();
   };
 
   const getStatusColor = (status) => {

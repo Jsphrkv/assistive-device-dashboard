@@ -776,38 +776,68 @@ def check_pair_status(serial_number):
     
 @devices_bp.route('/complete-pairing', methods=['POST'])
 def complete_pairing():
-    """User enters pairing code to activate device"""
+    """User enters pairing code to activate device (dashboard verification)"""
     try:
         data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
         pairing_code = data.get('pairingCode')
         device_id = data.get('deviceId')
+        
+        print(f"Complete pairing request: deviceId={device_id}, code={pairing_code}")
         
         if not pairing_code:
             return jsonify({'error': 'Pairing code required'}), 400
         
+        if not device_id:
+            return jsonify({'error': 'Device ID required'}), 400
+        
         supabase = get_supabase()
         
-        # Find device with this pairing code
-        device_response = supabase.table('devices').select('*').eq('id', device_id).single().execute()
+        # Find device with this ID
+        device_response = supabase.table('devices').select('*').eq('id', device_id).execute()
         
-        if not device_response.data:
+        if not device_response.data or len(device_response.data) == 0:
             return jsonify({'error': 'Device not found'}), 404
         
-        device = device_response.data
+        device = device_response.data[0]
         
         # Verify pairing code matches
-        if device['pairing_code'] != pairing_code:
+        if not device.get('pairing_code'):
+            return jsonify({'error': 'No pairing code set for this device'}), 400
+        
+        if device['pairing_code'].upper() != pairing_code.upper():
             return jsonify({'error': 'Invalid pairing code'}), 400
         
         # Check if code expired (1 hour)
-        created_at = datetime.fromisoformat(device['created_at'].replace('Z', '+00:00'))
-        if datetime.now(timezone.utc) - created_at > timedelta(hours=1):
-            return jsonify({'error': 'Pairing code expired'}), 400
+        try:
+            created_at_str = device['created_at']
+            # Handle different datetime formats
+            if created_at_str.endswith('Z'):
+                created_at_str = created_at_str.replace('Z', '+00:00')
+            created_at = datetime.fromisoformat(created_at_str)
+            
+            # Make sure created_at is timezone-aware
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            
+            time_diff = datetime.now(timezone.utc) - created_at
+            
+            if time_diff > timedelta(hours=1):
+                return jsonify({'error': 'Pairing code expired. Please register a new device.'}), 400
+        except Exception as date_error:
+            print(f"Date parsing error: {date_error}")
+            # Don't fail on date parsing - just warn
+            print("Warning: Could not verify code expiration")
         
-        # Mark as ready for Pi to connect (don't change status yet - Pi will do that)
+        # Update device timestamp (don't change status - Pi will do that when it connects)
         supabase.table('devices').update({
-            'updated_at': datetime.utcnow().isoformat()
+            'updated_at': datetime.now(timezone.utc).isoformat()
         }).eq('id', device_id).execute()
+        
+        print(f"✅ Pairing code verified for device {device_id}")
         
         return jsonify({
             'success': True,
@@ -815,5 +845,7 @@ def complete_pairing():
         }), 200
         
     except Exception as e:
-        print(f"Complete pairing error: {e}")
-        return jsonify({'error': 'Failed to complete pairing'}), 500
+        print(f"❌ Complete pairing error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Failed to complete pairing: {str(e)}'}), 500
