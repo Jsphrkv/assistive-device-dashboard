@@ -9,13 +9,10 @@ import {
   RefreshCw,
   FileSpreadsheet,
   FileJson,
-  Users,
-  Car,
-  Layers,
-  MapPin,
+  Brain,
 } from "lucide-react";
 import { detectionsAPI } from "../../services/api";
-import { useMLHistory } from "../../hooks/ml/useMLHistory"; // Import the hook
+import { useDetectionLogs } from "../../hooks/useDetectionLogs"; // ✅ Changed from useMLHistory
 
 // Object icons mapping
 const OBJECT_ICONS = {
@@ -38,16 +35,16 @@ const OBJECT_ICONS = {
 };
 
 const DetectionLogsTab = () => {
-  // ✅ Use the hook instead of manual state management
+  // ✅ Use the correct hook for detection logs
   const {
-    history: detections,
+    detections,
     loading,
     error,
     refresh,
-    addToHistory,
-    fetchStats,
-    stats: mlStats,
-  } = useMLHistory({
+    addDetection,
+    getMLDetections,
+    getMLStats,
+  } = useDetectionLogs({
     limit: 100,
     autoFetch: true,
     cacheDuration: 30000, // 30 seconds cache
@@ -59,11 +56,7 @@ const DetectionLogsTab = () => {
   const [filterDanger, setFilterDanger] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [dateRange, setDateRange] = useState("7days");
-
-  // ✅ Fetch stats on mount
-  useEffect(() => {
-    fetchStats(7); // Fetch last 7 days stats
-  }, [fetchStats]);
+  const [showMLOnly, setShowMLOnly] = useState(false); // ✅ NEW: ML filter toggle
 
   // ✅ Apply filters whenever detections or filters change
   useEffect(() => {
@@ -75,10 +68,16 @@ const DetectionLogsTab = () => {
     filterDanger,
     searchQuery,
     dateRange,
+    showMLOnly, // ✅ NEW: Add ML filter
   ]);
 
   const applyFilters = () => {
     let filtered = [...detections];
+
+    // ✅ ML-only filter
+    if (showMLOnly) {
+      filtered = filtered.filter((d) => d.detection_source === "camera");
+    }
 
     // Object filter
     if (filterObject !== "all") {
@@ -136,8 +135,7 @@ const DetectionLogsTab = () => {
   // ✅ Function to handle real-time detection logging
   const handleNewDetection = async (detection) => {
     try {
-      // Add detection to history (this will also save to backend)
-      await addToHistory({
+      addDetection({
         ...detection,
         detected_at: new Date().toISOString(),
       });
@@ -243,6 +241,9 @@ const DetectionLogsTab = () => {
       .length,
   };
 
+  // ✅ Get ML statistics
+  const mlStats = getMLStats();
+
   // Get unique objects for filter
   const uniqueObjects = [
     ...new Set(detections.map((d) => d.object_detected)),
@@ -327,7 +328,7 @@ const DetectionLogsTab = () => {
       </div>
 
       {/* Statistics Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
         <div className="bg-white rounded-lg shadow p-4">
           <p className="text-xs text-gray-600 mb-1">Total Logs</p>
           <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
@@ -354,7 +355,46 @@ const DetectionLogsTab = () => {
             {stats.high_danger}
           </p>
         </div>
+        {/* ✅ NEW: ML Statistics Card */}
+        <div className="bg-blue-50 rounded-lg shadow p-4">
+          <div className="flex items-center gap-1 mb-1">
+            <Brain className="w-3 h-3 text-blue-600" />
+            <p className="text-xs text-blue-600">ML Detections</p>
+          </div>
+          <p className="text-2xl font-bold text-blue-600">{mlStats.total}</p>
+          <p className="text-xs text-blue-500 mt-1">
+            Avg: {mlStats.avgConfidence}%
+          </p>
+        </div>
       </div>
+
+      {/* ✅ NEW: ML Filter Toggle */}
+      {mlStats.total > 0 && (
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowMLOnly(!showMLOnly)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+              showMLOnly
+                ? "bg-blue-600 text-white"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            <Brain className="w-4 h-4" />
+            <span className="text-sm">
+              {showMLOnly ? "Showing ML Only" : "Show ML Only"} ({mlStats.total}
+              )
+            </span>
+          </button>
+          {showMLOnly && (
+            <button
+              onClick={() => setShowMLOnly(false)}
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
+            >
+              Show All
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="bg-white rounded-lg shadow p-4">
@@ -474,9 +514,16 @@ const DetectionLogsTab = () => {
                   filteredDetections.map((detection) => (
                     <tr key={detection.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        <div className="flex items-center">
-                          <Clock className="w-4 h-4 text-gray-400 mr-2" />
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-gray-400" />
                           {new Date(detection.detected_at).toLocaleString()}
+                          {/* ✅ Show ML badge */}
+                          {detection.detection_source === "camera" && (
+                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full flex items-center gap-1">
+                              <Brain className="w-3 h-3" />
+                              ML
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -551,6 +598,4 @@ const DetectionLogsTab = () => {
   );
 };
 
-// ✅ Export the handleNewDetection function so it can be used externally
-export { DetectionLogsTab };
 export default DetectionLogsTab;

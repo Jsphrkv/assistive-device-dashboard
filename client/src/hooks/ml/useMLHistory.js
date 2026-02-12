@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { mlAPI } from "../../services/api";
 
-// ✅ Cache outside component - shared across all hook instances
+// Cache outside component - shared across all hook instances
 const cache = {
   data: null,
   timestamp: null,
@@ -17,6 +17,7 @@ export const useMLHistory = (options = {}) => {
     limit = 50,
     offset = 0,
     type,
+    source = "all", // ✅ NEW: 'predictions', 'detections', 'all'
     anomaliesOnly = false,
     startDate,
     endDate,
@@ -30,12 +31,12 @@ export const useMLHistory = (options = {}) => {
   const [error, setError] = useState(null);
   const isMounted = useRef(true);
 
-  // ✅ Fetch history with caching
+  // Fetch history with caching
   const fetchHistory = useCallback(
     async (force = false) => {
       const now = Date.now();
 
-      // ✅ Return cached data if fresh
+      // Return cached data if fresh
       if (
         !force &&
         cache.data &&
@@ -55,6 +56,7 @@ export const useMLHistory = (options = {}) => {
           limit,
           offset,
           type,
+          source, // ✅ NEW: Pass source parameter
           anomalies_only: anomaliesOnly,
           start_date: startDate,
           end_date: endDate,
@@ -62,7 +64,7 @@ export const useMLHistory = (options = {}) => {
 
         const data = response.data.data || [];
 
-        // ✅ Update cache
+        // Update cache
         cache.data = data;
         cache.timestamp = now;
 
@@ -88,15 +90,24 @@ export const useMLHistory = (options = {}) => {
         }
       }
     },
-    [limit, offset, type, anomaliesOnly, startDate, endDate, cacheDuration],
+    [
+      limit,
+      offset,
+      type,
+      source,
+      anomaliesOnly,
+      startDate,
+      endDate,
+      cacheDuration,
+    ],
   );
 
-  // ✅ Fetch stats with caching
+  // Fetch stats with caching
   const fetchStats = useCallback(
     async (days = 7, force = false) => {
       const now = Date.now();
 
-      // ✅ Return cached stats if fresh
+      // Return cached stats if fresh
       if (
         !force &&
         cache.stats &&
@@ -112,7 +123,7 @@ export const useMLHistory = (options = {}) => {
         const response = await mlAPI.getStats(days);
         const statsData = response.data;
 
-        // ✅ Update cache
+        // Update cache
         cache.stats = statsData;
         cache.statsTimestamp = now;
 
@@ -129,7 +140,7 @@ export const useMLHistory = (options = {}) => {
     [cacheDuration],
   );
 
-  // ✅ Auto-fetch on mount
+  // Auto-fetch on mount
   useEffect(() => {
     isMounted.current = true;
 
@@ -142,36 +153,37 @@ export const useMLHistory = (options = {}) => {
     };
   }, [autoFetch, fetchHistory]);
 
-  // ✅ Add to history (for real-time updates)
-  const addToHistory = useCallback(
-    async (prediction) => {
-      // Update local state
-      setHistory((prev) => [...prev, prediction]);
+  // ✅ REMOVED: addToHistory - ML history is read-only analytics
 
-      // ✅ Save to Supabase
-      if (deviceId) {
-        await api.post("/logs/detections", {
-          device_id: deviceId,
-          ...prediction,
-        });
-      }
-    },
-    [deviceId],
-  );
-
-  // ✅ Clear history and cache
+  // Clear history and cache
   const clearHistory = useCallback(() => {
     setHistory([]);
     cache.data = null;
     cache.timestamp = null;
   }, []);
 
-  // ✅ Get anomalies only
+  // Get anomalies only
   const getAnomalies = useCallback(() => {
     return history.filter((item) => item.is_anomaly);
   }, [history]);
 
-  // ✅ Filter by date range
+  // Filter by type
+  const getByType = useCallback(
+    (predictionType) => {
+      return history.filter((item) => item.prediction_type === predictionType);
+    },
+    [history],
+  );
+
+  // Filter by source
+  const getBySource = useCallback(
+    (sourceType) => {
+      return history.filter((item) => item.source === sourceType);
+    },
+    [history],
+  );
+
+  // Filter by date range
   const getByDateRange = useCallback(
     (start, end) => {
       return history.filter((item) => {
@@ -182,7 +194,7 @@ export const useMLHistory = (options = {}) => {
     [history],
   );
 
-  // ✅ Refresh data (force fetch)
+  // Refresh data (force fetch)
   const refresh = useCallback(async () => {
     return fetchHistory(true);
   }, [fetchHistory]);
@@ -194,9 +206,10 @@ export const useMLHistory = (options = {}) => {
     error,
     fetchHistory,
     fetchStats,
-    addToHistory,
     clearHistory,
     getAnomalies,
+    getByType,
+    getBySource,
     getByDateRange,
     refresh,
   };
