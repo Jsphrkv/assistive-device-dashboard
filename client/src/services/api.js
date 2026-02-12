@@ -105,6 +105,11 @@ export const detectionsAPI = {
   getRecent: () => api.get("/detections/recent"),
   getByDate: (startDate, endDate) =>
     api.get(`/detections/by-date?start_date=${startDate}&end_date=${endDate}`),
+  export: (params) =>
+    api.get(`/detections/export?${params}`, {
+      responseType: "blob", // Important for file downloads
+    }),
+  getCategories: () => api.get("/detections/categories"),
 };
 
 export const statisticsAPI = {
