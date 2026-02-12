@@ -13,7 +13,7 @@ import SettingsTab from "./components/settings/SettingsTab";
 import DeviceSystemTab from "./components/system/DeviceSystemTab";
 import HistoricalDataTab from "./components/ml/HistoricalDataTab";
 import { useAuth } from "./contexts/AuthContext";
-import NotificationSystem from "./components/notifications/NotificationSystem";
+// import NotificationSystem from "./components/notifications/NotificationSystem";
 
 function App() {
   const { user: authUser, loading, logout } = useAuth(); // ✅ Get logout from useAuth
@@ -148,7 +148,7 @@ function App() {
       onTabChange={setActiveTab}
       onLogout={handleLogout}
     >
-      <NotificationSystem />
+      {/* <NotificationSystem /> */}
       {renderActiveTab()}
     </Layout>
   );
