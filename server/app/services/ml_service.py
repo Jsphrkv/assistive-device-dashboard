@@ -307,7 +307,7 @@ class MLService:
         self._load_models()
         self._models_loaded = True
 
-    def detect_object(self, detection_data: Dict) -> Dict:
+    def detect_object(self, detection_data: dict) -> dict:
             """
             Classify detected object and assess danger level
             
@@ -397,7 +397,7 @@ class MLService:
         
         # ========== FALL DETECTION ==========
         
-    def detect_fall(self, sensor_data: Dict) -> Dict:
+    def detect_fall(self, sensor_data: dict) -> dict:
             """
             Detect if user has fallen based on accelerometer/gyroscope data
             
@@ -498,7 +498,7 @@ class MLService:
         
         # ========== ROUTE PREDICTION ==========
         
-    def predict_route(self, route_data: Dict) -> Dict:
+    def predict_route(self, route_data: dict) -> dict:
             """
             Predict best route from current location to destination
             
@@ -587,7 +587,7 @@ class MLService:
             
             return R * c
         
-    def _generate_simple_route(self, start: Dict, end: Dict) -> List[Dict]:
+    def _generate_simple_route(self, start: dict, end: dict) -> list:
             """Generate simple waypoints (in production, use real routing API)"""
             
             # Simple linear interpolation for demo
