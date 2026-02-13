@@ -1,7 +1,40 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Wrench, CheckCircle, Clock, AlertCircle } from "lucide-react";
+import { mlAPI } from "../../services/api";
 
-const MaintenanceStatus = ({ deviceInfo, maintenanceData, loading }) => {
+const MaintenanceStatus = ({ deviceId }) => {
+  const [maintenanceData, setMaintenanceData] = useState(null);
+  const [deviceInfo, setDeviceInfo] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchMaintenanceData();
+
+    // Refresh every 60 seconds (maintenance doesn't need to update as frequently)
+    const interval = setInterval(() => {
+      fetchMaintenanceData();
+    }, 60000);
+
+    return () => clearInterval(interval);
+  }, [deviceId]);
+
+  const fetchMaintenanceData = async () => {
+    try {
+      // Fetch device info first (you may need to adjust this based on your API)
+      const deviceInfoResponse = await mlAPI.getDeviceInfo(deviceId);
+      setDeviceInfo(deviceInfoResponse.data);
+
+      // Then fetch maintenance prediction
+      const response = await mlAPI.predictMaintenance(deviceId);
+      setMaintenanceData(response.data);
+      setLoading(false);
+    } catch (error) {
+      console.error("Error fetching maintenance data:", error);
+      setMaintenanceData(null);
+      setLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="bg-white rounded-lg shadow p-6 animate-pulse">

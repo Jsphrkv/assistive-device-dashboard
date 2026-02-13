@@ -10,9 +10,11 @@ import {
   FileSpreadsheet,
   FileJson,
   Brain,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { detectionsAPI } from "../../services/api";
-import { useDetectionLogs } from "../../hooks/useDetectionLogs"; // ✅ Changed from useMLHistory
+import { useDetectionLogs } from "../../hooks/useDetectionLogs";
 
 // Object icons mapping
 const OBJECT_ICONS = {
@@ -34,8 +36,9 @@ const OBJECT_ICONS = {
   unknown: "❓",
 };
 
+const ITEMS_PER_PAGE = 10;
+
 const DetectionLogsTab = () => {
-  // ✅ Use the correct hook for detection logs
   const {
     detections,
     loading,
@@ -47,7 +50,7 @@ const DetectionLogsTab = () => {
   } = useDetectionLogs({
     limit: 100,
     autoFetch: true,
-    cacheDuration: 30000, // 30 seconds cache
+    cacheDuration: 30000,
   });
 
   const [filteredDetections, setFilteredDetections] = useState([]);
@@ -56,11 +59,14 @@ const DetectionLogsTab = () => {
   const [filterDanger, setFilterDanger] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [dateRange, setDateRange] = useState("7days");
-  const [showMLOnly, setShowMLOnly] = useState(false); // ✅ NEW: ML filter toggle
+  const [showMLOnly, setShowMLOnly] = useState(false);
 
-  // ✅ Apply filters whenever detections or filters change
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+
   useEffect(() => {
     applyFilters();
+    setCurrentPage(1); // Reset to first page when filters change
   }, [
     detections,
     filterObject,
@@ -68,35 +74,30 @@ const DetectionLogsTab = () => {
     filterDanger,
     searchQuery,
     dateRange,
-    showMLOnly, // ✅ NEW: Add ML filter
+    showMLOnly,
   ]);
 
   const applyFilters = () => {
     let filtered = [...detections];
 
-    // ✅ ML-only filter
     if (showMLOnly) {
       filtered = filtered.filter((d) => d.detection_source === "camera");
     }
 
-    // Object filter
     if (filterObject !== "all") {
       filtered = filtered.filter((d) => d.object_detected === filterObject);
     }
 
-    // Category filter
     if (filterCategory !== "all") {
       filtered = filtered.filter((d) => d.object_category === filterCategory);
     }
 
-    // Danger level filter
     if (filterDanger !== "all") {
       filtered = filtered.filter(
         (d) => d.danger_level?.toLowerCase() === filterDanger,
       );
     }
 
-    // Search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(
@@ -106,7 +107,6 @@ const DetectionLogsTab = () => {
       );
     }
 
-    // Date range filter
     if (dateRange !== "all") {
       const now = new Date();
       const cutoff = new Date();
@@ -132,7 +132,6 @@ const DetectionLogsTab = () => {
     setFilteredDetections(filtered);
   };
 
-  // ✅ Function to handle real-time detection logging
   const handleNewDetection = async (detection) => {
     try {
       addDetection({
@@ -144,10 +143,9 @@ const DetectionLogsTab = () => {
     }
   };
 
-  // ✅ Use the hook's refresh function
   const handleRefresh = async () => {
     try {
-      await refresh(); // Force refresh bypasses cache
+      await refresh();
     } catch (error) {
       console.error("Failed to refresh:", error);
     }
@@ -185,7 +183,6 @@ const DetectionLogsTab = () => {
 
       const response = await detectionsAPI.export(params.toString());
 
-      // Download file
       const blob = new Blob([response.data], {
         type:
           format === "pdf"
@@ -226,6 +223,16 @@ const DetectionLogsTab = () => {
     return colors[level] || colors.Low;
   };
 
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredDetections.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const currentDetections = filteredDetections.slice(startIndex, endIndex);
+
+  const goToPage = (page) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+  };
+
   // Calculate stats
   const stats = {
     total: filteredDetections.length,
@@ -241,15 +248,12 @@ const DetectionLogsTab = () => {
       .length,
   };
 
-  // ✅ Get ML statistics
   const mlStats = getMLStats();
 
-  // Get unique objects for filter
   const uniqueObjects = [
     ...new Set(detections.map((d) => d.object_detected)),
   ].filter(Boolean);
 
-  // ✅ Show error state if there's an error
   if (error) {
     return (
       <div className="flex flex-col justify-center items-center h-64">
@@ -355,7 +359,6 @@ const DetectionLogsTab = () => {
             {stats.high_danger}
           </p>
         </div>
-        {/* ✅ NEW: ML Statistics Card */}
         <div className="bg-blue-50 rounded-lg shadow p-4">
           <div className="flex items-center gap-1 mb-1">
             <Brain className="w-3 h-3 text-blue-600" />
@@ -368,7 +371,7 @@ const DetectionLogsTab = () => {
         </div>
       </div>
 
-      {/* ✅ NEW: ML Filter Toggle */}
+      {/* ML Filter Toggle */}
       {mlStats.total > 0 && (
         <div className="flex items-center gap-2">
           <button
@@ -468,130 +471,152 @@ const DetectionLogsTab = () => {
       {/* Logs Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="overflow-x-auto">
-          <div className="max-h-[600px] overflow-y-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 sticky top-0 z-10">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Timestamp
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Object
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Category
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Distance
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Danger
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Alert
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Confidence
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {currentDetections.length === 0 ? (
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Timestamp
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Object
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Category
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Distance
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Danger
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Alert
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Confidence
-                  </th>
+                  <td colSpan="7" className="px-6 py-12 text-center">
+                    <FileText className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                    <p className="text-gray-500 font-medium">
+                      No detections found
+                    </p>
+                    <p className="text-sm text-gray-400 mt-1">
+                      {detections.length === 0
+                        ? "Detections will appear as the device operates"
+                        : "Try adjusting your filters"}
+                    </p>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredDetections.length === 0 ? (
-                  <tr>
-                    <td colSpan="7" className="px-6 py-12 text-center">
-                      <FileText className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-                      <p className="text-gray-500 font-medium">
-                        No detections found
-                      </p>
-                      <p className="text-sm text-gray-400 mt-1">
-                        {detections.length === 0
-                          ? "Detections will appear as the device operates"
-                          : "Try adjusting your filters"}
-                      </p>
+              ) : (
+                currentDetections.map((detection) => (
+                  <tr key={detection.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-gray-400" />
+                        {new Date(detection.detected_at).toLocaleString()}
+                        {detection.detection_source === "camera" && (
+                          <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full flex items-center gap-1">
+                            <Brain className="w-3 h-3" />
+                            ML
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">
+                          {OBJECT_ICONS[detection.object_detected] || "❓"}
+                        </span>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900 capitalize">
+                            {detection.object_detected || "unknown"}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {detection.obstacle_type}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span
+                        className={`px-3 py-1 text-xs font-medium rounded-full border ${getCategoryColor(detection.object_category)}`}
+                      >
+                        {detection.object_category || "unknown"}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {detection.distance_cm
+                        ? `${detection.distance_cm.toFixed(1)} cm`
+                        : "N/A"}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span
+                        className={`px-2 py-1 text-xs font-semibold rounded uppercase ${getDangerBadge(detection.danger_level)}`}
+                      >
+                        {detection.danger_level}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {detection.alert_type}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
+                          <div
+                            className="bg-green-600 h-2 rounded-full"
+                            style={{
+                              width: `${detection.detection_confidence || 85}%`,
+                            }}
+                          ></div>
+                        </div>
+                        <span className="text-xs">
+                          {(detection.detection_confidence || 85).toFixed(0)}%
+                        </span>
+                      </div>
                     </td>
                   </tr>
-                ) : (
-                  filteredDetections.map((detection) => (
-                    <tr key={detection.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        <div className="flex items-center gap-2">
-                          <Clock className="w-4 h-4 text-gray-400" />
-                          {new Date(detection.detected_at).toLocaleString()}
-                          {/* ✅ Show ML badge */}
-                          {detection.detection_source === "camera" && (
-                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full flex items-center gap-1">
-                              <Brain className="w-3 h-3" />
-                              ML
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <span className="text-2xl">
-                            {OBJECT_ICONS[detection.object_detected] || "❓"}
-                          </span>
-                          <div>
-                            <p className="text-sm font-medium text-gray-900 capitalize">
-                              {detection.object_detected || "unknown"}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              {detection.obstacle_type}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`px-3 py-1 text-xs font-medium rounded-full border ${getCategoryColor(detection.object_category)}`}
-                        >
-                          {detection.object_category || "unknown"}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {detection.distance_cm
-                          ? `${detection.distance_cm.toFixed(1)} cm`
-                          : "N/A"}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`px-2 py-1 text-xs font-semibold rounded uppercase ${getDangerBadge(detection.danger_level)}`}
-                        >
-                          {detection.danger_level}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {detection.alert_type}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
-                            <div
-                              className="bg-green-600 h-2 rounded-full"
-                              style={{
-                                width: `${detection.detection_confidence || 85}%`,
-                              }}
-                            ></div>
-                          </div>
-                          <span className="text-xs">
-                            {(detection.detection_confidence || 85).toFixed(0)}%
-                          </span>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
-      {/* Pagination Info */}
+      {/* Pagination */}
       {filteredDetections.length > 0 && (
-        <div className="text-center text-sm text-gray-600">
-          Showing {filteredDetections.length} of {detections.length} total
-          detections
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-gray-600">
+            Showing {startIndex + 1} to{" "}
+            {Math.min(endIndex, filteredDetections.length)} of{" "}
+            {filteredDetections.length} logs
+          </p>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => goToPage(currentPage - 1)}
+              disabled={currentPage === 1}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+
+            <span className="text-sm text-gray-700">
+              Page {currentPage} of {totalPages}
+            </span>
+
+            <button
+              onClick={() => goToPage(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
     </div>

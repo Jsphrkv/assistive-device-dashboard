@@ -1,8 +1,22 @@
 import React, { useState, useEffect } from "react";
 import { Activity, TrendingUp } from "lucide-react";
+import { mlAPI } from "../../services/api";
 
-const ActivityMonitor = ({ activityData, loading }) => {
+const ActivityMonitor = ({ deviceId }) => {
+  const [activityData, setActivityData] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [history, setHistory] = useState([]);
+
+  useEffect(() => {
+    fetchActivityData();
+
+    // Refresh every 30 seconds
+    const interval = setInterval(() => {
+      fetchActivityData();
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [deviceId]);
 
   // Update history when new activity data arrives
   useEffect(() => {
@@ -13,6 +27,19 @@ const ActivityMonitor = ({ activityData, loading }) => {
       ]);
     }
   }, [activityData]);
+
+  const fetchActivityData = async () => {
+    try {
+      // Assuming you have an endpoint to get activity predictions
+      const response = await mlAPI.predictActivity(deviceId);
+      setActivityData(response.data);
+      setLoading(false);
+    } catch (error) {
+      console.error("Error fetching activity data:", error);
+      setActivityData(null);
+      setLoading(false);
+    }
+  };
 
   if (loading) {
     return (

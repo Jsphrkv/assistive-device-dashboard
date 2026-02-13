@@ -24,7 +24,7 @@ import {
 import { useMLHistory } from "../../hooks/ml/useMLHistory";
 
 const MLStatistics = ({ deviceId }) => {
-  const { history, loading, refresh, addToHistory } = useMLHistory(
+  const { history, loading, refresh } = useMLHistory(
     deviceId || "default",
     500,
   );
@@ -229,17 +229,17 @@ const MLStatistics = ({ deviceId }) => {
     }).length;
 
     // Add summary log entry
-    addToHistory({
-      message: `Statistical Analysis: ${anomalyCount} anomalies, ${activityCount} activities, ${maintenanceCount} maintenance events analyzed`,
-      severity: "low",
-      confidence: 0.95,
-      is_anomaly: false,
-      timestamp: now,
-      source: "ml_statistics",
-    });
+    // addToHistory({
+    //   message: `Statistical Analysis: ${anomalyCount} anomalies, ${activityCount} activities, ${maintenanceCount} maintenance events analyzed`,
+    //   severity: "low",
+    //   confidence: 0.95,
+    //   is_anomaly: false,
+    //   timestamp: now,
+    //   source: "ml_statistics",
+    // });
 
     setLastAnalysisTime(now);
-  }, [history.length, addToHistory]);
+  }, [history.length]);
 
   if (loading) {
     return (

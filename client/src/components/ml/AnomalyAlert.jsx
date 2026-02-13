@@ -1,7 +1,41 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { AlertTriangle, CheckCircle } from "lucide-react";
+import { mlAPI } from "../../services/api";
 
-const AnomalyAlert = ({ deviceId, batteryLevel, anomalyData, loading }) => {
+const AnomalyAlert = ({ deviceId }) => {
+  const [anomalyData, setAnomalyData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchAnomalyData();
+
+    // Refresh every 30 seconds
+    const interval = setInterval(() => {
+      fetchAnomalyData();
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [deviceId]);
+
+  const fetchAnomalyData = async () => {
+    try {
+      const response = await mlAPI.getAnomalies(1); // Get most recent anomaly
+      const anomalies = response.data?.data || [];
+
+      if (anomalies.length > 0) {
+        setAnomalyData(anomalies[0]);
+      } else {
+        setAnomalyData(null);
+      }
+
+      setLoading(false);
+    } catch (error) {
+      console.error("Error fetching anomaly data:", error);
+      setAnomalyData(null);
+      setLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="bg-white rounded-lg shadow p-4 animate-pulse">

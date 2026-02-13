@@ -102,12 +102,15 @@ export const deviceAPI = {
 export const detectionsAPI = {
   getAll: (limit = 50, offset = 0) =>
     api.get(`/detections?limit=${limit}&offset=${offset}`),
-  getRecent: () => api.get("/detections/recent"),
+
+  // Add optional limit parameter
+  getRecent: (limit = 10) => api.get(`/detections/recent?limit=${limit}`),
+
   getByDate: (startDate, endDate) =>
     api.get(`/detections/by-date?start_date=${startDate}&end_date=${endDate}`),
   export: (params) =>
     api.get(`/detections/export?${params}`, {
-      responseType: "blob", // Important for file downloads
+      responseType: "blob",
     }),
   getCategories: () => api.get("/detections/categories"),
 };
