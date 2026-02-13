@@ -1,5 +1,7 @@
 import numpy as np
 from app.ml_models.model_loader import model_loader
+from typing import Dict, List, Tuple
+import math
 
 class MLService:
     """ML inference service for IoT predictions"""
