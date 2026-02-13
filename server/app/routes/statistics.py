@@ -5,6 +5,19 @@ from app.middleware.auth import check_permission
 
 statistics_bp = Blueprint('statistics', __name__, url_prefix='/api/statistics')
 
+def get_user_device_ids(user_id, user_role, supabase):
+    """Get device IDs for the current user (or all devices for admin)"""
+    if user_role == 'admin':
+        return None  # Admin sees everything
+    
+    user_devices = supabase.table('user_devices')\
+        .select('id')\
+        .eq('user_id', user_id)\
+        .execute()
+    
+    device_ids = [device['id'] for device in user_devices.data]
+    return device_ids if device_ids else ['no-devices']
+
 @statistics_bp.route('/daily', methods=['GET'])
 @token_required
 def get_daily_statistics():
@@ -15,24 +28,47 @@ def get_daily_statistics():
         days = request.args.get('days', 7, type=int)
         
         supabase = get_supabase()
+        device_ids = get_user_device_ids(user_id, user_role, supabase)
         
-        # ✅ Admins see all data, users see only their own
-        if user_role == 'admin':
-            response = supabase.table('daily_statistics')\
-                .select('*')\
-                .order('stat_date', desc=False)\
-                .limit(days)\
+        # If no device IDs (non-admin with no devices), return empty
+        if device_ids == ['no-devices']:
+            return jsonify({'data': []}), 200
+        
+        # Get detections grouped by date
+        if device_ids is None:  # Admin
+            response = supabase.table('detection_logs')\
+                .select('detected_at, danger_level, object_category')\
+                .order('detected_at', desc=True)\
                 .execute()
         else:
-            # ✅ Filter by user_id if the table has it
-            response = supabase.table('daily_statistics')\
-                .select('*')\
-                .eq('user_id', user_id)\
-                .order('stat_date', desc=False)\
-                .limit(days)\
+            response = supabase.table('detection_logs')\
+                .select('detected_at, danger_level, object_category')\
+                .in_('device_id', device_ids)\
+                .order('detected_at', desc=True)\
                 .execute()
         
-        return jsonify({'data': response.data}), 200
+        # Group by date and calculate stats
+        from datetime import datetime, timedelta
+        from collections import defaultdict
+        
+        daily_data = defaultdict(lambda: {'date': None, 'total': 0, 'high': 0, 'medium': 0, 'low': 0})
+        
+        for log in response.data:
+            date_str = log['detected_at'][:10]  # Get YYYY-MM-DD
+            daily_data[date_str]['date'] = date_str
+            daily_data[date_str]['total'] += 1
+            
+            if log.get('danger_level') == 'High':
+                daily_data[date_str]['high'] += 1
+            elif log.get('danger_level') == 'Medium':
+                daily_data[date_str]['medium'] += 1
+            else:
+                daily_data[date_str]['low'] += 1
+        
+        # Convert to list and sort
+        result = sorted(daily_data.values(), key=lambda x: x['date'])[-days:]
+        
+        return jsonify({'data': result}), 200
         
     except Exception as e:
         print(f"Get daily statistics error: {str(e)}")
@@ -81,20 +117,46 @@ def get_hourly_patterns():
         user_role = request.current_user['role']
         
         supabase = get_supabase()
+        device_ids = get_user_device_ids(user_id, user_role, supabase)
         
-        if user_role == 'admin':
-            response = supabase.table('hourly_patterns')\
-                .select('*')\
-                .order('hour_range', desc=False)\
+        if device_ids == ['no-devices']:
+            return jsonify({'data': []}), 200
+        
+        # Get all detections
+        if device_ids is None:  # Admin
+            response = supabase.table('detection_logs')\
+                .select('detected_at')\
                 .execute()
         else:
-            response = supabase.table('hourly_patterns')\
-                .select('*')\
-                .eq('user_id', user_id)\
-                .order('hour_range', desc=False)\
+            response = supabase.table('detection_logs')\
+                .select('detected_at')\
+                .in_('device_id', device_ids)\
                 .execute()
         
-        return jsonify({'data': response.data}), 200
+        # Group by hour
+        from collections import defaultdict
+        from datetime import datetime
+        
+        hourly_data = defaultdict(int)
+        
+        for log in response.data:
+            try:
+                dt = datetime.fromisoformat(log['detected_at'].replace('Z', '+00:00'))
+                hour = dt.hour
+                hourly_data[hour] += 1
+            except:
+                pass
+        
+        # Format for chart
+        result = [
+            {
+                'hour': f"{hour:02d}:00",
+                'count': hourly_data.get(hour, 0)
+            }
+            for hour in range(24)
+        ]
+        
+        return jsonify({'data': result}), 200
         
     except Exception as e:
         print(f"Get hourly patterns error: {str(e)}")
