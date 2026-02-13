@@ -47,23 +47,8 @@ const MLStatistics = ({ deviceId }) => {
 
     // Helper to detect log type
     const detectLogType = (item) => {
-      const msg = item.message?.toLowerCase() || "";
-      if (
-        msg.includes("maintenance") ||
-        msg.includes("repair") ||
-        msg.includes("service")
-      ) {
-        return "maintenance";
-      }
-      if (
-        msg.includes("activity") ||
-        msg.includes("walking") ||
-        msg.includes("resting") ||
-        msg.includes("using")
-      ) {
-        return "activity";
-      }
-      return "anomaly";
+      // Use actual prediction_type from database
+      return item.prediction_type || "unknown";
     };
 
     // 1. Anomaly History - Group by date (last 7 days)
@@ -163,9 +148,7 @@ const MLStatistics = ({ deviceId }) => {
     });
 
     // 4. Model Performance - Calculate from confidence scores
-    const anomalyLogs = history.filter(
-      (item) => detectLogType(item) === "anomaly",
-    );
+    const anomalyLogs = history.filter((item) => item.is_anomaly === true);
     const activityLogs = history.filter(
       (item) => detectLogType(item) === "activity",
     );

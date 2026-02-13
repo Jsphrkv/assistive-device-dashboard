@@ -14,6 +14,11 @@ from app.schemas.device import (
     DeviceSensorData,
     DeviceAnalysisRequest
 )
+from app.schemas.ml_types import (
+    ObjectDetectionRequest,
+    FallDetectionRequest,
+    RoutePredictionRequest
+)
 
 
 ml_bp = Blueprint('ml', __name__, url_prefix='/api/ml')
@@ -232,6 +237,228 @@ def recognize_activity():
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Activity recognition failed: {str(e)}'}), 500
+    
+# ========== OBJECT/OBSTACLE DETECTION ==========
+
+@ml_new_bp.route('/detect/object', methods=['POST'])
+@token_required
+def detect_object():
+    """Detect and classify objects/obstacles"""
+    try:
+        data = request.get_json()
+        print(f"🔍 [Object Detection] Received data: {data}")
+        
+        if not data:
+            return jsonify({'error': 'Missing detection data'}), 400
+        
+        device_id = data.get('device_id')
+        if not device_id:
+            return jsonify({'error': 'device_id is required'}), 400
+        
+        # Validate input
+        try:
+            detection_request = ObjectDetectionRequest(**data)
+        except ValidationError as e:
+            return jsonify({
+                'error': 'Invalid detection data',
+                'details': e.errors()
+            }), 400
+        
+        # Call ML service
+        result = ml_service.detect_object(detection_request.dict())
+        print(f"✅ [Object Detection] Result: {result}")
+        
+        # Save to database
+        try:
+            supabase = get_supabase()
+            prediction = {
+                'device_id': device_id,
+                'prediction_type': 'detection',
+                'object_detected': result.get('object_detected'),
+                'distance_cm': result.get('distance_cm'),
+                'danger_level': result.get('danger_level'),
+                'detection_source': data.get('detection_source'),
+                'detection_confidence': result.get('detection_confidence'),
+                'is_anomaly': result.get('danger_level') in ['High', 'Critical'],
+                'model_version': 'v1.0'
+            }
+            
+            print(f"💾 [Object Detection] Saving to DB: {prediction}")
+            db_result = supabase.table('ml_predictions').insert(prediction).execute()
+            print(f"✅ [Object Detection] Saved successfully!")
+            
+        except Exception as db_error:
+            print(f"❌ [Object Detection] Database save failed: {db_error}")
+            import traceback
+            traceback.print_exc()
+        
+        # Return response
+        return jsonify({
+            'object_detected': result.get('object_detected'),
+            'distance_cm': result.get('distance_cm'),
+            'danger_level': result.get('danger_level'),
+            'detection_confidence': result.get('detection_confidence'),
+            'message': result.get('message'),
+            'timestamp': int(time.time() * 1000)
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ [Object Detection] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Object detection failed'}), 500
+
+
+# ========== FALL DETECTION ==========
+
+@ml_new_bp.route('/detect/fall', methods=['POST'])
+@token_required
+def detect_fall():
+    """Detect if user has fallen"""
+    try:
+        data = request.get_json()
+        print(f"🔍 [Fall Detection] Received data: {data}")
+        
+        if not data:
+            return jsonify({'error': 'Missing sensor data'}), 400
+        
+        device_id = data.get('device_id')
+        if not device_id:
+            return jsonify({'error': 'device_id is required'}), 400
+        
+        # Validate input
+        try:
+            fall_request = FallDetectionRequest(**data)
+        except ValidationError as e:
+            return jsonify({
+                'error': 'Invalid sensor data',
+                'details': e.errors()
+            }), 400
+        
+        # Call ML service
+        result = ml_service.detect_fall(fall_request.dict())
+        print(f"✅ [Fall Detection] Result: {result}")
+        
+        # Save to database
+        try:
+            supabase = get_supabase()
+            prediction = {
+                'device_id': device_id,
+                'prediction_type': 'fall_detection',
+                'fall_detected': result.get('fall_detected'),
+                'fall_confidence': result.get('confidence'),
+                'fall_severity': result.get('severity'),
+                'post_fall_movement': result.get('post_fall_movement'),
+                'impact_magnitude': result.get('impact_magnitude'),
+                'is_anomaly': result.get('fall_detected'),  # Falls are anomalies
+                'sensor_data': fall_request.dict(),
+                'model_version': 'v1.0'
+            }
+            
+            print(f"💾 [Fall Detection] Saving to DB: {prediction}")
+            db_result = supabase.table('ml_predictions').insert(prediction).execute()
+            print(f"✅ [Fall Detection] Saved successfully!")
+            
+            # If emergency alert, trigger notification (implement later)
+            if result.get('emergency_alert'):
+                print(f"🚨 [Fall Detection] EMERGENCY ALERT - Fall detected!")
+                # TODO: Send emergency notification to contacts
+            
+        except Exception as db_error:
+            print(f"❌ [Fall Detection] Database save failed: {db_error}")
+            import traceback
+            traceback.print_exc()
+        
+        # Return response
+        return jsonify({
+            'fall_detected': result.get('fall_detected'),
+            'confidence': result.get('confidence'),
+            'severity': result.get('severity'),
+            'post_fall_movement': result.get('post_fall_movement'),
+            'impact_magnitude': result.get('impact_magnitude'),
+            'message': result.get('message'),
+            'emergency_alert': result.get('emergency_alert'),
+            'timestamp': int(time.time() * 1000)
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ [Fall Detection] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Fall detection failed'}), 500
+
+
+# ========== ROUTE PREDICTION ==========
+
+@ml_new_bp.route('/predict/route', methods=['POST'])
+@token_required
+def predict_route():
+    """Predict best route to destination"""
+    try:
+        data = request.get_json()
+        print(f"🔍 [Route Prediction] Received data: {data}")
+        
+        if not data:
+            return jsonify({'error': 'Missing route data'}), 400
+        
+        device_id = data.get('device_id')
+        if not device_id:
+            return jsonify({'error': 'device_id is required'}), 400
+        
+        # Validate input
+        try:
+            route_request = RoutePredictionRequest(**data)
+        except ValidationError as e:
+            return jsonify({
+                'error': 'Invalid route data',
+                'details': e.errors()
+            }), 400
+        
+        # Call ML service
+        result = ml_service.predict_route(route_request.dict())
+        print(f"✅ [Route Prediction] Result: {result}")
+        
+        # Save to database
+        try:
+            supabase = get_supabase()
+            prediction = {
+                'device_id': device_id,
+                'prediction_type': 'route_prediction',
+                'predicted_route': result.get('predicted_route'),
+                'route_difficulty_score': result.get('difficulty_score'),
+                'estimated_obstacles': result.get('estimated_obstacles'),
+                'route_recommendation': result.get('recommendation'),
+                'estimated_time_minutes': result.get('estimated_time_minutes'),
+                'is_anomaly': False,  # Routes are not anomalies
+                'telemetry_data': route_request.dict(),
+                'model_version': 'v1.0'
+            }
+            
+            print(f"💾 [Route Prediction] Saving to DB: {prediction}")
+            db_result = supabase.table('ml_predictions').insert(prediction).execute()
+            print(f"✅ [Route Prediction] Saved successfully!")
+            
+        except Exception as db_error:
+            print(f"❌ [Route Prediction] Database save failed: {db_error}")
+            import traceback
+            traceback.print_exc()
+        
+        # Return response
+        return jsonify({
+            'predicted_route': result.get('predicted_route'),
+            'route_confidence': result.get('route_confidence'),
+            'estimated_obstacles': result.get('estimated_obstacles'),
+            'difficulty_score': result.get('difficulty_score'),
+            'estimated_time_minutes': result.get('estimated_time_minutes'),
+            'recommendation': result.get('recommendation'),
+            'timestamp': int(time.time() * 1000)
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ [Route Prediction] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Route prediction failed'}), 500
 
 
 # ========== ML History Endpoints ==========

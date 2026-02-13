@@ -168,6 +168,46 @@ export const mlAPI = {
 
   // ✅ Changed from /ml/history/stats to /ml-history/stats
   getStats: (days = 7) => api.get(`/ml-history/stats?days=${days}`),
+
+  detectObject: (detectionData) =>
+    api.post("/ml/detect/object", {
+      device_id: detectionData.device_id,
+      object_detected: detectionData.object_detected,
+      distance_cm: detectionData.distance_cm,
+      detection_source: detectionData.detection_source || "camera",
+      detection_confidence: detectionData.detection_confidence || 0.85,
+      image_data: detectionData.image_data, // Optional base64 image
+    }),
+
+  // ✅ NEW: Fall Detection
+  detectFall: (sensorData) =>
+    api.post("/ml/detect/fall", {
+      device_id: sensorData.device_id,
+      accelerometer_x: sensorData.accelerometer_x,
+      accelerometer_y: sensorData.accelerometer_y,
+      accelerometer_z: sensorData.accelerometer_z,
+      gyroscope_x: sensorData.gyroscope_x,
+      gyroscope_y: sensorData.gyroscope_y,
+      gyroscope_z: sensorData.gyroscope_z,
+      time_since_last_movement: sensorData.time_since_last_movement || 0,
+    }),
+
+  // ✅ NEW: Route Prediction
+  predictRoute: (routeData) =>
+    api.post("/ml/predict/route", {
+      device_id: routeData.device_id,
+      current_location: {
+        latitude: routeData.current_location.latitude,
+        longitude: routeData.current_location.longitude,
+      },
+      destination: {
+        latitude: routeData.destination.latitude,
+        longitude: routeData.destination.longitude,
+      },
+      time_of_day: routeData.time_of_day || "afternoon",
+      avoid_obstacles: routeData.avoid_obstacles || [],
+      max_detour_meters: routeData.max_detour_meters || 500,
+    }),
 };
 
 export default api;
