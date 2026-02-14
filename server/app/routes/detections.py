@@ -15,27 +15,53 @@ from io import StringIO, BytesIO
 
 detections_bp = Blueprint('detections', __name__, url_prefix='/api/detections')
 
-# ========== GET ENDPOINTS ==========
+# ========== GET ENDPOINTS (UPDATED WITH USER FILTERING) ==========
 
 @detections_bp.route('/', methods=['GET'])
 @token_required
 @check_permission('detections', 'read')
 def get_detections():
-    """Get detection logs with pagination"""
+    """
+    Get detection logs with pagination
+    ✅ FIXED: Now filters by user_id
+    """
     try:
+        user_id = request.current_user['user_id']  # ✅ Get user_id from token
+        
         # Get pagination parameters
         limit = request.args.get('limit', 50, type=int)
         offset = request.args.get('offset', 0, type=int)
         
         supabase = get_supabase()
         
-        # Get total count
-        count_response = supabase.table('detection_logs').select('*', count='exact').execute()
+        # ✅ Get user's device
+        device = supabase.table('user_devices')\
+            .select('id')\
+            .eq('user_id', user_id)\
+            .limit(1)\
+            .execute()
+        
+        if not device.data:
+            return jsonify({
+                'data': [],
+                'count': 0,
+                'limit': limit,
+                'offset': offset
+            }), 200
+        
+        device_id = device.data[0]['id']
+        
+        # ✅ Filter by device_id (which is user-specific)
+        count_response = supabase.table('detection_logs')\
+            .select('*', count='exact')\
+            .eq('device_id', device_id)\
+            .execute()
         total_count = count_response.count
         
         # Get paginated data
         response = supabase.table('detection_logs')\
             .select('*')\
+            .eq('device_id', device_id)\
             .order('detected_at', desc=True)\
             .range(offset, offset + limit - 1)\
             .execute()
@@ -55,19 +81,38 @@ def get_detections():
 @token_required
 @check_permission('detections', 'read')
 def get_recent_detections():
-    """Get recent detections (configurable limit, default 10)"""
+    """
+    Get recent detections (configurable limit, default 10)
+    ✅ FIXED: Now filters by user_id
+    """
     try:
+        user_id = request.current_user['user_id']  # ✅ Get user_id
         limit = request.args.get('limit', 10, type=int)
         
         supabase = get_supabase()
+        
+        # ✅ Get user's device
+        device = supabase.table('user_devices')\
+            .select('id')\
+            .eq('user_id', user_id)\
+            .limit(1)\
+            .execute()
+        
+        if not device.data:
+            return jsonify({'detections': []}), 200
+        
+        device_id = device.data[0]['id']
+        
+        # ✅ Filter by device_id
         response = supabase.table('detection_logs')\
             .select('*')\
+            .eq('device_id', device_id)\
             .order('detected_at', desc=True)\
             .limit(limit)\
             .execute()
         
         return jsonify({
-            'detections': response.data  # Match expected format
+            'detections': response.data
         }), 200
         
     except Exception as e:
@@ -78,8 +123,12 @@ def get_recent_detections():
 @token_required
 @check_permission('detections', 'read')
 def get_detections_by_date():
-    """Get detections by date range"""
+    """
+    Get detections by date range
+    ✅ FIXED: Now filters by user_id
+    """
     try:
+        user_id = request.current_user['user_id']  # ✅ Get user_id
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
         
@@ -87,8 +136,23 @@ def get_detections_by_date():
             return jsonify({'error': 'start_date and end_date are required'}), 400
         
         supabase = get_supabase()
+        
+        # ✅ Get user's device
+        device = supabase.table('user_devices')\
+            .select('id')\
+            .eq('user_id', user_id)\
+            .limit(1)\
+            .execute()
+        
+        if not device.data:
+            return jsonify({'data': []}), 200
+        
+        device_id = device.data[0]['id']
+        
+        # ✅ Filter by device_id and date range
         response = supabase.table('detection_logs')\
             .select('*')\
+            .eq('device_id', device_id)\
             .gte('detected_at', start_date)\
             .lte('detected_at', end_date)\
             .order('detected_at', desc=True)\
@@ -104,11 +168,19 @@ def get_detections_by_date():
 @token_required
 @check_permission('detections', 'read')
 def get_count_by_type():
-    """Get detection count grouped by obstacle type"""
+    """
+    Get detection count grouped by obstacle type
+    ✅ FIXED: Now uses user-scoped obstacle_stats
+    """
     try:
+        user_id = request.current_user['user_id']  # ✅ Get user_id
+        
         supabase = get_supabase()
-        response = supabase.table('obstacle_statistics')\
+        
+        # ✅ Filter by user_id
+        response = supabase.table('obstacle_stats')\
             .select('*')\
+            .eq('user_id', user_id)\
             .order('total_count', desc=True)\
             .execute()
         
@@ -122,13 +194,32 @@ def get_count_by_type():
 @token_required
 @check_permission('detections', 'read')
 def get_sensor_logs():
-    """Get sensor detection logs for LogsTable.jsx"""
+    """
+    Get sensor detection logs for LogsTable.jsx
+    ✅ FIXED: Now filters by user_id
+    """
     try:
+        user_id = request.current_user['user_id']  # ✅ Get user_id
         limit = request.args.get('limit', 100, type=int)
         
         supabase = get_supabase()
+        
+        # ✅ Get user's device
+        device = supabase.table('user_devices')\
+            .select('id')\
+            .eq('user_id', user_id)\
+            .limit(1)\
+            .execute()
+        
+        if not device.data:
+            return jsonify({'data': []}), 200
+        
+        device_id = device.data[0]['id']
+        
+        # ✅ Filter by device_id
         response = supabase.table('detection_logs')\
             .select('*')\
+            .eq('device_id', device_id)\
             .order('detected_at', desc=True)\
             .limit(limit)\
             .execute()
@@ -218,14 +309,14 @@ def export_detections():
         print(f"Export error: {e}")
         return jsonify({'error': 'Export failed'}), 500
 
-# ========== POST ENDPOINT (MERGED VERSION) ==========
+# ========== POST ENDPOINT (UPDATED WITH USER_ID AND STATISTICS) ==========
 
 @detections_bp.route('/', methods=['POST'])
 @device_token_required
 def log_detection():
     """
     Log a new detection with object classification (called by Raspberry Pi)
-    Combines advanced object detection logic with device status updates
+    ✅ FIXED: Now includes user_id and updates statistics
     """
     try:
         device_id = request.current_device['id']
@@ -233,6 +324,21 @@ def log_detection():
         
         if not data:
             return jsonify({'error': 'No data provided'}), 400
+        
+        supabase = get_supabase()
+        
+        # ✅ NEW: Get user_id from device
+        device_query = supabase.table('user_devices')\
+            .select('user_id')\
+            .eq('id', device_id)\
+            .single()\
+            .execute()
+        
+        if not device_query.data:
+            return jsonify({'error': 'Device not found'}), 404
+        
+        user_id = device_query.data['user_id']
+        print(f"📍 Detection from device {device_id} (user: {user_id})")
         
         # Extract detection data
         object_detected = data.get('object_detected', 'unknown')
@@ -288,9 +394,12 @@ def log_detection():
         except (TypeError, ValueError):
             parsed_confidence = 85.0
 
+        # Get timestamp
+        detected_at = datetime.utcnow().isoformat()
 
-        # ===== PREPARE DETECTION LOG =====
+        # ✅ PREPARE DETECTION LOG WITH USER_ID
         detection_log = {
+            'user_id': user_id,  # ✅ NOW INCLUDES user_id
             'device_id': device_id,
             'obstacle_type': data.get('obstacle_type', obj_info['description']),
             'object_detected': object_detected,
@@ -304,13 +413,12 @@ def log_detection():
             'detection_source': detection_source,
             'detection_confidence': parsed_confidence,
             'image_url': image_url,
-            'detected_at': datetime.utcnow().isoformat()
+            'detected_at': detected_at
         }
         
         print(f"🔍 Inserting detection: {detection_log}")
         
         # Insert detection log
-        supabase = get_supabase()
         try:
             response = supabase.table('detection_logs').insert(detection_log).execute()
             print(f"✅ Detection logged: {object_detected} ({obj_info['icon']}) at {distance_cm}cm")
@@ -323,6 +431,18 @@ def log_detection():
         if not response.data:
             return jsonify({'error': 'Failed to log detection'}), 500
         
+        # ✅ NEW: Update statistics tables
+        try:
+            _update_user_statistics(
+                user_id=user_id,
+                object_detected=object_detected,
+                detected_at=detected_at
+            )
+            print(f"✅ Statistics updated for user {user_id}")
+        except Exception as stats_error:
+            print(f"⚠️ Statistics update failed: {stats_error}")
+            # Don't fail the request if statistics update fails
+        
         # Update device status with last detection
         try:
             status_check = supabase.table('device_status')\
@@ -333,8 +453,8 @@ def log_detection():
             
             status_update = {
                 'last_obstacle': detection_log['obstacle_type'],
-                'last_detection_time': datetime.utcnow().isoformat(),
-                'updated_at': datetime.utcnow().isoformat()
+                'last_detection_time': detected_at,
+                'updated_at': detected_at
             }
             
             if status_check.data and len(status_check.data) > 0:
@@ -369,6 +489,63 @@ def log_detection():
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'Failed to log detection'}), 500
+
+# ========== STATISTICS UPDATE FUNCTION (NEW) ==========
+
+def _update_user_statistics(user_id, object_detected, detected_at):
+    """
+    Update user-scoped statistics tables
+    ✅ NEW FUNCTION
+    
+    Updates:
+    - daily_stats
+    - obstacle_stats  
+    - hourly_detection_patterns
+    """
+    try:
+        from datetime import datetime
+        
+        supabase = get_supabase()
+        
+        # Parse timestamp
+        dt = datetime.fromisoformat(detected_at.replace('Z', '+00:00'))
+        stat_date = dt.date().isoformat()
+        hour = dt.hour
+        hour_range = f"{hour}PM" if hour >= 12 else f"{hour}AM"
+        
+        # 1. Update daily_stats
+        try:
+            supabase.rpc('upsert_daily_stat', {
+                'p_user_id': user_id,
+                'p_stat_date': stat_date
+            }).execute()
+            print(f"   ✅ Daily stats updated")
+        except Exception as e:
+            print(f"   ⚠️ Daily stats update failed: {e}")
+        
+        # 2. Update obstacle_stats
+        try:
+            supabase.rpc('upsert_obstacle_stat', {
+                'p_user_id': user_id,
+                'p_obstacle_type': object_detected
+            }).execute()
+            print(f"   ✅ Obstacle stats updated")
+        except Exception as e:
+            print(f"   ⚠️ Obstacle stats update failed: {e}")
+        
+        # 3. Update hourly_detection_patterns
+        try:
+            supabase.rpc('upsert_hourly_pattern', {
+                'p_user_id': user_id,
+                'p_hour_range': hour_range
+            }).execute()
+            print(f"   ✅ Hourly pattern updated")
+        except Exception as e:
+            print(f"   ⚠️ Hourly pattern update failed: {e}")
+        
+    except Exception as e:
+        print(f"❌ Statistics update error: {e}")
+        raise
 
 # ========== HELPER FUNCTIONS ==========
 
