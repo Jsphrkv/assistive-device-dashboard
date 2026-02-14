@@ -472,12 +472,12 @@ def log_detection():
         except Exception as stats_error:
             print(f"⚠️ Statistics update failed (non-critical): {stats_error}")
         
-        # ✅ Update device status (optional) - FIXED VARIABLE NAME
+        # ✅ Update device status (optional)
         try:
             print(f"🔄 Updating device status...")
             _update_device_status_safe(
                 device_id=device_id,
-                detection_log=detection_log,  # ✅ FIXED: Use detection_log not detection_log_clean
+                detection_log=detection_log,
                 detected_at=detected_at
             )
             print(f"✅ Device status updated")
@@ -499,17 +499,17 @@ def log_detection():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-# ========== STATISTICS UPDATE FUNCTION (NEW) ==========
+# ========== STATISTICS UPDATE FUNCTION (UPDATED TO 1-HOUR INTERVALS) ==========
 
 def _update_user_statistics_safe(user_id, object_detected, detected_at):
     """
     Update user-scoped statistics tables
-    ✅ FIXED: Using correct table names
+    ✅ USES 1-HOUR INTERVALS (instead of 3-hour)
     
     Updates:
-    - daily_statistics (was daily_stats)
-    - obstacle_statistics (was obstacle_stats)
-    - hourly_patterns (was hourly_detection_patterns)
+    - daily_statistics
+    - obstacle_statistics
+    - hourly_patterns (with 1-hour granularity: 1AM, 2AM, 3AM, etc.)
     """
     try:
         from datetime import datetime
@@ -520,11 +520,15 @@ def _update_user_statistics_safe(user_id, object_detected, detected_at):
         dt = datetime.fromisoformat(detected_at.replace('Z', '+00:00'))
         stat_date = dt.date().isoformat()
         hour = dt.hour
-        hour_range = f"{hour % 12 or 12}{'PM' if hour >= 12 else 'AM'}"
         
-        # 1. Update daily_statistics (FIXED TABLE NAME)
+        # ✅ CHANGED: 1-HOUR INTERVAL (12-hour format with AM/PM)
+        # Results: 12AM, 1AM, 2AM, ..., 11AM, 12PM, 1PM, ..., 11PM
+        hour_12 = hour % 12 or 12  # Convert 0 to 12, keep 1-11 as is
+        am_pm = 'AM' if hour < 12 else 'PM'
+        hour_range = f"{hour_12}{am_pm}"
+        
+        # 1. Update daily_statistics
         try:
-            # Check if record exists
             existing = supabase.table('daily_statistics')\
                 .select('id, total_alerts')\
                 .eq('user_id', user_id)\
@@ -533,7 +537,6 @@ def _update_user_statistics_safe(user_id, object_detected, detected_at):
                 .execute()
             
             if existing.data:
-                # Update existing record
                 new_count = existing.data[0]['total_alerts'] + 1
                 supabase.table('daily_statistics')\
                     .update({'total_alerts': new_count, 'updated_at': detected_at})\
@@ -541,7 +544,6 @@ def _update_user_statistics_safe(user_id, object_detected, detected_at):
                     .execute()
                 print(f"   ✅ Daily stats updated (count: {new_count})")
             else:
-                # Insert new record
                 supabase.table('daily_statistics').insert({
                     'user_id': user_id,
                     'stat_date': stat_date,
@@ -552,9 +554,8 @@ def _update_user_statistics_safe(user_id, object_detected, detected_at):
         except Exception as e:
             print(f"   ⚠️ Daily stats update failed: {e}")
         
-        # 2. Update obstacle_statistics (FIXED TABLE NAME)
+        # 2. Update obstacle_statistics
         try:
-            # Check if record exists
             existing = supabase.table('obstacle_statistics')\
                 .select('id, total_count')\
                 .eq('user_id', user_id)\
@@ -563,28 +564,25 @@ def _update_user_statistics_safe(user_id, object_detected, detected_at):
                 .execute()
             
             if existing.data:
-                # Update existing record
                 new_count = existing.data[0]['total_count'] + 1
                 supabase.table('obstacle_statistics')\
                     .update({'total_count': new_count, 'updated_at': detected_at})\
                     .eq('id', existing.data[0]['id'])\
                     .execute()
-                print(f"   ✅ Obstacle stats updated (count: {new_count})")
+                print(f"   ✅ Obstacle stats updated ({object_detected}: {new_count})")
             else:
-                # Insert new record
                 supabase.table('obstacle_statistics').insert({
                     'user_id': user_id,
                     'obstacle_type': object_detected,
                     'total_count': 1,
                     'created_at': detected_at
                 }).execute()
-                print(f"   ✅ Obstacle stats created")
+                print(f"   ✅ Obstacle stats created ({object_detected})")
         except Exception as e:
             print(f"   ⚠️ Obstacle stats update failed: {e}")
         
-        # 3. Update hourly_patterns (FIXED TABLE NAME)
+        # 3. Update hourly_patterns (✅ NOW WITH 1-HOUR INTERVALS)
         try:
-            # Check if record exists
             existing = supabase.table('hourly_patterns')\
                 .select('id, detection_count')\
                 .eq('user_id', user_id)\
@@ -593,39 +591,32 @@ def _update_user_statistics_safe(user_id, object_detected, detected_at):
                 .execute()
             
             if existing.data:
-                # Update existing record
                 new_count = existing.data[0]['detection_count'] + 1
                 supabase.table('hourly_patterns')\
                     .update({'detection_count': new_count, 'updated_at': detected_at})\
                     .eq('id', existing.data[0]['id'])\
                     .execute()
-                print(f"   ✅ Hourly pattern updated (count: {new_count})")
+                print(f"   ✅ Hourly pattern updated ({hour_range}: {new_count})")
             else:
-                # Insert new record
                 supabase.table('hourly_patterns').insert({
                     'user_id': user_id,
                     'hour_range': hour_range,
                     'detection_count': 1,
                     'created_at': detected_at
                 }).execute()
-                print(f"   ✅ Hourly pattern created")
+                print(f"   ✅ Hourly pattern created ({hour_range})")
         except Exception as e:
             print(f"   ⚠️ Hourly pattern update failed: {e}")
         
     except Exception as e:
         print(f"⚠️ Statistics update error (non-critical): {e}")
-        # Don't raise - let the main function continue
 
 
 def _update_device_status_safe(device_id, detection_log, detected_at):
-    """
-    Update device status safely
-    ✅ SAFE VERSION - Doesn't fail the request
-    """
+    """Update device status safely - Doesn't fail the request"""
     try:
         supabase = get_supabase()
         
-        # Check if status exists
         status_check = supabase.table('device_status')\
             .select('id')\
             .eq('device_id', device_id)\
@@ -639,14 +630,12 @@ def _update_device_status_safe(device_id, detection_log, detected_at):
         }
         
         if status_check.data and len(status_check.data) > 0:
-            # Update existing status
             status_id = status_check.data[0]['id']
             supabase.table('device_status')\
                 .update(status_update)\
                 .eq('id', status_id)\
                 .execute()
         else:
-            # Create new status
             status_update.update({
                 'device_id': device_id,
                 'device_online': True,
@@ -663,23 +652,17 @@ def _update_device_status_safe(device_id, detection_log, detected_at):
 def _upload_image_to_supabase(device_id, image_base64):
     """Upload detection image to Supabase Storage"""
     try:
-        # Decode base64 image
         image_data = base64.b64decode(image_base64)
-        
-        # Generate unique filename
         timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
         filename = f"{device_id}/{timestamp}_{uuid.uuid4().hex[:8]}.jpg"
         
         supabase = get_supabase()
-        
-        # Upload to Supabase Storage
         supabase.storage.from_('detection-image').upload(
             path=filename,
             file=image_data,
             file_options={"content-type": "image/jpeg"}
         )
         
-        # Get public URL
         url = supabase.storage.from_('detection-image').get_public_url(filename)
         return url
     except Exception as e:
@@ -691,21 +674,12 @@ def _generate_csv(detections):
     output = StringIO()
     writer = csv.writer(output)
     
-    # Header
     writer.writerow([
-        'Timestamp',
-        'Object Detected',
-        'Category',
-        'Distance (cm)',
-        'Danger Level',
-        'Alert Type',
-        'Confidence (%)',
-        'Source',
-        'Proximity',
-        'Ambient Light'
+        'Timestamp', 'Object Detected', 'Category', 'Distance (cm)',
+        'Danger Level', 'Alert Type', 'Confidence (%)', 'Source',
+        'Proximity', 'Ambient Light'
     ])
     
-    # Data rows
     for d in detections:
         writer.writerow([
             d.get('detected_at', ''),
@@ -740,12 +714,10 @@ def _generate_pdf(detections):
     elements = []
     styles = getSampleStyleSheet()
     
-    # Title
     title = Paragraph("Detection Logs Report", styles['Title'])
     elements.append(title)
     elements.append(Spacer(1, 12))
     
-    # Summary
     total = len(detections)
     critical = len([d for d in detections if d.get('object_category') == 'critical'])
     navigation = len([d for d in detections if d.get('object_category') == 'navigation'])
@@ -761,9 +733,8 @@ def _generate_pdf(detections):
     elements.append(summary)
     elements.append(Spacer(1, 12))
     
-    # Table data
     data = [['Time', 'Object', 'Category', 'Distance', 'Danger', 'Confidence']]
-    for d in detections[:100]:  # Limit to 100 for PDF
+    for d in detections[:100]:
         data.append([
             d.get('detected_at', '')[:16],
             d.get('object_detected', 'unknown')[:15],
@@ -796,48 +767,3 @@ def _generate_pdf(detections):
             'Content-Disposition': f'attachment; filename=detections_{datetime.now().strftime("%Y%m%d")}.pdf'
         }
     )
-
-@detections_bp.route('/debug/stats', methods=['GET'])
-@token_required
-def debug_stats():
-    """Debug statistics updates"""
-    try:
-        user_id = request.current_user['user_id']
-        supabase = get_supabase()
-        
-        # Check daily_statistics
-        daily = supabase.table('daily_statistics')\
-            .select('*')\
-            .eq('user_id', user_id)\
-            .order('stat_date', desc=True)\
-            .limit(5)\
-            .execute()
-        
-        # Check obstacle_statistics
-        obstacles = supabase.table('obstacle_statistics')\
-            .select('*')\
-            .eq('user_id', user_id)\
-            .order('total_count', desc=True)\
-            .limit(5)\
-            .execute()
-        
-        # Check hourly_patterns
-        hourly = supabase.table('hourly_patterns')\
-            .select('*')\
-            .eq('user_id', user_id)\
-            .order('detection_count', desc=True)\
-            .limit(5)\
-            .execute()
-        
-        return jsonify({
-            'user_id': user_id,
-            'daily_stats_count': len(daily.data),
-            'daily_stats_sample': daily.data,
-            'obstacle_stats_count': len(obstacles.data),
-            'obstacle_stats_sample': obstacles.data,
-            'hourly_stats_count': len(hourly.data),
-            'hourly_stats_sample': hourly.data
-        }), 200
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500

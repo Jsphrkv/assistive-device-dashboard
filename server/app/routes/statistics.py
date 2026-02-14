@@ -17,15 +17,13 @@ def get_user_device_ids(user_id, user_role, supabase):
     
     device_ids = [device['id'] for device in user_devices.data]
     return device_ids if device_ids else ['no-devices']
-
-# ✅ REMOVED DUPLICATE - Keep only the parameterized version below
     
 @statistics_bp.route('/daily/<int:days>', methods=['GET'])
 @token_required
 def get_daily_stats(days):
     """
     Get daily statistics for current user
-    ✅ FIXED: Now transforms data to match frontend expectations
+    ✅ Transforms data to match frontend expectations
     """
     try:
         user_id = request.current_user['user_id']
@@ -35,7 +33,7 @@ def get_daily_stats(days):
         
         print(f"📊 Fetching daily stats for user {user_id} (last {days} days)")
         
-        # ✅ Query daily_statistics table
+        # Query daily_statistics table
         if user_role == 'admin':
             response = supabase.table('daily_statistics')\
                 .select('*')\
@@ -52,14 +50,14 @@ def get_daily_stats(days):
         
         print(f"📊 Found {len(response.data)} daily statistics records")
         
-        # ✅ Transform to match chart format
+        # Transform to match chart format
         result = []
         for row in response.data:
             result.append({
-                'stat_date': row['stat_date'],  # Keep original
-                'date': row['stat_date'],       # For chart
-                'total_alerts': row.get('total_alerts', 0),  # Keep original
-                'alerts': row.get('total_alerts', 0),        # For chart
+                'stat_date': row['stat_date'],
+                'date': row['stat_date'],
+                'total_alerts': row.get('total_alerts', 0),
+                'alerts': row.get('total_alerts', 0),
                 'high': row.get('high_priority', 0),
                 'medium': row.get('medium_priority', 0),
                 'low': row.get('low_priority', 0)
@@ -85,7 +83,7 @@ def get_daily_stats(days):
 def get_obstacle_statistics():
     """
     Get obstacle statistics for current user
-    ✅ FIXED: Transforms data correctly for PieChart
+    ✅ Transforms data correctly for PieChart
     """
     try:
         user_id = request.current_user['user_id']
@@ -95,7 +93,7 @@ def get_obstacle_statistics():
         
         print(f"📊 Fetching obstacle stats for user {user_id}")
         
-        # ✅ Query obstacle_statistics table
+        # Query obstacle_statistics table
         if user_role == 'admin':
             response = supabase.table('obstacle_statistics')\
                 .select('*')\
@@ -112,15 +110,15 @@ def get_obstacle_statistics():
         
         print(f"📊 Found {len(response.data)} obstacle types")
         
-        # ✅ Transform to match PieChart format
+        # Transform to match PieChart format
         result = []
         for row in response.data:
             result.append({
-                'obstacle_type': row['obstacle_type'],  # Keep original
-                'name': row['obstacle_type'],           # For chart label
-                'total_count': row['total_count'],      # Keep original
-                'value': row['total_count'],            # For chart value
-                'count': row['total_count'],            # Backup
+                'obstacle_type': row['obstacle_type'],
+                'name': row['obstacle_type'],
+                'total_count': row['total_count'],
+                'value': row['total_count'],
+                'count': row['total_count'],
                 'percentage': row.get('percentage', 0)
             })
         
@@ -142,7 +140,7 @@ def get_obstacle_statistics():
 def get_hourly_patterns():
     """
     Get hourly detection patterns
-    ✅ FIXED: Transforms data correctly for BarChart
+    ✅ UPDATED: Now supports 1-hour intervals (12AM-11PM) with proper sorting
     """
     try:
         user_id = request.current_user['user_id']
@@ -152,50 +150,59 @@ def get_hourly_patterns():
         
         print(f"📊 Fetching hourly patterns for user {user_id}")
         
-        # ✅ Query hourly_patterns table
+        # Query hourly_patterns table
         if user_role == 'admin':
             response = supabase.table('hourly_patterns')\
                 .select('*')\
-                .order('hour_range')\
                 .execute()
         else:
             response = supabase.table('hourly_patterns')\
                 .select('*')\
                 .eq('user_id', user_id)\
-                .order('hour_range')\
                 .execute()
         
         print(f"📊 Found {len(response.data)} hourly records")
         
-        # ✅ Transform to match BarChart format
+        # Transform to match BarChart format
         result = []
         for row in response.data:
             hour_str = row['hour_range']
             
             result.append({
-                'hour_range': hour_str,                      # Keep original
-                'hour': hour_str,                            # For chart X-axis
-                'detection_count': row.get('detection_count', 0),  # Keep original
-                'detections': row.get('detection_count', 0),       # For chart bar height
-                'count': row.get('detection_count', 0)       # Backup
+                'hour_range': hour_str,
+                'hour': hour_str,
+                'detection_count': row.get('detection_count', 0),
+                'detections': row.get('detection_count', 0),
+                'count': row.get('detection_count', 0)
             })
         
-        # Sort by hour (convert to 24h for sorting)
+        # ✅ IMPROVED: Sort by hour (handles both 1-hour and 3-hour formats)
         def parse_hour(hour_str):
-            """Convert '12PM' to 12, '9AM' to 9, etc."""
+            """
+            Convert hour string to 24-hour format for sorting
+            Examples: '12AM' → 0, '1AM' → 1, '12PM' → 12, '1PM' → 13, '11PM' → 23
+            """
             try:
-                hour_num = int(''.join(filter(str.isdigit, hour_str)))
-                if 'PM' in hour_str and hour_num != 12:
-                    hour_num += 12
-                elif 'AM' in hour_str and hour_num == 12:
-                    hour_num = 0
-                return hour_num
+                # Extract number and AM/PM
+                import re
+                match = re.match(r'(\d+)(AM|PM)', hour_str)
+                if not match:
+                    return 0
+                
+                hour_num = int(match.group(1))
+                is_pm = match.group(2) == 'PM'
+                
+                # Convert to 24-hour
+                if hour_num == 12:
+                    return 0 if not is_pm else 12
+                else:
+                    return hour_num if not is_pm else hour_num + 12
             except:
                 return 0
         
         result.sort(key=lambda x: parse_hour(x['hour']))
         
-        print(f"✅ Returning hourly data:")
+        print(f"✅ Returning {len(result)} hourly data points:")
         for r in result[:5]:
             print(f"   {r['hour']}: {r['detections']} detections")
         
@@ -220,7 +227,7 @@ def get_ml_statistics():
         
         print(f"📊 Fetching summary stats for user {user_id}")
         
-        # ✅ Get user's device IDs first
+        # Get user's device IDs first
         user_devices = supabase.table('user_devices')\
             .select('id')\
             .eq('user_id', user_id)\
@@ -242,7 +249,7 @@ def get_ml_statistics():
                 }
             }), 200
         
-        # ✅ Get total detections count
+        # Get total detections count
         if user_role == 'admin':
             total_response = supabase.table('detection_logs')\
                 .select('*', count='exact')\
