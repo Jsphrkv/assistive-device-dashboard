@@ -9,7 +9,25 @@ import {
 } from "recharts";
 import { Package } from "lucide-react";
 
-const COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6"];
+// Colors matching the number of OBJECT_ICONS entries (16 items)
+const COLORS = [
+  "#3B82F6",
+  "#10B981",
+  "#F59E0B",
+  "#EF4444",
+  "#8B5CF6",
+  "#EC4899",
+  "#14B8A6",
+  "#F97316",
+  "#6B7280",
+  "#A855F7",
+  "#06B6D4",
+  "#84CC16",
+  "#D946EF",
+  "#F43F5E",
+  "#64748B",
+  "#7C3AED", // One more color for the 16th item
+];
 
 const ObstaclesChart = ({ data, loading }) => {
   // ✅ Debug logging
@@ -20,6 +38,21 @@ const ObstaclesChart = ({ data, loading }) => {
   }, [data]);
 
   const hasData = data && data.length > 0;
+
+  // Format data to remove any line/percentage artifacts
+  const formattedData = hasData
+    ? data.map((item) => ({
+        ...item,
+        name: item.name.split(">")[0].split("%")[0], // Remove any > or % and everything after
+      }))
+    : [];
+
+  // Custom label renderer to show only percentage
+  const renderCustomLabel = (entry) => {
+    const total = formattedData.reduce((sum, item) => sum + item.value, 0);
+    const percentage = Math.round((entry.value / total) * 100);
+    return percentage > 5 ? `${percentage}%` : ""; // Only show labels for slices > 5%
+  };
 
   return (
     <div className="bg-white rounded-lg shadow p-6">
@@ -42,30 +75,74 @@ const ObstaclesChart = ({ data, loading }) => {
           </div>
         </div>
       ) : (
-        <ResponsiveContainer width="100%" height={300}>
-          <PieChart>
-            <Pie
-              data={data}
-              dataKey="value"
-              nameKey="name"
-              cx="50%"
-              cy="50%"
-              outerRadius={100}
-              label={(entry) =>
-                `${entry.name} ${entry.percentage || Math.round((entry.value / data.reduce((sum, item) => sum + item.value, 0)) * 100)}%`
-              }
-            >
-              {data.map((entry, index) => (
-                <Cell
-                  key={`cell-${index}`}
-                  fill={COLORS[index % COLORS.length]}
-                />
-              ))}
-            </Pie>
-            <Tooltip />
-            <Legend />
-          </PieChart>
-        </ResponsiveContainer>
+        <div className="flex flex-col md:flex-row justify-center items-center gap-8 md:gap-4">
+          {/* Legend on the left - with balanced width */}
+          <div className="w-full md:w-1/3 md:max-w-[200px]">
+            <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-2">
+              {formattedData.map((item, index) => {
+                const total = formattedData.reduce(
+                  (sum, i) => sum + i.value,
+                  0,
+                );
+                const percentage = Math.round((item.value / total) * 100);
+                return (
+                  <div
+                    key={`legend-${index}`}
+                    className="flex items-center gap-2 text-sm"
+                  >
+                    <span
+                      className="w-3 h-3 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                    />
+                    <span className="text-gray-700 truncate flex-1">
+                      {item.name}
+                    </span>
+                    <span className="text-gray-500 text-xs whitespace-nowrap">
+                      {item.value} ({percentage}%)
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Chart on the right - centered */}
+          <div className="w-full md:w-2/3 h-[300px] flex justify-center">
+            <div className="w-full max-w-[300px] md:max-w-none">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={formattedData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={100}
+                    label={renderCustomLabel}
+                    labelLine={false}
+                  >
+                    {formattedData.map((entry, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={COLORS[index % COLORS.length]}
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(value, name) => {
+                      const total = formattedData.reduce(
+                        (sum, item) => sum + item.value,
+                        0,
+                      );
+                      const percentage = Math.round((value / total) * 100);
+                      return [`${value} (${percentage}%)`, name];
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

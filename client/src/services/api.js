@@ -116,10 +116,12 @@ export const detectionsAPI = {
 };
 
 export const statisticsAPI = {
+  // Fix: remove the extra /api from the path
   getDaily: async (days = 7) => {
-    const response = await api.get(`/api/statistics/daily?days=${days}`);
+    const response = await api.get(`/statistics/daily?days=${days}`);
     return { data: response.data.data || [] };
   },
+
   getObstacles: () => api.get("/statistics/obstacles"),
   getHourly: () => api.get("/statistics/hourly"),
   getSummary: () => api.get("/statistics/summary"),
