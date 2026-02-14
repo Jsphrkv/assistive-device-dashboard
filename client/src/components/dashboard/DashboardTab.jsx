@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   Brain,
   Zap,
-  Eye,
 } from "lucide-react";
 import { deviceAPI, detectionsAPI, mlAPI } from "../../services/api";
 import { formatRelativeTime } from "../../utils/helpers";
@@ -53,9 +52,10 @@ const DashboardTab = () => {
       setDeviceStatus(data);
       setHasDevice(data.hasDevice !== false);
 
-      // Calculate uptime if last_seen is available
-      if (data.lastSeen) {
-        const uptime = calculateUptime(data.lastSeen);
+      // Check both possible field names
+      const lastSeenTime = data.lastSeen || data.last_seen;
+      if (lastSeenTime) {
+        const uptime = calculateUptime(lastSeenTime);
         setDeviceUptime(uptime);
       }
 
@@ -280,26 +280,8 @@ const DashboardTab = () => {
 
       <MaintenanceStatus deviceId={deviceStatus?.deviceId || "device-001"} />
 
-      {/* Quick Stats - Real Data */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
-        {/* Total Detections */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Total Detections</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {totalDetections}
-              </p>
-              {mlStats && (
-                <p className="text-xs text-gray-500 mt-1">
-                  {mlStats.byType?.detection || 0} from camera
-                </p>
-              )}
-            </div>
-            <Eye className="w-8 h-8 text-purple-500" />
-          </div>
-        </div>
-
+      {/* Quick Stats - Real Data (3 cards only) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
         {/* Anomalies */}
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center justify-between">
@@ -316,7 +298,7 @@ const DashboardTab = () => {
           </div>
         </div>
 
-        {/* Uptime */}
+        {/* Last Active */}
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center justify-between">
             <div>

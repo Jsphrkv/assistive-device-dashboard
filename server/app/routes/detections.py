@@ -316,7 +316,7 @@ def export_detections():
 def log_detection():
     """
     Log a new detection with object classification (called by Raspberry Pi)
-    ✅ FIXED: Now includes user_id and updates statistics
+    ✅ FIXED: Now includes user_id and updates statistics safely
     """
     try:
         device_id = request.current_device['id']
@@ -327,7 +327,8 @@ def log_detection():
         
         supabase = get_supabase()
         
-        # ✅ NEW: Get user_id from device
+        # ✅ Get user_id from device
+        print(f"🔍 Looking up user for device: {device_id}")
         device_query = supabase.table('user_devices')\
             .select('user_id')\
             .eq('id', device_id)\
@@ -335,10 +336,16 @@ def log_detection():
             .execute()
         
         if not device_query.data:
+            print(f"❌ Device not found: {device_id}")
             return jsonify({'error': 'Device not found'}), 404
         
         user_id = device_query.data['user_id']
-        print(f"📍 Detection from device {device_id} (user: {user_id})")
+        
+        if not user_id:
+            print(f"❌ Device {device_id} has no user_id!")
+            return jsonify({'error': 'Device not paired to a user'}), 403
+        
+        print(f"✅ Detection from device {device_id} (user: {user_id})")
         
         # Extract detection data
         object_detected = data.get('object_detected', 'unknown')
@@ -365,10 +372,9 @@ def log_detection():
                 print(f"✅ Image uploaded: {image_url}")
             except Exception as img_error:
                 print(f"⚠️ Image upload failed: {img_error}")
-                import traceback
-                traceback.print_exc()
                 # Continue without image - don't fail the whole request
-        
+
+        # Parse and validate numeric fields
         raw_distance = data.get('distance_cm')
         raw_proximity = data.get('proximity_value')
         raw_ambient = data.get('ambient_light')
@@ -399,7 +405,7 @@ def log_detection():
 
         # ✅ PREPARE DETECTION LOG WITH USER_ID
         detection_log = {
-            'user_id': user_id,  # ✅ NOW INCLUDES user_id
+            'user_id': user_id,  # ✅ INCLUDES user_id
             'device_id': device_id,
             'obstacle_type': data.get('obstacle_type', obj_info['description']),
             'object_detected': object_detected,
@@ -416,69 +422,55 @@ def log_detection():
             'detected_at': detected_at
         }
         
-        print(f"🔍 Inserting detection: {detection_log}")
+        print(f"📝 Inserting detection: {object_detected} at {parsed_distance}cm")
         
-        # Insert detection log
+        # ✅ Insert detection log (THIS MUST SUCCEED)
         try:
             response = supabase.table('detection_logs').insert(detection_log).execute()
+            
+            if not response.data:
+                print(f"❌ Detection insert returned no data")
+                return jsonify({'error': 'Failed to log detection - no data returned'}), 500
+            
             print(f"✅ Detection logged: {object_detected} ({obj_info['icon']}) at {distance_cm}cm")
+            detection_id = response.data[0]['id']
+            
         except Exception as db_error:
             print(f"❌ Database insert failed: {db_error}")
             import traceback
             traceback.print_exc()
             return jsonify({'error': f'Database insert failed: {str(db_error)}'}), 500
         
-        if not response.data:
-            return jsonify({'error': 'Failed to log detection'}), 500
-        
-        # ✅ NEW: Update statistics tables
+        # ✅ Update statistics (OPTIONAL - don't fail if this fails)
         try:
-            _update_user_statistics(
+            print(f"📊 Updating statistics...")
+            _update_user_statistics_safe(
                 user_id=user_id,
                 object_detected=object_detected,
                 detected_at=detected_at
             )
             print(f"✅ Statistics updated for user {user_id}")
         except Exception as stats_error:
-            print(f"⚠️ Statistics update failed: {stats_error}")
-            # Don't fail the request if statistics update fails
+            print(f"⚠️ Statistics update failed (non-critical): {stats_error}")
+            # Continue - statistics update is not critical
         
-        # Update device status with last detection
+        # ✅ Update device status (OPTIONAL - don't fail if this fails)
         try:
-            status_check = supabase.table('device_status')\
-                .select('id')\
-                .eq('device_id', device_id)\
-                .limit(1)\
-                .execute()
-            
-            status_update = {
-                'last_obstacle': detection_log['obstacle_type'],
-                'last_detection_time': detected_at,
-                'updated_at': detected_at
-            }
-            
-            if status_check.data and len(status_check.data) > 0:
-                # Update existing status
-                status_id = status_check.data[0]['id']
-                supabase.table('device_status').update(status_update).eq('id', status_id).execute()
-            else:
-                # Create new status
-                status_update.update({
-                    'device_id': device_id,
-                    'device_online': True,
-                    'camera_status': 'Active',
-                    'battery_level': 100
-                })
-                supabase.table('device_status').insert(status_update).execute()
-                
+            print(f"🔄 Updating device status...")
+            _update_device_status_safe(
+                device_id=device_id,
+                detection_log=detection_log,
+                detected_at=detected_at
+            )
             print(f"✅ Device status updated")
         except Exception as status_error:
-            print(f"⚠️ Could not update device_status: {status_error}")
-            # Don't fail the request if status update fails
+            print(f"⚠️ Device status update failed (non-critical): {status_error}")
+            # Continue - status update is not critical
         
         return jsonify({
             'message': 'Detection logged successfully',
-            'detection_id': response.data[0]['id'],
+            'id': detection_id,
+            'detection_id': detection_id,
             'object_info': obj_info,
             'image_url': image_url,
             'data': response.data[0]
@@ -488,14 +480,14 @@ def log_detection():
         print(f"❌ Detection log error: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({'error': 'Failed to log detection'}), 500
+        return jsonify({'error': f'Failed to log detection: {str(e)}'}), 500
 
 # ========== STATISTICS UPDATE FUNCTION (NEW) ==========
 
-def _update_user_statistics(user_id, object_detected, detected_at):
+def _update_user_statistics_safe(user_id, object_detected, detected_at):
     """
     Update user-scoped statistics tables
-    ✅ NEW FUNCTION
+    ✅ SAFE VERSION - Uses direct SQL inserts instead of RPC functions
     
     Updates:
     - daily_stats
@@ -511,42 +503,144 @@ def _update_user_statistics(user_id, object_detected, detected_at):
         dt = datetime.fromisoformat(detected_at.replace('Z', '+00:00'))
         stat_date = dt.date().isoformat()
         hour = dt.hour
-        hour_range = f"{hour}PM" if hour >= 12 else f"{hour}AM"
+        hour_range = f"{hour % 12 or 12}{'PM' if hour >= 12 else 'AM'}"
         
         # 1. Update daily_stats
         try:
-            supabase.rpc('upsert_daily_stat', {
-                'p_user_id': user_id,
-                'p_stat_date': stat_date
-            }).execute()
+            # Check if record exists
+            existing = supabase.table('daily_stats')\
+                .select('id, total_alerts')\
+                .eq('user_id', user_id)\
+                .eq('stat_date', stat_date)\
+                .limit(1)\
+                .execute()
+            
+            if existing.data:
+                # Update existing record
+                new_count = existing.data[0]['total_alerts'] + 1
+                supabase.table('daily_stats')\
+                    .update({'total_alerts': new_count, 'updated_at': detected_at})\
+                    .eq('id', existing.data[0]['id'])\
+                    .execute()
+            else:
+                # Insert new record
+                supabase.table('daily_stats').insert({
+                    'user_id': user_id,
+                    'stat_date': stat_date,
+                    'total_alerts': 1,
+                    'created_at': detected_at
+                }).execute()
+            
             print(f"   ✅ Daily stats updated")
         except Exception as e:
             print(f"   ⚠️ Daily stats update failed: {e}")
         
         # 2. Update obstacle_stats
         try:
-            supabase.rpc('upsert_obstacle_stat', {
-                'p_user_id': user_id,
-                'p_obstacle_type': object_detected
-            }).execute()
+            # Check if record exists
+            existing = supabase.table('obstacle_stats')\
+                .select('id, total_count')\
+                .eq('user_id', user_id)\
+                .eq('obstacle_type', object_detected)\
+                .limit(1)\
+                .execute()
+            
+            if existing.data:
+                # Update existing record
+                new_count = existing.data[0]['total_count'] + 1
+                supabase.table('obstacle_stats')\
+                    .update({'total_count': new_count, 'updated_at': detected_at})\
+                    .eq('id', existing.data[0]['id'])\
+                    .execute()
+            else:
+                # Insert new record
+                supabase.table('obstacle_stats').insert({
+                    'user_id': user_id,
+                    'obstacle_type': object_detected,
+                    'total_count': 1,
+                    'created_at': detected_at
+                }).execute()
+            
             print(f"   ✅ Obstacle stats updated")
         except Exception as e:
             print(f"   ⚠️ Obstacle stats update failed: {e}")
         
         # 3. Update hourly_detection_patterns
         try:
-            supabase.rpc('upsert_hourly_pattern', {
-                'p_user_id': user_id,
-                'p_hour_range': hour_range
-            }).execute()
+            # Check if record exists
+            existing = supabase.table('hourly_detection_patterns')\
+                .select('id, detection_count')\
+                .eq('user_id', user_id)\
+                .eq('hour_range', hour_range)\
+                .limit(1)\
+                .execute()
+            
+            if existing.data:
+                # Update existing record
+                new_count = existing.data[0]['detection_count'] + 1
+                supabase.table('hourly_detection_patterns')\
+                    .update({'detection_count': new_count, 'updated_at': detected_at})\
+                    .eq('id', existing.data[0]['id'])\
+                    .execute()
+            else:
+                # Insert new record
+                supabase.table('hourly_detection_patterns').insert({
+                    'user_id': user_id,
+                    'hour_range': hour_range,
+                    'detection_count': 1,
+                    'created_at': detected_at
+                }).execute()
+            
             print(f"   ✅ Hourly pattern updated")
         except Exception as e:
             print(f"   ⚠️ Hourly pattern update failed: {e}")
         
     except Exception as e:
-        print(f"❌ Statistics update error: {e}")
-        raise
+        print(f"⚠️ Statistics update error (non-critical): {e}")
+        # Don't raise - let the main function continue
 
+
+def _update_device_status_safe(device_id, detection_log, detected_at):
+    """
+    Update device status safely
+    ✅ SAFE VERSION - Doesn't fail the request
+    """
+    try:
+        supabase = get_supabase()
+        
+        # Check if status exists
+        status_check = supabase.table('device_status')\
+            .select('id')\
+            .eq('device_id', device_id)\
+            .limit(1)\
+            .execute()
+        
+        status_update = {
+            'last_obstacle': detection_log['obstacle_type'],
+            'last_detection_time': detected_at,
+            'updated_at': detected_at
+        }
+        
+        if status_check.data and len(status_check.data) > 0:
+            # Update existing status
+            status_id = status_check.data[0]['id']
+            supabase.table('device_status')\
+                .update(status_update)\
+                .eq('id', status_id)\
+                .execute()
+        else:
+            # Create new status
+            status_update.update({
+                'device_id': device_id,
+                'device_online': True,
+                'camera_status': 'Active',
+                'battery_level': 100
+            })
+            supabase.table('device_status').insert(status_update).execute()
+        
+    except Exception as e:
+        print(f"⚠️ Device status update error (non-critical): {e}")
+        
 # ========== HELPER FUNCTIONS ==========
 
 def _upload_image_to_supabase(device_id, image_base64):

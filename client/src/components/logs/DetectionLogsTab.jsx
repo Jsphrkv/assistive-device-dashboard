@@ -13,7 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { detectionsAPI } from "../../services/api";
+import { detectionsAPI, statisticsAPI } from "../../services/api";
 import { useDetectionLogs } from "../../hooks/useDetectionLogs";
 
 // Object icons mapping
@@ -48,10 +48,13 @@ const DetectionLogsTab = () => {
     getMLDetections,
     getMLStats,
   } = useDetectionLogs({
-    limit: 100,
+    limit: 10000,
     autoFetch: true,
     cacheDuration: 30000,
   });
+
+  // Add state for true total count from database
+  const [totalCount, setTotalCount] = useState(0);
 
   const [filteredDetections, setFilteredDetections] = useState([]);
   const [filterObject, setFilterObject] = useState("all");
@@ -63,6 +66,11 @@ const DetectionLogsTab = () => {
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Fetch total count on mount
+  useEffect(() => {
+    fetchTotalCount();
+  }, []);
 
   useEffect(() => {
     applyFilters();
@@ -76,6 +84,17 @@ const DetectionLogsTab = () => {
     dateRange,
     showMLOnly,
   ]);
+
+  // Fetch the true total count from the database
+  const fetchTotalCount = async () => {
+    try {
+      const response = await statisticsAPI.getSummary();
+      setTotalCount(response.data?.totalPredictions || 0);
+    } catch (error) {
+      console.error("Error fetching total count:", error);
+      setTotalCount(detections.length); // Fallback to array length
+    }
+  };
 
   const applyFilters = () => {
     let filtered = [...detections];
@@ -146,6 +165,7 @@ const DetectionLogsTab = () => {
   const handleRefresh = async () => {
     try {
       await refresh();
+      await fetchTotalCount(); // Also refresh the total count
     } catch (error) {
       console.error("Failed to refresh:", error);
     }
@@ -284,8 +304,14 @@ const DetectionLogsTab = () => {
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Detection Logs</h2>
           <p className="text-sm text-gray-600 mt-1">
-            Real-time log of all ML detections and predictions •{" "}
-            {detections.length} total entries
+            Real-time log of all ML detections and predictions • {totalCount}{" "}
+            total entries
+            {detections.length < totalCount && (
+              <span className="text-gray-500">
+                {" "}
+                (showing {detections.length} most recent)
+              </span>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -335,7 +361,12 @@ const DetectionLogsTab = () => {
       <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
         <div className="bg-white rounded-lg shadow p-4">
           <p className="text-xs text-gray-600 mb-1">Total Logs</p>
-          <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+          <p className="text-2xl font-bold text-gray-900">{totalCount}</p>
+          {detections.length < totalCount && (
+            <p className="text-xs text-gray-500 mt-1">
+              Loaded: {detections.length}
+            </p>
+          )}
         </div>
         <div className="bg-red-50 rounded-lg shadow p-4">
           <p className="text-xs text-red-600 mb-1">Critical</p>

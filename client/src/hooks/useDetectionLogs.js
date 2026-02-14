@@ -11,7 +11,7 @@ const CACHE_DURATION = 30000; // 30 seconds
 
 export const useDetectionLogs = (options = {}) => {
   const {
-    limit = 100,
+    limit = 10000,
     autoFetch = true,
     cacheDuration = CACHE_DURATION,
   } = options;
