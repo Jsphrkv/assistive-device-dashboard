@@ -796,3 +796,48 @@ def _generate_pdf(detections):
             'Content-Disposition': f'attachment; filename=detections_{datetime.now().strftime("%Y%m%d")}.pdf'
         }
     )
+
+@detections_bp.route('/debug/stats', methods=['GET'])
+@token_required
+def debug_stats():
+    """Debug statistics updates"""
+    try:
+        user_id = request.current_user['user_id']
+        supabase = get_supabase()
+        
+        # Check daily_statistics
+        daily = supabase.table('daily_statistics')\
+            .select('*')\
+            .eq('user_id', user_id)\
+            .order('stat_date', desc=True)\
+            .limit(5)\
+            .execute()
+        
+        # Check obstacle_statistics
+        obstacles = supabase.table('obstacle_statistics')\
+            .select('*')\
+            .eq('user_id', user_id)\
+            .order('total_count', desc=True)\
+            .limit(5)\
+            .execute()
+        
+        # Check hourly_patterns
+        hourly = supabase.table('hourly_patterns')\
+            .select('*')\
+            .eq('user_id', user_id)\
+            .order('detection_count', desc=True)\
+            .limit(5)\
+            .execute()
+        
+        return jsonify({
+            'user_id': user_id,
+            'daily_stats_count': len(daily.data),
+            'daily_stats_sample': daily.data,
+            'obstacle_stats_count': len(obstacles.data),
+            'obstacle_stats_sample': obstacles.data,
+            'hourly_stats_count': len(hourly.data),
+            'hourly_stats_sample': hourly.data
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
