@@ -263,20 +263,46 @@ def log_detection():
                 traceback.print_exc()
                 # Continue without image - don't fail the whole request
         
-        # Prepare detection log
+        raw_distance = data.get('distance_cm')
+        raw_proximity = data.get('proximity_value')
+        raw_ambient = data.get('ambient_light')
+        raw_confidence = data.get('detection_confidence', 85.0)
+
+        try:
+            parsed_distance = float(raw_distance) if raw_distance is not None else None
+        except (TypeError, ValueError):
+            parsed_distance = None
+
+        try:
+            parsed_proximity = int(raw_proximity) if raw_proximity is not None else 0
+        except (TypeError, ValueError):
+            parsed_proximity = 0
+
+        try:
+            parsed_ambient = int(raw_ambient) if raw_ambient is not None else 0
+        except (TypeError, ValueError):
+            parsed_ambient = 0
+
+        try:
+            parsed_confidence = float(raw_confidence) if raw_confidence is not None else 85.0
+        except (TypeError, ValueError):
+            parsed_confidence = 85.0
+
+
+        # ===== PREPARE DETECTION LOG =====
         detection_log = {
             'device_id': device_id,
             'obstacle_type': data.get('obstacle_type', obj_info['description']),
             'object_detected': object_detected,
             'object_category': obj_info['category'],
-            'distance_cm': float(distance_cm) if distance_cm else None,
+            'distance_cm': parsed_distance,
             'danger_level': danger_level,
             'alert_type': alert_type,
-            'proximity_value': int(data.get('proximity_value', 0)),
-            'ambient_light': int(data.get('ambient_light', 0)),
+            'proximity_value': parsed_proximity,
+            'ambient_light': parsed_ambient,
             'camera_enabled': bool(data.get('camera_enabled', False)),
             'detection_source': detection_source,
-            'detection_confidence': float(detection_confidence),
+            'detection_confidence': parsed_confidence,
             'image_url': image_url,
             'detected_at': datetime.utcnow().isoformat()
         }

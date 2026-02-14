@@ -45,12 +45,6 @@ const MLStatistics = ({ deviceId }) => {
       };
     }
 
-    // Helper to detect log type
-    const detectLogType = (item) => {
-      // Use actual prediction_type from database
-      return item.prediction_type || "unknown";
-    };
-
     // 1. Anomaly History - Group by date (last 7 days)
     const last7Days = Array.from({ length: 7 }, (_, i) => {
       const d = new Date();
@@ -63,24 +57,32 @@ const MLStatistics = ({ deviceId }) => {
       const nextDay = new Date(date);
       nextDay.setDate(nextDay.getDate() + 1);
 
+      // ✅ CORRECT: Filter by is_anomaly flag
       const dayLogs = history.filter((item) => {
         const itemDate = new Date(item.timestamp);
         return (
-          itemDate >= date &&
-          itemDate < nextDay &&
-          detectLogType(item) === "anomaly"
+          itemDate >= date && itemDate < nextDay && item.is_anomaly === true // ← Use database flag
         );
       });
 
       const avgSeverity =
         dayLogs.length > 0
           ? dayLogs.reduce((sum, item) => {
-              const severity =
-                item.severity === "high"
-                  ? 100
-                  : item.severity === "medium"
-                    ? 60
-                    : 30;
+              // Get severity from result object
+              let severity = 30; // default low
+
+              if (
+                item.result?.severity === "high" ||
+                item.result?.danger_level === "High"
+              ) {
+                severity = 100;
+              } else if (
+                item.result?.severity === "medium" ||
+                item.result?.danger_level === "Medium"
+              ) {
+                severity = 60;
+              }
+
               return sum + severity;
             }, 0) / dayLogs.length
           : 0;
@@ -98,12 +100,18 @@ const MLStatistics = ({ deviceId }) => {
     // 2. Activity Distribution
     const activityCounts = history.reduce(
       (acc, item) => {
-        const type = detectLogType(item);
-        if (type === "activity") {
-          const msg = item.message?.toLowerCase() || "";
-          if (msg.includes("resting")) acc.resting++;
-          else if (msg.includes("walking")) acc.walking++;
-          else if (msg.includes("using")) acc.using++;
+        // ✅ CORRECT: Check prediction_type directly
+        if (item.prediction_type === "activity") {
+          // ✅ CORRECT: Get activity from result object
+          const activity = item.result?.activity?.toLowerCase() || "";
+
+          if (activity.includes("resting") || activity === "sitting") {
+            acc.resting++;
+          } else if (activity.includes("walking")) {
+            acc.walking++;
+          } else if (activity.includes("using") || activity === "standing") {
+            acc.using++;
+          }
         }
         return acc;
       },
@@ -135,7 +143,7 @@ const MLStatistics = ({ deviceId }) => {
 
     // 3. Maintenance Timeline - Group by month (next 6 months projection)
     const maintenanceLogs = history.filter(
-      (item) => detectLogType(item) === "maintenance",
+      (item) => item.prediction_type === "maintenance", // ✅ Fixed
     );
     const next6Months = Array.from({ length: 6 }, (_, i) => {
       const d = new Date();
@@ -150,13 +158,13 @@ const MLStatistics = ({ deviceId }) => {
     // 4. Model Performance - Calculate from confidence scores
     const anomalyLogs = history.filter((item) => item.is_anomaly === true);
     const activityLogs = history.filter(
-      (item) => detectLogType(item) === "activity",
+      (item) => item.prediction_type === "activity",
     );
 
     const avgConfidence = (logs) => {
       if (logs.length === 0) return 0;
       const sum = logs.reduce(
-        (acc, item) => acc + (item.confidence || item.anomaly_score || 0.85),
+        (acc, item) => acc + (item.confidence_score || 0.85),
         0,
       );
       return (sum / logs.length) * 100;
@@ -180,49 +188,28 @@ const MLStatistics = ({ deviceId }) => {
   useEffect(() => {
     if (history.length === 0) return;
 
-    // Only log analysis every 5 minutes or when first loaded
     const now = Date.now();
     if (lastAnalysisTime && now - lastAnalysisTime < 5 * 60 * 1000) {
       return;
     }
 
-    // Log statistical analysis summary
-    const anomalyCount = history.filter((item) => {
-      const msg = item.message?.toLowerCase() || "";
-      return (
-        !msg.includes("maintenance") &&
-        !msg.includes("activity") &&
-        !msg.includes("walking") &&
-        !msg.includes("resting")
-      );
-    }).length;
+    // ✅ CORRECT: Count using database fields
+    const anomalyCount = history.filter(
+      (item) => item.is_anomaly === true,
+    ).length;
+    const activityCount = history.filter(
+      (item) => item.prediction_type === "activity",
+    ).length;
+    const maintenanceCount = history.filter(
+      (item) => item.prediction_type === "maintenance",
+    ).length;
 
-    const activityCount = history.filter((item) => {
-      const msg = item.message?.toLowerCase() || "";
-      return (
-        msg.includes("activity") ||
-        msg.includes("walking") ||
-        msg.includes("resting")
-      );
-    }).length;
-
-    const maintenanceCount = history.filter((item) => {
-      const msg = item.message?.toLowerCase() || "";
-      return msg.includes("maintenance");
-    }).length;
-
-    // Add summary log entry
-    // addToHistory({
-    //   message: `Statistical Analysis: ${anomalyCount} anomalies, ${activityCount} activities, ${maintenanceCount} maintenance events analyzed`,
-    //   severity: "low",
-    //   confidence: 0.95,
-    //   is_anomaly: false,
-    //   timestamp: now,
-    //   source: "ml_statistics",
-    // });
+    console.log(
+      `📊 Statistics Analysis: ${anomalyCount} anomalies, ${activityCount} activities, ${maintenanceCount} maintenance events`,
+    );
 
     setLastAnalysisTime(now);
-  }, [history.length]);
+  }, [history.length, lastAnalysisTime]);
 
   if (loading) {
     return (
