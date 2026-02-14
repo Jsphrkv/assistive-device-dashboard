@@ -55,25 +55,33 @@ def device_token_required(f):
         from app.services.supabase_client import get_supabase
         supabase = get_supabase()
         
-        device = supabase.table('user_devices')\
-            .select('*')\
-            .eq('device_token', token)\
-            .eq('is_active', True)\
-            .maybe_single()\
-            .execute()
+        try:
+            device = supabase.table('user_devices')\
+                .select('*')\
+                .eq('device_token', token)\
+                .eq('is_active', True)\
+                .maybe_single()\
+                .execute()
+        except Exception as e:
+            print(f"❌ Database error in device auth: {e}")
+            return jsonify({'error': 'Database error'}), 500
         
         # ✅ FIX: Check if device is None OR device.data is None
         if not device or not device.data:
+            print(f"⚠️  Invalid device token attempt")
             return jsonify({'error': 'Invalid or inactive device token'}), 401
         
         # Update last_seen timestamp
-        supabase.table('user_devices')\
-            .update({
-                'last_seen': 'now()',
-                'status': 'active'
-            })\
-            .eq('id', device.data['id'])\
-            .execute()
+        try:
+            supabase.table('user_devices')\
+                .update({
+                    'last_seen': 'now()',
+                    'status': 'active'
+                })\
+                .eq('id', device.data['id'])\
+                .execute()
+        except Exception as e:
+            print(f"⚠️  Failed to update last_seen: {e}")
         
         # Add device info to request context
         request.current_device = device.data
