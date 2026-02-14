@@ -240,7 +240,7 @@ def recognize_activity():
     
 # ========== OBJECT/OBSTACLE DETECTION ==========
 
-@ml_new_bp.route('/detect/object', methods=['POST'])
+@ml_bp.route('/detect/object', methods=['POST'])
 @token_required
 def detect_object():
     """Detect and classify objects/obstacles"""
@@ -311,7 +311,7 @@ def detect_object():
 
 # ========== FALL DETECTION ==========
 
-@ml_new_bp.route('/detect/fall', methods=['POST'])
+@ml_bp.route('/detect/fall', methods=['POST'])
 @token_required
 def detect_fall():
     """Detect if user has fallen"""
@@ -390,7 +390,7 @@ def detect_fall():
 
 # ========== ROUTE PREDICTION ==========
 
-@ml_new_bp.route('/predict/route', methods=['POST'])
+@ml_bp.route('/predict/route', methods=['POST'])
 @token_required
 def predict_route():
     """Predict best route to destination"""
