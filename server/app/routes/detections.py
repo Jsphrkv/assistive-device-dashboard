@@ -394,22 +394,29 @@ def log_detection():
         # Get timestamp
         detected_at = datetime.utcnow().isoformat()
 
-        # ✅ BUILD THE PAYLOAD - Keep it as detection_log for consistency
+        # ✅ BUILD THE PAYLOAD WITH GUARANTEED VALUES
         detection_log = {
-            'user_id': str(user_id),  # ✅ Ensure it's a string UUID
+            # Required UUID fields
+            'user_id': str(user_id),
             'device_id': str(device_id),
-            'obstacle_type': str(data.get('obstacle_type', obj_info['description']))[:255],
-            'object_detected': str(object_detected)[:255],
-            'object_category': str(obj_info['category'])[:255],
-            'danger_level': str(danger_level)[:255],
-            'alert_type': str(alert_type)[:255],
-            'detection_source': str(detection_source)[:255],
+            
+            # Required text fields - ALWAYS provide a value
+            'obstacle_type': str(data.get('obstacle_type') or obj_info['description'] or 'unknown')[:255],
+            'object_detected': str(object_detected or 'unknown')[:255],
+            'object_category': str(obj_info.get('category') or 'unknown')[:255],
+            'danger_level': str(danger_level or 'Low')[:255],
+            'alert_type': str(alert_type or 'Audio')[:255],
+            'detection_source': str(detection_source or 'ultrasonic')[:255],
+            
+            # Required timestamp
+            'detected_at': str(detected_at),
+            
+            # Boolean (defaults to False)
             'camera_enabled': bool(data.get('camera_enabled', False)),
-            'detected_at': str(detected_at)
         }
         
-        # Add numeric fields only if valid
-        if parsed_distance is not None:
+        # Optional numeric fields - only add if valid
+        if parsed_distance is not None and parsed_distance > 0:
             detection_log['distance_cm'] = float(parsed_distance)
         
         if parsed_proximity is not None and parsed_proximity > 0:
@@ -418,9 +425,10 @@ def log_detection():
         if parsed_ambient is not None and parsed_ambient > 0:
             detection_log['ambient_light'] = int(parsed_ambient)
         
-        if parsed_confidence is not None:
+        if parsed_confidence is not None and parsed_confidence > 0:
             detection_log['detection_confidence'] = float(parsed_confidence)
         
+        # Optional text fields
         if image_url:
             detection_log['image_url'] = str(image_url)
         
