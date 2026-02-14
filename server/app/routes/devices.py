@@ -667,7 +667,7 @@ def update_temperature():
 @devices_bp.route('/system-info', methods=['POST'])
 @device_token_required
 def update_system_info():
-    """Update system information (called by Raspberry Pi on first boot)"""
+    """Update system information (called by Raspberry Pi)"""
     try:
         device_id = request.current_device['id']
         data = request.get_json()
@@ -675,21 +675,26 @@ def update_system_info():
         if not data:
             return jsonify({'error': 'No data provided'}), 400
         
+        print(f"📥 System info update for device {device_id}")
+        print(f"   Data received: {data}")
+        
         supabase = get_supabase()
         
-        # Prepare system info data
+        # Prepare system info data with safe type conversion
         system_data = {
             'device_id': device_id,
-            'raspberry_pi_model': data.get('raspberryPiModel'),
-            'software_version': data.get('softwareVersion'),
-            'cpu_model': data.get('cpuModel'),
-            'ram_size': data.get('ramSize'),
-            'storage_size': data.get('storageSize'),
-            'os_version': data.get('osVersion'),
-            'cpu_temperature': data.get('cpuTemperature'),
-            'last_reboot_time': data.get('lastRebootTime'),
+            'raspberry_pi_model': str(data.get('raspberryPiModel', '')),
+            'software_version': str(data.get('softwareVersion', '')),
+            'cpu_model': str(data.get('cpuModel', '')),
+            'ram_size': int(data.get('ramSize', 0)) if data.get('ramSize') else None,
+            'storage_size': int(data.get('storageSize', 0)) if data.get('storageSize') else None,
+            'os_version': str(data.get('osVersion', '')),
+            'cpu_temperature': float(data.get('cpuTemperature')) if data.get('cpuTemperature') else None,
+            'last_reboot_time': str(data.get('lastRebootTime', '')),
             'updated_at': 'now()'
         }
+        
+        print(f"   Prepared data: {system_data}")
         
         # Check if system info already exists
         existing = supabase.table('system_info')\
@@ -698,17 +703,23 @@ def update_system_info():
             .limit(1)\
             .execute()
         
+        print(f"   Existing record: {len(existing.data) if existing.data else 0}")
+        
         if existing.data and len(existing.data) > 0:
             # Update existing
+            print(f"   Updating existing record...")
             response = supabase.table('system_info')\
                 .update(system_data)\
                 .eq('device_id', device_id)\
                 .execute()
         else:
             # Insert new
+            print(f"   Inserting new record...")
             response = supabase.table('system_info').insert(system_data).execute()
         
-        # Update device status to 'active' since it's now connected
+        print(f"   ✅ Database operation successful")
+        
+        # Update device status to 'active'
         supabase.table('user_devices')\
             .update({'status': 'active', 'last_seen': 'now()'})\
             .eq('id', device_id)\
@@ -720,10 +731,14 @@ def update_system_info():
         }), 200
         
     except Exception as e:
-        print(f"Update system info error: {str(e)}")
+        print(f"❌ Update system info error: {str(e)}")
+        print(f"   Error type: {type(e).__name__}")
         import traceback
         traceback.print_exc()
-        return jsonify({'error': 'Failed to update system info'}), 500
+        return jsonify({
+            'error': 'Failed to update system info',
+            'details': str(e)  # ✅ Include error details
+        }), 500
     
 # ============================================
 # IMPROVEMENT 1 & 2: Secure Two-Step Pairing
