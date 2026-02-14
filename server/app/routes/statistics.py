@@ -71,7 +71,26 @@ def get_daily_statistics():
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'Failed to get daily statistics'}), 500
-
+    
+@statistics_bp.route('/daily/<int:days>', methods=['GET'])
+@token_required
+def get_daily_stats(days):
+    try:
+        user_id = request.current_user['user_id']
+        supabase = get_supabase()
+        
+        # ✅ Use daily_statistics (not daily_stats)
+        response = supabase.table('daily_statistics')\
+            .select('*')\
+            .eq('user_id', user_id)\
+            .order('stat_date', desc=True)\
+            .limit(days)\
+            .execute()
+        
+        return jsonify({'data': response.data}), 200
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @statistics_bp.route('/obstacles', methods=['GET'])
 @token_required

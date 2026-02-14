@@ -504,12 +504,12 @@ def log_detection():
 def _update_user_statistics_safe(user_id, object_detected, detected_at):
     """
     Update user-scoped statistics tables
-    ✅ SAFE VERSION - Uses direct SQL inserts instead of RPC functions
+    ✅ FIXED: Using correct table names
     
     Updates:
-    - daily_stats
-    - obstacle_stats  
-    - hourly_detection_patterns
+    - daily_statistics (was daily_stats)
+    - obstacle_statistics (was obstacle_stats)
+    - hourly_patterns (was hourly_detection_patterns)
     """
     try:
         from datetime import datetime
@@ -522,10 +522,10 @@ def _update_user_statistics_safe(user_id, object_detected, detected_at):
         hour = dt.hour
         hour_range = f"{hour % 12 or 12}{'PM' if hour >= 12 else 'AM'}"
         
-        # 1. Update daily_stats
+        # 1. Update daily_statistics (FIXED TABLE NAME)
         try:
             # Check if record exists
-            existing = supabase.table('daily_stats')\
+            existing = supabase.table('daily_statistics')\
                 .select('id, total_alerts')\
                 .eq('user_id', user_id)\
                 .eq('stat_date', stat_date)\
@@ -535,27 +535,27 @@ def _update_user_statistics_safe(user_id, object_detected, detected_at):
             if existing.data:
                 # Update existing record
                 new_count = existing.data[0]['total_alerts'] + 1
-                supabase.table('daily_stats')\
+                supabase.table('daily_statistics')\
                     .update({'total_alerts': new_count, 'updated_at': detected_at})\
                     .eq('id', existing.data[0]['id'])\
                     .execute()
+                print(f"   ✅ Daily stats updated (count: {new_count})")
             else:
                 # Insert new record
-                supabase.table('daily_stats').insert({
+                supabase.table('daily_statistics').insert({
                     'user_id': user_id,
                     'stat_date': stat_date,
                     'total_alerts': 1,
                     'created_at': detected_at
                 }).execute()
-            
-            print(f"   ✅ Daily stats updated")
+                print(f"   ✅ Daily stats created")
         except Exception as e:
             print(f"   ⚠️ Daily stats update failed: {e}")
         
-        # 2. Update obstacle_stats
+        # 2. Update obstacle_statistics (FIXED TABLE NAME)
         try:
             # Check if record exists
-            existing = supabase.table('obstacle_stats')\
+            existing = supabase.table('obstacle_statistics')\
                 .select('id, total_count')\
                 .eq('user_id', user_id)\
                 .eq('obstacle_type', object_detected)\
@@ -565,27 +565,27 @@ def _update_user_statistics_safe(user_id, object_detected, detected_at):
             if existing.data:
                 # Update existing record
                 new_count = existing.data[0]['total_count'] + 1
-                supabase.table('obstacle_stats')\
+                supabase.table('obstacle_statistics')\
                     .update({'total_count': new_count, 'updated_at': detected_at})\
                     .eq('id', existing.data[0]['id'])\
                     .execute()
+                print(f"   ✅ Obstacle stats updated (count: {new_count})")
             else:
                 # Insert new record
-                supabase.table('obstacle_stats').insert({
+                supabase.table('obstacle_statistics').insert({
                     'user_id': user_id,
                     'obstacle_type': object_detected,
                     'total_count': 1,
                     'created_at': detected_at
                 }).execute()
-            
-            print(f"   ✅ Obstacle stats updated")
+                print(f"   ✅ Obstacle stats created")
         except Exception as e:
             print(f"   ⚠️ Obstacle stats update failed: {e}")
         
-        # 3. Update hourly_detection_patterns
+        # 3. Update hourly_patterns (FIXED TABLE NAME)
         try:
             # Check if record exists
-            existing = supabase.table('hourly_detection_patterns')\
+            existing = supabase.table('hourly_patterns')\
                 .select('id, detection_count')\
                 .eq('user_id', user_id)\
                 .eq('hour_range', hour_range)\
@@ -595,20 +595,20 @@ def _update_user_statistics_safe(user_id, object_detected, detected_at):
             if existing.data:
                 # Update existing record
                 new_count = existing.data[0]['detection_count'] + 1
-                supabase.table('hourly_detection_patterns')\
+                supabase.table('hourly_patterns')\
                     .update({'detection_count': new_count, 'updated_at': detected_at})\
                     .eq('id', existing.data[0]['id'])\
                     .execute()
+                print(f"   ✅ Hourly pattern updated (count: {new_count})")
             else:
                 # Insert new record
-                supabase.table('hourly_detection_patterns').insert({
+                supabase.table('hourly_patterns').insert({
                     'user_id': user_id,
                     'hour_range': hour_range,
                     'detection_count': 1,
                     'created_at': detected_at
                 }).execute()
-            
-            print(f"   ✅ Hourly pattern updated")
+                print(f"   ✅ Hourly pattern created")
         except Exception as e:
             print(f"   ⚠️ Hourly pattern update failed: {e}")
         

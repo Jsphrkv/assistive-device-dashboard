@@ -31,6 +31,7 @@ const StatisticsTab = ({ deviceId }) => {
       // Fetch all statistics in parallel
       const [dailyRes, obstaclesRes, hourlyRes, summaryRes] = await Promise.all(
         [
+          // ✅ FIXED: Use correct table names
           statisticsAPI.getDaily(7).catch((err) => {
             console.error("Daily stats error:", err);
             return { data: { data: [] } };
@@ -50,26 +51,51 @@ const StatisticsTab = ({ deviceId }) => {
         ],
       );
 
-      // Extract data (backend wraps in { data: [...] })
-      const daily = dailyRes.data?.data || [];
-      const obstacles = obstaclesRes.data?.data || [];
-      const hourly = hourlyRes.data?.data || [];
+      // Extract raw data
+      const dailyRaw = dailyRes.data?.data || [];
+      const obstaclesRaw = obstaclesRes.data?.data || [];
+      const hourlyRaw = hourlyRes.data?.data || [];
       const summary = summaryRes.data || null;
 
-      // Check if we have any data
-      const hasAnyData =
-        daily.length > 0 || obstacles.length > 0 || hourly.length > 0;
+      console.log("📊 Raw daily data from API:", dailyRaw);
+      console.log("📊 Raw hourly data from API:", hourlyRaw);
+      console.log("📊 Raw obstacles data from API:", obstaclesRaw);
 
-      setDailyStats(daily);
-      setObstacleStats(obstacles);
-      setHourlyStats(hourly);
+      // ✅ Transform data to match chart expectations
+      const transformedDaily = dailyRaw.map((item) => ({
+        date: item.stat_date || item.date,
+        alerts: item.total_alerts || item.alerts || 0,
+      }));
+
+      const transformedHourly = hourlyRaw.map((item) => ({
+        hour: item.hour_range || item.hour,
+        detections: item.detection_count || item.detections || 0,
+      }));
+
+      const transformedObstacles = obstaclesRaw.map((item) => ({
+        name: item.obstacle_type || item.object_detected || item.name,
+        count: item.total_count || item.count || 0,
+      }));
+
+      console.log("📊 Transformed daily data:", transformedDaily);
+      console.log("📊 Transformed hourly data:", transformedHourly);
+      console.log("📊 Transformed obstacles data:", transformedObstacles);
+
+      const hasAnyData =
+        transformedDaily.length > 0 ||
+        transformedObstacles.length > 0 ||
+        transformedHourly.length > 0;
+
+      setDailyStats(transformedDaily);
+      setObstacleStats(transformedObstacles);
+      setHourlyStats(transformedHourly);
       setMlSummary(summary);
       setHasData(hasAnyData);
 
-      console.log("Statistics loaded:", {
-        daily: daily.length,
-        obstacles: obstacles.length,
-        hourly: hourly.length,
+      console.log("✅ Statistics loaded:", {
+        daily: transformedDaily.length,
+        obstacles: transformedObstacles.length,
+        hourly: transformedHourly.length,
         summary: summary ? "yes" : "no",
       });
     } catch (error) {
