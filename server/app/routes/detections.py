@@ -314,10 +314,6 @@ def export_detections():
 @detections_bp.route('/', methods=['POST'])
 @device_token_required
 def log_detection():
-    """
-    Log a new detection with object classification (called by Raspberry Pi)
-    ✅ FIXED: Now includes user_id and updates statistics safely
-    """
     try:
         device_id = request.current_device['id']
         data = request.get_json()
@@ -335,17 +331,13 @@ def log_detection():
             .single()\
             .execute()
         
-        if not device_query.data:
-            print(f"❌ Device not found: {device_id}")
-            return jsonify({'error': 'Device not found'}), 404
-        
-        user_id = device_query.data['user_id']
-        
-        if not user_id:
-            print(f"❌ Device {device_id} has no user_id!")
+        if not device_query.data or not device_query.data.get('user_id'):
+            print(f"❌ Device has no user_id!")
             return jsonify({'error': 'Device not paired to a user'}), 403
         
+        user_id = device_query.data['user_id']
         print(f"✅ Detection from device {device_id} (user: {user_id})")
+        print(f"   User ID type: {type(user_id)}, Value: {user_id}")  # Debug
         
         # Extract detection data
         object_detected = data.get('object_detected', 'unknown')
@@ -356,7 +348,7 @@ def log_detection():
         # Get object classification info
         obj_info = get_detection_info(object_detected)
         
-        # Determine danger level and alert type based on object and distance
+        # Determine danger level and alert type
         if distance_cm:
             danger_level = get_danger_level_from_object(object_detected, distance_cm)
             alert_type = get_alert_type_from_object(object_detected, distance_cm)
@@ -364,7 +356,7 @@ def log_detection():
             danger_level = data.get('danger_level', 'Low')
             alert_type = data.get('alert_type', 'Audio')
         
-        # Handle image upload if provided
+        # Handle image upload
         image_url = None
         if data.get('image_data'):
             try:
@@ -372,9 +364,8 @@ def log_detection():
                 print(f"✅ Image uploaded: {image_url}")
             except Exception as img_error:
                 print(f"⚠️ Image upload failed: {img_error}")
-                # Continue without image - don't fail the whole request
 
-        # Parse and validate numeric fields
+        # Parse numeric fields
         raw_distance = data.get('distance_cm')
         raw_proximity = data.get('proximity_value')
         raw_ambient = data.get('ambient_light')
@@ -403,60 +394,65 @@ def log_detection():
         # Get timestamp
         detected_at = datetime.utcnow().isoformat()
 
-        print(f"📝 Inserting detection: {object_detected} at {parsed_distance}cm")
-        
-        # ✅ CLEAN INSERT - Remove any fields that might cause conflicts
-        detection_log_clean = {
-            'device_id': device_id,
-            'obstacle_type': data.get('obstacle_type', obj_info['description']),
-            'object_detected': object_detected,
-            'object_category': obj_info['category'],
-            'distance_cm': parsed_distance,
-            'danger_level': danger_level,
-            'alert_type': alert_type,
-            'proximity_value': parsed_proximity,
-            'ambient_light': parsed_ambient,
+        # ✅ BUILD THE PAYLOAD - Keep it as detection_log for consistency
+        detection_log = {
+            'user_id': str(user_id),  # ✅ Ensure it's a string UUID
+            'device_id': str(device_id),
+            'obstacle_type': str(data.get('obstacle_type', obj_info['description']))[:255],
+            'object_detected': str(object_detected)[:255],
+            'object_category': str(obj_info['category'])[:255],
+            'danger_level': str(danger_level)[:255],
+            'alert_type': str(alert_type)[:255],
+            'detection_source': str(detection_source)[:255],
             'camera_enabled': bool(data.get('camera_enabled', False)),
-            'detection_source': detection_source,
-            'detection_confidence': parsed_confidence,
-            'image_url': image_url,
-            'detected_at': detected_at
-            # Don't include 'created_at' - let the database default handle it
+            'detected_at': str(detected_at)
         }
         
-        # Remove None values to avoid issues
-        detection_log_clean = {k: v for k, v in detection_log_clean.items() if v is not None}
+        # Add numeric fields only if valid
+        if parsed_distance is not None:
+            detection_log['distance_cm'] = float(parsed_distance)
         
-        print(f"🔍 Detection payload: {list(detection_log_clean.keys())}")
+        if parsed_proximity is not None and parsed_proximity > 0:
+            detection_log['proximity_value'] = int(parsed_proximity)
         
-        # ✅ Insert detection log with explicit method
+        if parsed_ambient is not None and parsed_ambient > 0:
+            detection_log['ambient_light'] = int(parsed_ambient)
+        
+        if parsed_confidence is not None:
+            detection_log['detection_confidence'] = float(parsed_confidence)
+        
+        if image_url:
+            detection_log['image_url'] = str(image_url)
+        
+        print(f"📝 Inserting detection: {object_detected} at {parsed_distance}cm")
+        print(f"🔍 Payload keys: {list(detection_log.keys())}")
+        print(f"🔍 user_id in payload: {detection_log.get('user_id')}")  # Debug
+        
+        # ✅ INSERT
         try:
             response = supabase.table('detection_logs')\
-                .insert(detection_log_clean)\
+                .insert(detection_log)\
                 .execute()
             
-            if not response.data:
-                print(f"❌ Detection insert returned no data")
-                print(f"   Response: {response}")
-                return jsonify({'error': 'Failed to log detection - no data returned'}), 500
+            if not response.data or len(response.data) == 0:
+                print(f"❌ Insert returned no data")
+                return jsonify({'error': 'Insert failed'}), 500
             
-            print(f"✅ Detection logged successfully!")
-            print(f"   ID: {response.data[0].get('id')}")
-            print(f"   Object: {object_detected} ({obj_info['icon']}) at {distance_cm}cm")
             detection_id = response.data[0]['id']
+            print(f"✅ Detection logged! ID: {detection_id}")
+            print(f"   Saved user_id: {response.data[0].get('user_id')}")  # Debug
             
         except Exception as db_error:
             print(f"❌ Database insert failed!")
             print(f"   Error: {db_error}")
-            print(f"   Error details: {getattr(db_error, '__dict__', {})}")
             import traceback
             traceback.print_exc()
             return jsonify({
-                'error': 'Database insert failed', 
+                'error': 'Database insert failed',
                 'details': str(db_error)
             }), 500
         
-        # ✅ Update statistics (OPTIONAL - don't fail if this fails)
+        # ✅ Update statistics (optional)
         try:
             print(f"📊 Updating statistics...")
             _update_user_statistics_safe(
@@ -467,20 +463,18 @@ def log_detection():
             print(f"✅ Statistics updated for user {user_id}")
         except Exception as stats_error:
             print(f"⚠️ Statistics update failed (non-critical): {stats_error}")
-            # Continue - statistics update is not critical
         
-        # ✅ Update device status (OPTIONAL - don't fail if this fails)
+        # ✅ Update device status (optional) - FIXED VARIABLE NAME
         try:
             print(f"🔄 Updating device status...")
             _update_device_status_safe(
                 device_id=device_id,
-                detection_log=detection_log,
+                detection_log=detection_log,  # ✅ FIXED: Use detection_log not detection_log_clean
                 detected_at=detected_at
             )
             print(f"✅ Device status updated")
         except Exception as status_error:
             print(f"⚠️ Device status update failed (non-critical): {status_error}")
-            # Continue - status update is not critical
         
         return jsonify({
             'message': 'Detection logged successfully',
@@ -492,10 +486,10 @@ def log_detection():
         }), 201
         
     except Exception as e:
-        print(f"❌ Detection log error: {e}")
+        print(f"❌ Error: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({'error': f'Failed to log detection: {str(e)}'}), 500
+        return jsonify({'error': str(e)}), 500
 
 # ========== STATISTICS UPDATE FUNCTION (NEW) ==========
 
