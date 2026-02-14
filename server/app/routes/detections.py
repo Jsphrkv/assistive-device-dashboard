@@ -407,8 +407,6 @@ def log_detection():
         
         # ✅ CLEAN INSERT - Remove any fields that might cause conflicts
         detection_log_clean = {
-            # Don't include 'id' - let the database auto-generate it
-            'user_id': user_id,
             'device_id': device_id,
             'obstacle_type': data.get('obstacle_type', obj_info['description']),
             'object_detected': object_detected,
