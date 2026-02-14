@@ -403,9 +403,12 @@ def log_detection():
         # Get timestamp
         detected_at = datetime.utcnow().isoformat()
 
-        # ✅ PREPARE DETECTION LOG WITH USER_ID
-        detection_log = {
-            'user_id': user_id,  # ✅ INCLUDES user_id
+        print(f"📝 Inserting detection: {object_detected} at {parsed_distance}cm")
+        
+        # ✅ CLEAN INSERT - Remove any fields that might cause conflicts
+        detection_log_clean = {
+            # Don't include 'id' - let the database auto-generate it
+            'user_id': user_id,
             'device_id': device_id,
             'obstacle_type': data.get('obstacle_type', obj_info['description']),
             'object_detected': object_detected,
@@ -420,26 +423,40 @@ def log_detection():
             'detection_confidence': parsed_confidence,
             'image_url': image_url,
             'detected_at': detected_at
+            # Don't include 'created_at' - let the database default handle it
         }
         
-        print(f"📝 Inserting detection: {object_detected} at {parsed_distance}cm")
+        # Remove None values to avoid issues
+        detection_log_clean = {k: v for k, v in detection_log_clean.items() if v is not None}
         
-        # ✅ Insert detection log (THIS MUST SUCCEED)
+        print(f"🔍 Detection payload: {list(detection_log_clean.keys())}")
+        
+        # ✅ Insert detection log with explicit method
         try:
-            response = supabase.table('detection_logs').insert(detection_log).execute()
+            response = supabase.table('detection_logs')\
+                .insert(detection_log_clean)\
+                .execute()
             
             if not response.data:
                 print(f"❌ Detection insert returned no data")
+                print(f"   Response: {response}")
                 return jsonify({'error': 'Failed to log detection - no data returned'}), 500
             
-            print(f"✅ Detection logged: {object_detected} ({obj_info['icon']}) at {distance_cm}cm")
+            print(f"✅ Detection logged successfully!")
+            print(f"   ID: {response.data[0].get('id')}")
+            print(f"   Object: {object_detected} ({obj_info['icon']}) at {distance_cm}cm")
             detection_id = response.data[0]['id']
             
         except Exception as db_error:
-            print(f"❌ Database insert failed: {db_error}")
+            print(f"❌ Database insert failed!")
+            print(f"   Error: {db_error}")
+            print(f"   Error details: {getattr(db_error, '__dict__', {})}")
             import traceback
             traceback.print_exc()
-            return jsonify({'error': f'Database insert failed: {str(db_error)}'}), 500
+            return jsonify({
+                'error': 'Database insert failed', 
+                'details': str(db_error)
+            }), 500
         
         # ✅ Update statistics (OPTIONAL - don't fail if this fails)
         try:
@@ -640,7 +657,7 @@ def _update_device_status_safe(device_id, detection_log, detected_at):
         
     except Exception as e:
         print(f"⚠️ Device status update error (non-critical): {e}")
-        
+
 # ========== HELPER FUNCTIONS ==========
 
 def _upload_image_to_supabase(device_id, image_base64):
