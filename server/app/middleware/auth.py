@@ -33,60 +33,86 @@ def token_required(f):
     return decorated
 
 def device_token_required(f):
-    """Decorator to require valid device token (for Raspberry Pi)"""
+    """
+    Middleware to verify device token from X-Device-Token header
+    IMPROVED VERSION WITH EXTENSIVE LOGGING
+    """
+    from functools import wraps
+    from flask import request, jsonify
+    from app.services.supabase_client import get_supabase
+    
     @wraps(f)
     def decorated(*args, **kwargs):
-        token = None
+        print(f"\n{'='*60}")
+        print(f"[DEVICE AUTH] Authenticating request to {request.path}")
+        print(f"{'='*60}")
         
-        # Get token from header
-        if 'X-Device-Token' in request.headers:
-            token = request.headers['X-Device-Token']
-        elif 'Authorization' in request.headers:
-            auth_header = request.headers['Authorization']
-            try:
-                token = auth_header.split(' ')[1]
-            except IndexError:
-                return jsonify({'error': 'Invalid token format'}), 401
+        # Check for token in header
+        auth_header = request.headers.get('X-Device-Token', '')
+        print(f"📋 Headers received:")
+        for key, value in request.headers:
+            if key.lower() in ['x-device-token', 'authorization', 'content-type']:
+                if 'token' in key.lower():
+                    print(f"   {key}: {value[:20]}..." if len(value) > 20 else f"   {key}: {value}")
+                else:
+                    print(f"   {key}: {value}")
         
-        if not token:
-            return jsonify({'error': 'Device token is missing'}), 401
+        if not auth_header:
+            print(f"❌ [DEVICE AUTH] No X-Device-Token header found!")
+            return jsonify({'error': 'Device token required'}), 401
         
-        # Verify token exists in database
-        from app.services.supabase_client import get_supabase
-        supabase = get_supabase()
+        device_token = auth_header.replace('Bearer ', '').strip()
+        print(f"🔑 [DEVICE AUTH] Token received: {device_token[:20]}...")
         
         try:
-            device = supabase.table('user_devices')\
+            # Look up device by token
+            supabase = get_supabase()
+            print(f"🔍 [DEVICE AUTH] Querying database for device with this token...")
+            
+            response = supabase.table('user_devices')\
                 .select('*')\
-                .eq('device_token', token)\
-                .eq('is_active', True)\
-                .maybe_single()\
+                .eq('device_token', device_token)\
                 .execute()
+            
+            print(f"📊 [DEVICE AUTH] Query result: {len(response.data) if response.data else 0} devices found")
+            
+            if not response.data or len(response.data) == 0:
+                print(f"❌ [DEVICE AUTH] No device found with this token!")
+                print(f"   Possible reasons:")
+                print(f"   - Token is invalid or expired")
+                print(f"   - Device was deleted from database")
+                print(f"   - Token doesn't match any device_token in user_devices table")
+                return jsonify({'error': 'Invalid device token'}), 401
+            
+            device = response.data[0]
+            print(f"✅ [DEVICE AUTH] Device found!")
+            print(f"   Device ID: {device['id']}")
+            print(f"   Device Name: {device.get('device_name', 'Unknown')}")
+            print(f"   Status: {device.get('status', 'Unknown')}")
+            print(f"   User ID: {device.get('user_id', 'Unknown')}")
+            
+            # Check if device is active
+            if device.get('status') != 'active':
+                print(f"⚠️  [DEVICE AUTH] Device is not active (status: {device.get('status')})")
+                print(f"   Allowing anyway, but device should be activated")
+            
+            # Set device in request context
+            request.current_device = device
+            print(f"✅ [DEVICE AUTH] Authentication successful!")
+            print(f"   request.current_device set to: {device['id']}")
+            print(f"{'='*60}\n")
+            
+            # Call the actual route handler
+            return f(*args, **kwargs)
+            
         except Exception as e:
-            print(f"❌ Database error in device auth: {e}")
-            return jsonify({'error': 'Database error'}), 500
-        
-        # ✅ FIX: Check if device is None OR device.data is None
-        if not device or not device.data:
-            print(f"⚠️  Invalid device token attempt")
-            return jsonify({'error': 'Invalid or inactive device token'}), 401
-        
-        # Update last_seen timestamp
-        try:
-            supabase.table('user_devices')\
-                .update({
-                    'last_seen': 'now()',
-                    'status': 'active'
-                })\
-                .eq('id', device.data['id'])\
-                .execute()
-        except Exception as e:
-            print(f"⚠️  Failed to update last_seen: {e}")
-        
-        # Add device info to request context
-        request.current_device = device.data
-        
-        return f(*args, **kwargs)
+            print(f"❌ [DEVICE AUTH] Error during authentication!")
+            print(f"   Error type: {type(e).__name__}")
+            print(f"   Error message: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            print(f"{'='*60}\n")
+            return jsonify({'error': 'Authentication failed'}), 500
     
     return decorated
 
