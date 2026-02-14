@@ -18,20 +18,24 @@ def get_user_device_ids(user_id, user_role, supabase):
     device_ids = [device['id'] for device in user_devices.data]
     return device_ids if device_ids else ['no-devices']
 
-@statistics_bp.route('/daily', methods=['GET'])
+# ✅ REMOVED DUPLICATE - Keep only the parameterized version below
+    
+@statistics_bp.route('/daily/<int:days>', methods=['GET'])
 @token_required
-def get_daily_statistics():
-    """Get daily statistics for current user's devices using daily_statistics table"""
+def get_daily_stats(days):
+    """
+    Get daily statistics for current user
+    ✅ FIXED: Now transforms data to match frontend expectations
+    """
     try:
         user_id = request.current_user['user_id']
-        user_role = request.current_user['role']
-        days = request.args.get('days', 7, type=int)
+        user_role = request.current_user.get('role', 'user')
         
         supabase = get_supabase()
         
-        print(f"📊 Fetching daily stats for user {user_id} (role: {user_role})")
+        print(f"📊 Fetching daily stats for user {user_id} (last {days} days)")
         
-        # ✅ Use daily_statistics table
+        # ✅ Query daily_statistics table
         if user_role == 'admin':
             response = supabase.table('daily_statistics')\
                 .select('*')\
@@ -48,63 +52,50 @@ def get_daily_statistics():
         
         print(f"📊 Found {len(response.data)} daily statistics records")
         
-        # ✅ Transform to match chart format (AlertsChart expects 'alerts' key)
+        # ✅ Transform to match chart format
         result = []
         for row in response.data:
             result.append({
-                'date': row['stat_date'],
-                'alerts': row.get('total_alerts', 0),  # ✅ Key name for chart
+                'stat_date': row['stat_date'],  # Keep original
+                'date': row['stat_date'],       # For chart
+                'total_alerts': row.get('total_alerts', 0),  # Keep original
+                'alerts': row.get('total_alerts', 0),        # For chart
                 'high': row.get('high_priority', 0),
                 'medium': row.get('medium_priority', 0),
-                'low': row.get('low_priority', 0),
-                'total': row.get('total_alerts', 0)
+                'low': row.get('low_priority', 0)
             })
         
         # Sort by date ascending for chart display
         result.sort(key=lambda x: x['date'])
         
-        print(f"✅ Returning {len(result)} days: {[d['date'] for d in result]}")
+        print(f"✅ Returning {len(result)} days")
+        if result:
+            print(f"   Sample: {result[0]}")
+        
         return jsonify({'data': result}), 200
         
     except Exception as e:
-        print(f"❌ Get daily statistics error: {str(e)}")
+        print(f"❌ Get daily stats error: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({'error': 'Failed to get daily statistics'}), 500
-    
-@statistics_bp.route('/daily/<int:days>', methods=['GET'])
-@token_required
-def get_daily_stats(days):
-    try:
-        user_id = request.current_user['user_id']
-        supabase = get_supabase()
-        
-        # ✅ Use daily_statistics (not daily_stats)
-        response = supabase.table('daily_statistics')\
-            .select('*')\
-            .eq('user_id', user_id)\
-            .order('stat_date', desc=True)\
-            .limit(days)\
-            .execute()
-        
-        return jsonify({'data': response.data}), 200
-    except Exception as e:
-        print(f"Error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @statistics_bp.route('/obstacles', methods=['GET'])
 @token_required
 def get_obstacle_statistics():
-    """Get obstacle statistics for current user using obstacle_statistics table"""
+    """
+    Get obstacle statistics for current user
+    ✅ FIXED: Transforms data correctly for PieChart
+    """
     try:
         user_id = request.current_user['user_id']
-        user_role = request.current_user['role']
+        user_role = request.current_user.get('role', 'user')
         
         supabase = get_supabase()
         
         print(f"📊 Fetching obstacle stats for user {user_id}")
         
-        # ✅ Use obstacle_statistics table
+        # ✅ Query obstacle_statistics table
         if user_role == 'admin':
             response = supabase.table('obstacle_statistics')\
                 .select('*')\
@@ -121,21 +112,26 @@ def get_obstacle_statistics():
         
         print(f"📊 Found {len(response.data)} obstacle types")
         
-        # ✅ Transform to match chart format (PieChart expects 'name' and 'value')
+        # ✅ Transform to match PieChart format
         result = []
         for row in response.data:
             result.append({
-                'name': row['obstacle_type'],  # ✅ For pie chart label
-                'value': row['total_count'],   # ✅ For pie chart value
-                'count': row['total_count'],   # ✅ Backup
+                'obstacle_type': row['obstacle_type'],  # Keep original
+                'name': row['obstacle_type'],           # For chart label
+                'total_count': row['total_count'],      # Keep original
+                'value': row['total_count'],            # For chart value
+                'count': row['total_count'],            # Backup
                 'percentage': row.get('percentage', 0)
             })
         
-        print(f"✅ Returning obstacles: {[(r['name'], r['value']) for r in result]}")
+        print(f"✅ Returning obstacles:")
+        for r in result[:3]:
+            print(f"   {r['name']}: {r['value']}")
+        
         return jsonify({'data': result}), 200
         
     except Exception as e:
-        print(f"❌ Get obstacle statistics error: {str(e)}")
+        print(f"❌ Get obstacle statistics error: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'Failed to get obstacle statistics'}), 500
@@ -144,16 +140,19 @@ def get_obstacle_statistics():
 @statistics_bp.route('/hourly', methods=['GET'])
 @token_required
 def get_hourly_patterns():
-    """Get hourly detection patterns using hourly_patterns table"""
+    """
+    Get hourly detection patterns
+    ✅ FIXED: Transforms data correctly for BarChart
+    """
     try:
         user_id = request.current_user['user_id']
-        user_role = request.current_user['role']
+        user_role = request.current_user.get('role', 'user')
         
         supabase = get_supabase()
         
         print(f"📊 Fetching hourly patterns for user {user_id}")
         
-        # ✅ Use hourly_patterns table
+        # ✅ Query hourly_patterns table
         if user_role == 'admin':
             response = supabase.table('hourly_patterns')\
                 .select('*')\
@@ -168,35 +167,42 @@ def get_hourly_patterns():
         
         print(f"📊 Found {len(response.data)} hourly records")
         
-        # ✅ Transform to match chart format (BarChart expects 'hour' and 'detections')
+        # ✅ Transform to match BarChart format
         result = []
         for row in response.data:
-            # Convert "12PM" to "12:00" format
             hour_str = row['hour_range']
             
             result.append({
-                'hour': hour_str,  # ✅ Keep original format like "12PM", "9AM"
-                'detections': row.get('detection_count', 0),  # ✅ For bar height
-                'count': row.get('detection_count', 0)  # ✅ Backup
+                'hour_range': hour_str,                      # Keep original
+                'hour': hour_str,                            # For chart X-axis
+                'detection_count': row.get('detection_count', 0),  # Keep original
+                'detections': row.get('detection_count', 0),       # For chart bar height
+                'count': row.get('detection_count', 0)       # Backup
             })
         
-        # Sort by hour (convert to 24h for sorting, then convert back)
+        # Sort by hour (convert to 24h for sorting)
         def parse_hour(hour_str):
             """Convert '12PM' to 12, '9AM' to 9, etc."""
-            hour_num = int(hour_str.replace('AM', '').replace('PM', ''))
-            if 'PM' in hour_str and hour_num != 12:
-                hour_num += 12
-            elif 'AM' in hour_str and hour_num == 12:
-                hour_num = 0
-            return hour_num
+            try:
+                hour_num = int(''.join(filter(str.isdigit, hour_str)))
+                if 'PM' in hour_str and hour_num != 12:
+                    hour_num += 12
+                elif 'AM' in hour_str and hour_num == 12:
+                    hour_num = 0
+                return hour_num
+            except:
+                return 0
         
         result.sort(key=lambda x: parse_hour(x['hour']))
         
-        print(f"✅ Returning hourly data: {[(r['hour'], r['detections']) for r in result[:5]]}...")
+        print(f"✅ Returning hourly data:")
+        for r in result[:5]:
+            print(f"   {r['hour']}: {r['detections']} detections")
+        
         return jsonify({'data': result}), 200
         
     except Exception as e:
-        print(f"❌ Get hourly patterns error: {str(e)}")
+        print(f"❌ Get hourly patterns error: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'Failed to get hourly patterns'}), 500
@@ -208,7 +214,7 @@ def get_ml_statistics():
     """Get ML statistics summary for current user"""
     try:
         user_id = request.current_user['user_id']
-        user_role = request.current_user['role']
+        user_role = request.current_user.get('role', 'user')
         
         supabase = get_supabase()
         
@@ -236,14 +242,12 @@ def get_ml_statistics():
                 }
             }), 200
         
-        # ✅ Filter detection_logs by user's devices
+        # ✅ Get total detections count
         if user_role == 'admin':
-            # Admin sees everything
             total_response = supabase.table('detection_logs')\
                 .select('*', count='exact')\
                 .execute()
         else:
-            # User sees only their devices' data
             total_response = supabase.table('detection_logs')\
                 .select('*', count='exact')\
                 .in_('device_id', device_ids)\
@@ -319,7 +323,7 @@ def get_ml_statistics():
         }), 200
         
     except Exception as e:
-        print(f"❌ Get ML statistics error: {str(e)}")
+        print(f"❌ Get ML statistics error: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'Failed to get ML statistics'}), 500
