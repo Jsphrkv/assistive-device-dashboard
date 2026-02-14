@@ -117,13 +117,28 @@ export const detectionsAPI = {
 
 export const statisticsAPI = {
   getDaily: async (days = 7) => {
-    const response = await api.get(`/statistics/daily?days=${days}`);
-    return response; // Return full response like the others
+    const response = await axios.get(`/api/statistics/daily/${days}`);
+    console.log("🔍 Daily API response:", response.data);
+    return response;
   },
 
-  getObstacles: () => api.get("/statistics/obstacles"),
-  getHourly: () => api.get("/statistics/hourly"),
-  getSummary: () => api.get("/statistics/summary"),
+  getObstacles: async () => {
+    const response = await axios.get("/api/statistics/obstacles");
+    console.log("🔍 Obstacles API response:", response.data);
+    return response;
+  },
+
+  getHourly: async () => {
+    const response = await axios.get("/api/statistics/hourly");
+    console.log("🔍 Hourly API response:", response.data);
+    return response;
+  },
+
+  getSummary: async () => {
+    const response = await axios.get("/api/statistics/summary");
+    console.log("🔍 Summary API response:", response.data);
+    return response;
+  },
 };
 
 export const settingsAPI = {

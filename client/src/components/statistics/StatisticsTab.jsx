@@ -28,10 +28,8 @@ const StatisticsTab = ({ deviceId }) => {
     setError(null);
 
     try {
-      // Fetch all statistics in parallel
       const [dailyRes, obstaclesRes, hourlyRes, summaryRes] = await Promise.all(
         [
-          // ✅ FIXED: Use correct table names
           statisticsAPI.getDaily(7).catch((err) => {
             console.error("Daily stats error:", err);
             return { data: { data: [] } };
@@ -51,7 +49,6 @@ const StatisticsTab = ({ deviceId }) => {
         ],
       );
 
-      // Extract raw data
       const dailyRaw = dailyRes.data?.data || [];
       const obstaclesRaw = obstaclesRes.data?.data || [];
       const hourlyRaw = hourlyRes.data?.data || [];
@@ -61,20 +58,23 @@ const StatisticsTab = ({ deviceId }) => {
       console.log("📊 Raw hourly data from API:", hourlyRaw);
       console.log("📊 Raw obstacles data from API:", obstaclesRaw);
 
-      // ✅ Transform data to match chart expectations
+      // Transform daily data
       const transformedDaily = dailyRaw.map((item) => ({
         date: item.stat_date || item.date,
         alerts: item.total_alerts || item.alerts || 0,
       }));
 
+      // Transform hourly data
       const transformedHourly = hourlyRaw.map((item) => ({
         hour: item.hour_range || item.hour,
         detections: item.detection_count || item.detections || 0,
       }));
 
+      // ✅ FIX: Use "value" instead of "count" for the pie chart
       const transformedObstacles = obstaclesRaw.map((item) => ({
-        name: item.obstacle_type || item.object_detected || item.name,
-        count: item.total_count || item.count || 0,
+        name:
+          item.obstacle_type || item.object_detected || item.name || "unknown",
+        value: item.total_count || item.count || 0, // ✅ Changed from "count" to "value"
       }));
 
       console.log("📊 Transformed daily data:", transformedDaily);
