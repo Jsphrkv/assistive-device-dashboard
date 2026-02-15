@@ -233,7 +233,7 @@ def get_anomalies():
                 .execute()
         else:
             ml_response = supabase.table('ml_predictions')\
-                .select('*, user_devices(device_name, users(username))')\
+                .select('*, user_devices(device_name)')\
                 .eq('is_anomaly', True)\
                 .order('created_at', desc=True)\
                 .limit(limit)\
