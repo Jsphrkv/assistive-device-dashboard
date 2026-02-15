@@ -4,7 +4,6 @@ from .device import (
     DeviceUpdate,
     DeviceTelemetry,
     DeviceMaintenanceInfo,
-    DeviceSensorData,
     DeviceAnalysisRequest
 )
 
@@ -33,7 +32,6 @@ __all__ = [
     'DeviceUpdate',
     'DeviceTelemetry',
     'DeviceMaintenanceInfo',
-    'DeviceSensorData',
     'DeviceAnalysisRequest',
 
     # Detection schemas (5 models)
