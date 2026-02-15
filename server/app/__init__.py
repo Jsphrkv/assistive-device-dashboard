@@ -96,7 +96,23 @@ def create_app(config_name=None):
             response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Device-Token'
             response.headers['Access-Control-Allow-Credentials'] = 'true'
         return response
-
+    
+    @app.route('/')
+    def root():
+        """Root endpoint - API health check"""
+        return {
+            'status': 'online',
+            'service': 'Assistive Device Backend API',
+            'version': '1.0.0',
+            'endpoints': {
+                'devices': '/api/devices',
+                'detections': '/api/detections',
+                'statistics': '/api/statistics',
+                'ml': '/api/ml',
+                'ml_history': '/api/ml-history'
+            }
+        }, 200
+    
     # Health check endpoint
     @app.route('/health')
     def health_check():

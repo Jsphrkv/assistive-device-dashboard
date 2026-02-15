@@ -1,224 +1,167 @@
+"""
+Train Environment Classification Model
+"""
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-
-import pandas as pd
+import joblib
 import numpy as np
+from pathlib import Path
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.multioutput import MultiOutputClassifier
-from app.ml_training.utils import (
-    DataPreprocessor, ModelEvaluator, ModelSaver, generate_synthetic_data
-)
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
 
-def train_environment_classifier_model(data_path=None, use_synthetic=True):
-    """
-    Train environment classification model
-    Classifies environment type, lighting, and complexity from sensor patterns
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+def generate_synthetic_data(n_samples=500):
+    """Generate synthetic environment classification data"""
+    np.random.seed(42)
     
-    Args:
-        data_path: Path to CSV file with training data
-        use_synthetic: Generate synthetic data if no file provided
-    """
-    print("="*60)
-    print("ENVIRONMENT CLASSIFICATION MODEL TRAINING")
-    print("="*60)
+    samples_per_env = n_samples // 5
+    all_X = []
+    all_y = []
     
-    # Load or generate data
-    if use_synthetic or data_path is None:
-        print("\n📊 Generating synthetic training data...")
-        df = generate_synthetic_data(n_samples=5000, dataset_type='environment_classification')
-        print(f"✓ Generated {len(df)} samples")
-    else:
-        print(f"\n📊 Loading data from: {data_path}")
-        df = pd.read_csv(data_path)
-        print(f"✓ Loaded {len(df)} samples")
+    for env_type in range(5):  # 0=indoor, 1=outdoor, 2=crowded, 3=open_space, 4=narrow_corridor
+        if env_type == 0:  # indoor
+            ambient_light = np.random.uniform(200, 600, samples_per_env)
+            light_var = np.random.uniform(10, 50, samples_per_env)
+            detect_freq = np.random.uniform(1, 5, samples_per_env)
+            avg_dist = np.random.uniform(50, 200, samples_per_env)
+            complexity = np.random.uniform(3, 7, samples_per_env)
+            dist_var = np.random.uniform(30, 100, samples_per_env)
+            lighting = np.random.choice([0, 1], samples_per_env, p=[0.7, 0.3])  # 0=bright, 1=dim
+            complex_level = np.random.choice([0, 1, 2], samples_per_env, p=[0.2, 0.6, 0.2])  # 0=simple, 1=moderate, 2=complex
+            
+        elif env_type == 1:  # outdoor
+            ambient_light = np.random.uniform(500, 2000, samples_per_env)
+            light_var = np.random.uniform(100, 500, samples_per_env)
+            detect_freq = np.random.uniform(0.5, 3, samples_per_env)
+            avg_dist = np.random.uniform(100, 400, samples_per_env)
+            complexity = np.random.uniform(2, 5, samples_per_env)
+            dist_var = np.random.uniform(100, 300, samples_per_env)
+            lighting = np.random.choice([0, 1], samples_per_env, p=[0.8, 0.2])
+            complex_level = np.random.choice([0, 1], samples_per_env, p=[0.6, 0.4])
+            
+        elif env_type == 2:  # crowded
+            ambient_light = np.random.uniform(150, 700, samples_per_env)
+            light_var = np.random.uniform(20, 80, samples_per_env)
+            detect_freq = np.random.uniform(5, 15, samples_per_env)
+            avg_dist = np.random.uniform(30, 150, samples_per_env)
+            complexity = np.random.uniform(7, 10, samples_per_env)
+            dist_var = np.random.uniform(50, 150, samples_per_env)
+            lighting = np.random.choice([0, 1, 2], samples_per_env, p=[0.4, 0.4, 0.2])  # 2=dark
+            complex_level = np.random.choice([1, 2], samples_per_env, p=[0.3, 0.7])
+            
+        elif env_type == 3:  # open_space
+            ambient_light = np.random.uniform(400, 1500, samples_per_env)
+            light_var = np.random.uniform(80, 300, samples_per_env)
+            detect_freq = np.random.uniform(0.2, 2, samples_per_env)
+            avg_dist = np.random.uniform(150, 400, samples_per_env)
+            complexity = np.random.uniform(1, 4, samples_per_env)
+            dist_var = np.random.uniform(100, 250, samples_per_env)
+            lighting = np.random.choice([0], samples_per_env)
+            complex_level = np.random.choice([0], samples_per_env)
+            
+        else:  # narrow_corridor
+            ambient_light = np.random.uniform(100, 400, samples_per_env)
+            light_var = np.random.uniform(5, 30, samples_per_env)
+            detect_freq = np.random.uniform(2, 8, samples_per_env)
+            avg_dist = np.random.uniform(40, 120, samples_per_env)
+            complexity = np.random.uniform(4, 8, samples_per_env)
+            dist_var = np.random.uniform(20, 60, samples_per_env)
+            lighting = np.random.choice([0, 1, 2], samples_per_env, p=[0.3, 0.5, 0.2])
+            complex_level = np.random.choice([1, 2], samples_per_env, p=[0.5, 0.5])
+        
+        X_part = np.column_stack([ambient_light, light_var, detect_freq, avg_dist, complexity, dist_var])
+        y_part = np.column_stack([
+            np.full(samples_per_env, env_type),
+            lighting,
+            complex_level
+        ])
+        
+        all_X.append(X_part)
+        all_y.append(y_part)
     
-    # Display data info
-    print(f"\n📋 Dataset Info:")
-    print(f"   Columns: {list(df.columns)}")
-    print(f"   Shape: {df.shape}")
+    X = np.vstack(all_X)
+    y = np.vstack(all_y)
     
-    # Define features
-    feature_columns = [
-        'ambient_light_avg',
-        'ambient_light_variance',
-        'detection_frequency',
-        'average_obstacle_distance',
-        'proximity_pattern_complexity',
-        'distance_variance'
-    ]
+    # Shuffle
+    shuffle_idx = np.random.permutation(len(X))
+    return X[shuffle_idx], y[shuffle_idx]
+
+def train_model():
+    """Train and save environment classification model"""
+    print("=" * 60)
+    print("Training Environment Classification Model")
+    print("=" * 60)
     
-    # Three target columns (multi-output classification)
-    target_columns = [
-        'environment_type',     # indoor/outdoor/crowded/open/corridor
-        'lighting_condition',   # bright/dim/dark
-        'complexity_level'      # simple/moderate/complex
-    ]
+    # Generate data
+    X, y = generate_synthetic_data()
+    print(f"✓ Generated {len(X)} samples")
     
-    print(f"\n🔧 Feature columns: {feature_columns}")
-    print(f"🎯 Target columns: {target_columns}")
-    
-    # Prepare data
-    print("\n⚙️  Preprocessing data...")
-    from sklearn.model_selection import train_test_split
-    from sklearn.preprocessing import LabelEncoder
-    
-    preprocessor = DataPreprocessor()
-    
-    X = df[feature_columns]
-    
-    # Encode each target separately
-    encoders = {}
-    y_encoded = {}
-    
-    for target in target_columns:
-        encoder = LabelEncoder()
-        y_encoded[target] = encoder.fit_transform(df[target])
-        encoders[target] = encoder
-        print(f"   {target} classes: {encoder.classes_}")
-    
-    # Combine targets into matrix
-    y = np.column_stack([y_encoded[target] for target in target_columns])
-    
+    # Split data
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42
     )
     
     # Scale features
-    X_train_scaled = preprocessor.scaler.fit_transform(X_train)
-    X_test_scaled = preprocessor.scaler.transform(X_test)
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+    print("✓ Scaled features")
     
-    print(f"\n✓ Training set: {X_train_scaled.shape}")
-    print(f"✓ Test set: {X_test_scaled.shape}")
-    print(f"✓ Targets: {y.shape}")
-    
-    # Train Multi-Output Random Forest
-    print("\n🤖 Training Multi-Output Random Forest Classifier...")
+    # Train multi-output model
     base_model = RandomForestClassifier(
         n_estimators=100,
         max_depth=10,
-        min_samples_split=5,
-        min_samples_leaf=2,
         random_state=42,
         n_jobs=-1
     )
     
     model = MultiOutputClassifier(base_model, n_jobs=-1)
     model.fit(X_train_scaled, y_train)
-    print("✓ Model training complete!")
+    print("✓ Model trained")
     
-    # Evaluate model
-    print("\n📊 Evaluating model performance...")
+    # Evaluate
+    from sklearn.metrics import accuracy_score
     y_pred = model.predict(X_test_scaled)
     
-    from sklearn.metrics import accuracy_score, classification_report
-    
-    for i, target in enumerate(target_columns):
+    target_names = ['Environment Type', 'Lighting Condition', 'Complexity Level']
+    for i, name in enumerate(target_names):
         accuracy = accuracy_score(y_test[:, i], y_pred[:, i])
-        print(f"\n📈 {target.upper()} Performance:")
-        print(f"   Accuracy: {accuracy:.4f}")
-        print(f"\n   Classification Report:")
-        print(classification_report(
-            y_test[:, i],
-            y_pred[:, i],
-            target_names=encoders[target].classes_,
-            zero_division=0
-        ))
+        print(f"\n✓ {name} Accuracy: {accuracy:.4f}")
     
-    # Overall accuracy
-    overall_accuracy = np.mean([
-        accuracy_score(y_test[:, i], y_pred[:, i]) 
-        for i in range(len(target_columns))
-    ])
-    print(f"\n📊 Overall Average Accuracy: {overall_accuracy:.4f}")
+    overall_accuracy = np.mean([accuracy_score(y_test[:, i], y_pred[:, i]) for i in range(3)])
+    print(f"\n✓ Overall Accuracy: {overall_accuracy:.4f}")
     
-    # Feature importance (from first output)
-    print("\n📈 Feature Importance:")
-    first_estimator = model.estimators_[0]
-    feature_importance = pd.DataFrame({
-        'feature': feature_columns,
-        'importance': first_estimator.feature_importances_
-    }).sort_values('importance', ascending=False)
-    print(feature_importance.to_string(index=False))
+    # Save model
+    models_dir = Path(__file__).parent.parent / 'ml_models' / 'saved_models'
+    models_dir.mkdir(parents=True, exist_ok=True)
     
-    # Save model with encoders
-    print("\n💾 Saving model...")
-    
-    model_with_encoders = {
+    model_path = models_dir / 'environment_classification_model.joblib'
+    joblib.dump({
         'model': model,
-        'encoders': encoders
-    }
-    
-    metrics = {
-        'overall_accuracy': overall_accuracy,
-        'individual_accuracies': {
-            target: accuracy_score(y_test[:, i], y_pred[:, i])
-            for i, target in enumerate(target_columns)
-        }
-    }
-    
-    ModelSaver.save_model(
-        model=model_with_encoders,
-        scaler=preprocessor.scaler,
-        model_name='environment_classifier_model',
-        metrics=metrics
-    )
-    
-    print("\n✅ Environment classification model training complete!")
-    print("="*60)
-    
-    return model_with_encoders, preprocessor.scaler, metrics
-
-
-if __name__ == "__main__":
-    # Train the model
-    model, scaler, metrics = train_environment_classifier_model(use_synthetic=True)
+        'scaler': scaler
+    }, model_path)
+    print(f"\n✓ Model saved to {model_path}")
     
     # Test prediction
-    print("\n🧪 Testing prediction on sample data...")
+    test_sample = [[400, 200, 10, 80, 15, 30]]  # Crowded indoor
+    test_scaled = scaler.transform(test_sample)
+    prediction = model.predict(test_scaled)[0]
     
-    # Test cases
-    test_cases = [
-        {
-            'name': 'Bright outdoor open space',
-            'data': np.array([[800, 100, 0.5, 500, 2, 200]])  # High light, low variance, few detections
-        },
-        {
-            'name': 'Dark indoor corridor',
-            'data': np.array([[150, 50, 5.0, 100, 8, 50]])  # Low light, high detection freq, narrow
-        },
-        {
-            'name': 'Crowded indoor area',
-            'data': np.array([[400, 200, 10.0, 80, 15, 30]])  # Medium light, very high detection freq
-        },
-        {
-            'name': 'Dim outdoor area',
-            'data': np.array([[250, 150, 2.0, 300, 5, 100]])  # Medium-low light, moderate detections
-        }
-    ]
+    env_types = ['indoor', 'outdoor', 'crowded', 'open_space', 'narrow_corridor']
+    lighting = ['bright', 'dim', 'dark']
+    complexity = ['simple', 'moderate', 'complex']
     
-    for test_case in test_cases:
-        test_sample = test_case['data']
-        test_sample_scaled = scaler.transform(test_sample.reshape(1, -1))
-        
-        # Get predictions
-        predictions = model['model'].predict(test_sample_scaled)[0]
-        
-        # Decode predictions
-        environment_type = model['encoders']['environment_type'].inverse_transform([predictions[0]])[0]
-        lighting = model['encoders']['lighting_condition'].inverse_transform([predictions[1]])[0]
-        complexity = model['encoders']['complexity_level'].inverse_transform([predictions[2]])[0]
-        
-        # Get probabilities (average across all estimators)
-        env_probs = np.mean([est.predict_proba(test_sample_scaled)[0] for est in model['model'].estimators_[0].estimators_], axis=0)
-        confidence = float(np.max(env_probs))
-        
-        print(f"\n{test_case['name']}:")
-        print(f"  Ambient light avg: {test_sample[0]:.0f}")
-        print(f"  Detection frequency: {test_sample[2]:.1f}/min")
-        print(f"  Average distance: {test_sample[3]:.0f}cm")
-        print(f"\n  Predictions:")
-        print(f"    Environment: {environment_type}")
-        print(f"    Lighting: {lighting}")
-        print(f"    Complexity: {complexity}")
-        print(f"    Confidence: {confidence:.2%}")
+    print(f"\n✓ Test prediction:")
+    print(f"   Environment: {env_types[prediction[0]]}")
+    print(f"   Lighting: {lighting[prediction[1]]}")
+    print(f"   Complexity: {complexity[prediction[2]]}")
+    
+    print("=" * 60)
+    print("✅ Environment Classification Model Training Complete!")
+    print("=" * 60)
+
+if __name__ == '__main__':
+    train_model()

@@ -1,142 +1,138 @@
+"""
+Train Object Detection Model
+"""
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-
-import pandas as pd
+import joblib
 import numpy as np
+from pathlib import Path
 from sklearn.ensemble import RandomForestClassifier
-from app.ml_training.utils import (
-    DataPreprocessor, ModelEvaluator, ModelSaver, generate_synthetic_data
-)
+from sklearn.preprocessing import StandardScaler, LabelEncoder
 
-def train_object_detection_model(data_path=None, use_synthetic=True):
-    """
-    Train object/obstacle detection and classification model
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+def generate_synthetic_data(n_samples=800):
+    """Generate synthetic object detection data"""
+    np.random.seed(42)
     
-    Args:
-        data_path: Path to CSV file with training data
-        use_synthetic: Generate synthetic data if no file provided
-    """
-    print("="*60)
-    print("OBJECT DETECTION MODEL TRAINING")
-    print("="*60)
+    # Object types: 0=obstacle, 1=person, 2=vehicle, 3=wall, 4=stairs, 5=door, 6=pole
+    samples_per_type = n_samples // 7
+    all_data = []
     
-    # Load or generate data
-    if use_synthetic or data_path is None:
-        print("\n📊 Generating synthetic training data...")
-        df = generate_synthetic_data(n_samples=5000, dataset_type='object_detection')
-        print(f"✓ Generated {len(df)} samples")
-    else:
-        print(f"\n📊 Loading data from: {data_path}")
-        df = pd.read_csv(data_path)
-        print(f"✓ Loaded {len(df)} samples")
+    for obj_type in range(7):
+        if obj_type == 0:  # obstacle
+            distance = np.random.uniform(10, 300, samples_per_type)
+            confidence = np.random.uniform(0.6, 0.95, samples_per_type)
+            proximity = np.random.uniform(500, 8000, samples_per_type)
+            ambient = np.random.uniform(100, 1000, samples_per_type)
+        elif obj_type == 1:  # person
+            distance = np.random.uniform(50, 250, samples_per_type)
+            confidence = np.random.uniform(0.75, 0.98, samples_per_type)
+            proximity = np.random.uniform(3000, 12000, samples_per_type)
+            ambient = np.random.uniform(200, 800, samples_per_type)
+        elif obj_type == 2:  # vehicle
+            distance = np.random.uniform(100, 400, samples_per_type)
+            confidence = np.random.uniform(0.7, 0.95, samples_per_type)
+            proximity = np.random.uniform(1000, 5000, samples_per_type)
+            ambient = np.random.uniform(300, 1200, samples_per_type)
+        elif obj_type == 3:  # wall
+            distance = np.random.uniform(20, 150, samples_per_type)
+            confidence = np.random.uniform(0.85, 0.99, samples_per_type)
+            proximity = np.random.uniform(10000, 20000, samples_per_type)
+            ambient = np.random.uniform(100, 600, samples_per_type)
+        elif obj_type == 4:  # stairs
+            distance = np.random.uniform(30, 200, samples_per_type)
+            confidence = np.random.uniform(0.65, 0.90, samples_per_type)
+            proximity = np.random.uniform(5000, 15000, samples_per_type)
+            ambient = np.random.uniform(150, 700, samples_per_type)
+        elif obj_type == 5:  # door
+            distance = np.random.uniform(50, 180, samples_per_type)
+            confidence = np.random.uniform(0.75, 0.95, samples_per_type)
+            proximity = np.random.uniform(8000, 18000, samples_per_type)
+            ambient = np.random.uniform(200, 800, samples_per_type)
+        else:  # pole
+            distance = np.random.uniform(20, 120, samples_per_type)
+            confidence = np.random.uniform(0.70, 0.92, samples_per_type)
+            proximity = np.random.uniform(2000, 8000, samples_per_type)
+            ambient = np.random.uniform(250, 900, samples_per_type)
+        
+        X_part = np.column_stack([distance, confidence, proximity, ambient])
+        y_part = np.full(samples_per_type, obj_type)
+        
+        all_data.append((X_part, y_part))
     
-    # Display data info
-    print(f"\n📋 Dataset Info:")
-    print(f"   Columns: {list(df.columns)}")
-    print(f"   Shape: {df.shape}")
-    print(f"\n   Object distribution:")
-    print(df['object_detected'].value_counts())
+    # Combine and shuffle
+    X = np.vstack([d[0] for d in all_data])
+    y = np.hstack([d[1] for d in all_data])
     
-    # Define features
-    feature_columns = [col for col in df.columns if col not in ['object_detected', 'danger_level']]
-    target_column = 'object_detected'
+    shuffle_idx = np.random.permutation(len(X))
+    return X[shuffle_idx], y[shuffle_idx]
+
+def train_model():
+    """Train and save object detection model"""
+    print("=" * 60)
+    print("Training Object Detection Model")
+    print("=" * 60)
     
-    print(f"\n🔧 Feature columns: {feature_columns}")
+    # Generate data
+    X, y = generate_synthetic_data()
+    print(f"✓ Generated {len(X)} samples")
     
-    # Prepare data
-    print("\n⚙️  Preprocessing data...")
-    preprocessor = DataPreprocessor()
-    X_train, X_test, y_train, y_test = preprocessor.prepare_multiclass_features(
-        df, feature_columns, target_column
+    # Split data
+    from sklearn.model_selection import train_test_split
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42
     )
     
-    print(f"✓ Training set: {X_train.shape}")
-    print(f"✓ Test set: {X_test.shape}")
-    print(f"✓ Classes: {preprocessor.label_encoder.classes_}")
+    # Scale features
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+    print("✓ Scaled features")
     
-    # Train Random Forest model
-    print("\n🤖 Training Random Forest model...")
+    # Train model
     model = RandomForestClassifier(
-        n_estimators=150,
+        n_estimators=100,
         max_depth=15,
-        min_samples_split=5,
-        min_samples_leaf=2,
         random_state=42,
-        n_jobs=-1,
-        class_weight='balanced'  # Handle imbalanced classes
+        n_jobs=-1
     )
+    model.fit(X_train_scaled, y_train)
+    print("✓ Model trained")
     
-    model.fit(X_train, y_train)
-    print("✓ Model training complete!")
+    # Evaluate
+    from sklearn.metrics import accuracy_score, classification_report
+    y_pred = model.predict(X_test_scaled)
+    accuracy = accuracy_score(y_test, y_pred)
     
-    # Evaluate model
-    print("\n📊 Evaluating model performance...")
-    evaluator = ModelEvaluator()
-    metrics = evaluator.evaluate_multiclass_classifier(
-        model, X_test, y_test, 
-        preprocessor.label_encoder,
-        model_name="Object Detection Random Forest"
-    )
+    print(f"\n✓ Test Accuracy: {accuracy:.4f}")
     
-    # Feature importance
-    print("\n📈 Feature Importance:")
-    feature_importance = pd.DataFrame({
-        'feature': feature_columns,
-        'importance': model.feature_importances_
-    }).sort_values('importance', ascending=False)
-    print(feature_importance.to_string(index=False))
+    object_names = ['obstacle', 'person', 'vehicle', 'wall', 'stairs', 'door', 'pole']
+    print("\nClassification Report:")
+    print(classification_report(y_test, y_pred, target_names=object_names))
     
     # Save model
-    print("\n💾 Saving model...")
-    ModelSaver.save_model(
-        model=model,
-        scaler=preprocessor.scaler,
-        model_name='object_detection_model',
-        metrics=metrics,
-        label_encoder=preprocessor.label_encoder
-    )
+    models_dir = Path(__file__).parent.parent / 'ml_models' / 'saved_models'
+    models_dir.mkdir(parents=True, exist_ok=True)
     
-    print("\n✅ Object detection model training complete!")
-    print("="*60)
-    
-    return model, preprocessor.scaler, preprocessor.label_encoder, metrics
-
-
-if __name__ == "__main__":
-    # Train the model
-    model, scaler, label_encoder, metrics = train_object_detection_model(use_synthetic=True)
+    model_path = models_dir / 'object_detection_model.joblib'
+    joblib.dump({
+        'model': model,
+        'scaler': scaler
+    }, model_path)
+    print(f"\n✓ Model saved to {model_path}")
     
     # Test prediction
-    print("\n🧪 Testing prediction on sample data...")
+    test_sample = [[100, 0.85, 5000, 400]]  # Medium distance, moderate proximity
+    test_scaled = scaler.transform(test_sample)
+    prediction = model.predict(test_scaled)[0]
+    proba = model.predict_proba(test_scaled)[0]
     
-    # Test cases
-    test_cases = [
-        {
-            'name': 'Close obstacle (30cm)',
-            'data': np.array([[30.0, 0.85, 800, 250]])  # distance_cm, confidence, proximity, ambient
-        },
-        {
-            'name': 'Medium distance person (150cm)',
-            'data': np.array([[150.0, 0.90, 400, 500]])
-        },
-        {
-            'name': 'Far vehicle (300cm)',
-            'data': np.array([[300.0, 0.75, 100, 600]])
-        }
-    ]
+    print(f"\n✓ Test prediction: {object_names[prediction]} (confidence: {proba[prediction]:.2f})")
     
-    for test_case in test_cases:
-        test_sample = test_case['data']
-        test_sample_scaled = scaler.transform(test_sample)
-        prediction_encoded = model.predict(test_sample_scaled)[0]
-        prediction = label_encoder.inverse_transform([prediction_encoded])[0]
-        probabilities = model.predict_proba(test_sample_scaled)[0]
-        
-        print(f"\n{test_case['name']}:")
-        print(f"  Sample: distance={test_sample[0][0]}cm, confidence={test_sample[0][1]}")
-        print(f"  Predicted Object: {prediction}")
-        print(f"  Top 3 Probabilities:")
-        top_3_idx = np.argsort(probabilities)[-3:][::-1]
-        for idx in top_3_idx:
-            print(f"    {label_encoder.classes_[idx]}: {probabilities[idx]:.3f}")
+    print("=" * 60)
+    print("✅ Object Detection Model Training Complete!")
+    print("=" * 60)
+
+if __name__ == '__main__':
+    train_model()

@@ -1,227 +1,140 @@
+"""
+Train Danger Prediction Model
+"""
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-
-import pandas as pd
+import joblib
 import numpy as np
+from pathlib import Path
 from sklearn.ensemble import GradientBoostingRegressor, GradientBoostingClassifier
-from sklearn.multioutput import MultiOutputRegressor
-from app.ml_training.utils import (
-    DataPreprocessor, ModelEvaluator, ModelSaver, generate_synthetic_data
-)
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
 
-def train_danger_prediction_model(data_path=None, use_synthetic=True):
-    """
-    Train danger prediction model
-    Predicts danger score and recommended action based on sensor data
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+def generate_synthetic_data(n_samples=600):
+    """Generate synthetic danger prediction data"""
+    np.random.seed(42)
     
-    Args:
-        data_path: Path to CSV file with training data
-        use_synthetic: Generate synthetic data if no file provided
-    """
-    print("="*60)
-    print("DANGER PREDICTION MODEL TRAINING")
-    print("="*60)
+    # Features: distance_cm, rate_of_change, proximity_value, object_type, speed
+    X = np.column_stack([
+        np.random.uniform(10, 400, n_samples),      # distance_cm
+        np.random.uniform(-50, 10, n_samples),      # rate_of_change (usually approaching)
+        np.random.uniform(500, 20000, n_samples),   # proximity_value
+        np.random.randint(0, 7, n_samples),         # object_type (0-6)
+        np.random.uniform(0.5, 2.0, n_samples),     # current_speed_estimate
+    ])
     
-    # Load or generate data
-    if use_synthetic or data_path is None:
-        print("\n📊 Generating synthetic training data...")
-        df = generate_synthetic_data(n_samples=5000, dataset_type='danger_prediction')
-        print(f"✓ Generated {len(df)} samples")
-    else:
-        print(f"\n📊 Loading data from: {data_path}")
-        df = pd.read_csv(data_path)
-        print(f"✓ Loaded {len(df)} samples")
+    # Calculate danger score based on distance, speed, and rate
+    distance_factor = 1 - (X[:, 0] / 400)  # Closer = more dangerous
+    approach_factor = np.abs(X[:, 1]) / 50  # Faster approach = more dangerous
+    speed_factor = X[:, 4] / 2  # Faster speed = more dangerous
     
-    # Display data info
-    print(f"\n📋 Dataset Info:")
-    print(f"   Columns: {list(df.columns)}")
-    print(f"   Shape: {df.shape}")
+    danger_score = (
+        distance_factor * 50 +
+        approach_factor * 30 +
+        speed_factor * 20
+    ).clip(0, 100)
     
-    # Define features and target
-    feature_columns = [
-        'distance_cm',
-        'rate_of_change',
-        'proximity_value',
-        'object_type_encoded',
-        'current_speed_estimate'
-    ]
+    # Add noise
+    danger_score += np.random.normal(0, 5, n_samples)
+    danger_score = danger_score.clip(0, 100)
     
-    # We'll train two models: one for danger_score (regression), one for recommended_action (classification)
-    target_danger_score = 'danger_score'
-    target_action = 'recommended_action'
+    # Determine recommended action based on danger score
+    # 0=SAFE, 1=CAUTION, 2=SLOW_DOWN, 3=STOP
+    recommended_action = np.digitize(danger_score, bins=[0, 30, 60, 80, 100]) - 1
+    recommended_action = recommended_action.clip(0, 3)
     
-    print(f"\n🔧 Feature columns: {feature_columns}")
-    print(f"🎯 Targets: {target_danger_score}, {target_action}")
+    return X, danger_score, recommended_action
+
+def train_model():
+    """Train and save danger prediction model"""
+    print("=" * 60)
+    print("Training Danger Prediction Model")
+    print("=" * 60)
     
-    # Prepare data for danger score (regression)
-    print("\n⚙️  Preprocessing data...")
-    preprocessor = DataPreprocessor()
+    # Generate data
+    X, y_score, y_action = generate_synthetic_data()
+    print(f"✓ Generated {len(X)} samples")
     
-    from sklearn.model_selection import train_test_split
-    X = df[feature_columns]
-    y_score = df[target_danger_score]
-    y_action = df[target_action]
-    
+    # Split data
     X_train, X_test, y_score_train, y_score_test, y_action_train, y_action_test = train_test_split(
         X, y_score, y_action, test_size=0.2, random_state=42
     )
     
     # Scale features
-    X_train_scaled = preprocessor.scaler.fit_transform(X_train)
-    X_test_scaled = preprocessor.scaler.transform(X_test)
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+    print("✓ Scaled features")
     
-    print(f"✓ Training set: {X_train_scaled.shape}")
-    print(f"✓ Test set: {X_test_scaled.shape}")
-    
-    # Train Danger Score Model (Regression)
-    print("\n🤖 Training Danger Score Predictor (Gradient Boosting Regressor)...")
+    # Train danger score model (regression)
+    print("\n🤖 Training Danger Score Model...")
     score_model = GradientBoostingRegressor(
         n_estimators=100,
         learning_rate=0.1,
         max_depth=5,
-        subsample=0.8,
         random_state=42
     )
-    
     score_model.fit(X_train_scaled, y_score_train)
-    print("✓ Danger score model training complete!")
+    print("✓ Score model trained")
     
-    # Evaluate regression model
+    # Evaluate score model
     from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-    
     y_score_pred = score_model.predict(X_test_scaled)
     mse = mean_squared_error(y_score_test, y_score_pred)
     mae = mean_absolute_error(y_score_test, y_score_pred)
     r2 = r2_score(y_score_test, y_score_pred)
     
-    print(f"\n📊 Danger Score Model Performance:")
+    print(f"\n📊 Danger Score Performance:")
     print(f"   MSE: {mse:.4f}")
     print(f"   MAE: {mae:.4f}")
     print(f"   R²: {r2:.4f}")
     
-    # Train Recommended Action Model (Classification)
-    print("\n🤖 Training Action Recommender (Gradient Boosting Classifier)...")
-    
-    # Encode actions
-    from sklearn.preprocessing import LabelEncoder
-    action_encoder = LabelEncoder()
-    y_action_encoded_train = action_encoder.fit_transform(y_action_train)
-    y_action_encoded_test = action_encoder.transform(y_action_test)
-    
+    # Train action model (classification)
+    print("\n🤖 Training Action Recommender...")
     action_model = GradientBoostingClassifier(
         n_estimators=100,
         learning_rate=0.1,
         max_depth=5,
-        subsample=0.8,
         random_state=42
     )
+    action_model.fit(X_train_scaled, y_action_train)
+    print("✓ Action model trained")
     
-    action_model.fit(X_train_scaled, y_action_encoded_train)
-    print("✓ Action model training complete!")
-    
-    # Evaluate classification model
-    from sklearn.metrics import accuracy_score, classification_report
-    
+    # Evaluate action model
+    from sklearn.metrics import accuracy_score
     y_action_pred = action_model.predict(X_test_scaled)
-    accuracy = accuracy_score(y_action_encoded_test, y_action_pred)
+    accuracy = accuracy_score(y_action_test, y_action_pred)
     
     print(f"\n📊 Action Recommender Performance:")
     print(f"   Accuracy: {accuracy:.4f}")
-    print(f"\n   Classification Report:")
-    print(classification_report(
-        y_action_encoded_test, 
-        y_action_pred,
-        target_names=action_encoder.classes_
-    ))
-    
-    # Feature importance (from score model)
-    print("\n📈 Feature Importance (Danger Score):")
-    feature_importance = pd.DataFrame({
-        'feature': feature_columns,
-        'importance': score_model.feature_importances_
-    }).sort_values('importance', ascending=False)
-    print(feature_importance.to_string(index=False))
-    
-    # Combine both models into a single object
-    combined_model = {
-        'score_model': score_model,
-        'action_model': action_model,
-        'action_encoder': action_encoder
-    }
     
     # Save both models
-    print("\n💾 Saving models...")
+    models_dir = Path(__file__).parent.parent / 'ml_models' / 'saved_models'
+    models_dir.mkdir(parents=True, exist_ok=True)
     
-    metrics = {
-        'score_mse': mse,
-        'score_mae': mae,
-        'score_r2': r2,
-        'action_accuracy': accuracy
-    }
-    
-    ModelSaver.save_model(
-        model=combined_model,
-        scaler=preprocessor.scaler,
-        model_name='danger_prediction_model',
-        metrics=metrics
-    )
-    
-    print("\n✅ Danger prediction model training complete!")
-    print("="*60)
-    
-    return combined_model, preprocessor.scaler, metrics
-
-
-if __name__ == "__main__":
-    # Train the model
-    model, scaler, metrics = train_danger_prediction_model(use_synthetic=True)
+    model_path = models_dir / 'danger_prediction_model.joblib'
+    joblib.dump({
+        'score_model': score_model,
+        'action_model': action_model,
+        'scaler': scaler
+    }, model_path)
+    print(f"\n✓ Model saved to {model_path}")
     
     # Test prediction
-    print("\n🧪 Testing prediction on sample data...")
+    test_sample = [[25, -50, 9500, 1, 3.0]]  # Close, fast approach, person
+    test_scaled = scaler.transform(test_sample)
     
-    # Test cases
-    test_cases = [
-        {
-            'name': 'CRITICAL: Very close obstacle approaching fast',
-            'data': np.array([[25.0, -50.0, 9500, 1, 3.0]])  # 25cm, closing fast, person, moving
-        },
-        {
-            'name': 'HIGH: Close obstacle, moderate approach',
-            'data': np.array([[80.0, -20.0, 8000, 0, 1.5]])  # 80cm, closing, obstacle, slow
-        },
-        {
-            'name': 'MEDIUM: Medium distance, slow approach',
-            'data': np.array([[150.0, -5.0, 5000, 2, 1.0]])  # 150cm, slow closing, vehicle
-        },
-        {
-            'name': 'LOW: Far obstacle, moving away',
-            'data': np.array([[300.0, 10.0, 2000, 0, 0.5]])  # 300cm, moving away
-        }
-    ]
+    danger = score_model.predict(test_scaled)[0]
+    action = action_model.predict(test_scaled)[0]
+    actions = ['SAFE', 'CAUTION', 'SLOW_DOWN', 'STOP']
     
-    for test_case in test_cases:
-        test_sample = test_case['data']
-        test_sample_scaled = scaler.transform(test_sample)
-        
-        # Get danger score
-        danger_score = model['score_model'].predict(test_sample_scaled)[0]
-        
-        # Get recommended action
-        action_encoded = model['action_model'].predict(test_sample_scaled)[0]
-        recommended_action = model['action_encoder'].inverse_transform([action_encoded])[0]
-        
-        # Calculate time to collision (simple estimate)
-        distance = test_sample[0][0]
-        speed = abs(test_sample[0][1])  # rate of change
-        if speed > 0:
-            time_to_collision = distance / speed
-        else:
-            time_to_collision = 999
-        
-        print(f"\n{test_case['name']}:")
-        print(f"  Distance: {test_sample[0][0]:.0f}cm")
-        print(f"  Rate of change: {test_sample[0][1]:.1f}cm/s")
-        print(f"  Danger Score: {danger_score:.1f}/100")
-        print(f"  Recommended Action: {recommended_action}")
-        print(f"  Time to collision: {time_to_collision:.1f}s")
+    print(f"\n✓ Test prediction: Danger Score={danger:.1f}, Action={actions[action]}")
+    
+    print("=" * 60)
+    print("✅ Danger Prediction Model Training Complete!")
+    print("=" * 60)
+
+if __name__ == '__main__':
+    train_model()
