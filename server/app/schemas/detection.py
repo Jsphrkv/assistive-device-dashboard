@@ -5,8 +5,8 @@ from typing import Optional
 class DetectionBase(BaseModel):
     """Base detection schema"""
     device_id: str
-    detection_type: str = Field(..., description="Type of detection (anomaly, maintenance, activity)")
-    severity: str = Field(..., description="Severity level (low, medium, high)")
+    detection_type: str = Field(..., description="Type of detection (anomaly, maintenance, object_detection, danger_prediction, environment_classification)")
+    severity: str = Field(..., description="Severity level (low, medium, high, critical)")
     message: str
 
 class DetectionCreate(DetectionBase):
@@ -25,25 +25,59 @@ class Detection(DetectionBase):
     class Config:
         from_attributes = True
 
+# ========== 1. ANOMALY DETECTION ==========
+
 class AnomalyDetectionResponse(BaseModel):
     """Response schema for anomaly detection"""
     is_anomaly: bool
     anomaly_score: float = Field(..., ge=0, le=1)
-    severity: str
+    confidence: float = Field(..., ge=0, le=1)
+    severity: str  # 'low', 'medium', 'high'
+    device_health_score: float = Field(..., ge=0, le=100)
     message: str
+    timestamp: int
+
+# ========== 2. MAINTENANCE PREDICTION ==========
 
 class MaintenancePredictionResponse(BaseModel):
     """Response schema for maintenance prediction"""
-    needs_maintenance: bool
-    confidence: float = Field(..., ge=0, le=1)
-    priority: str
-    estimated_days_until_maintenance: int
-    recommendations: list[str]
+    maintenance_needed: bool
+    probability: float = Field(..., ge=0, le=1)
+    priority: str  # 'low', 'medium', 'high'
+    days_until: int
+    recommendations: dict
+    message: str
+    timestamp: int
 
-class ActivityRecognitionResponse(BaseModel):
-    """Response schema for activity recognition"""
-    activity: str
-    description: str
+# ========== 3. OBJECT DETECTION ==========
+
+class ObjectDetectionResponse(BaseModel):
+    """Response schema for object detection"""
+    object_detected: str
+    distance_cm: float
+    danger_level: str  # 'low', 'medium', 'high', 'critical'
+    detection_confidence: float = Field(..., ge=0, le=1)
+    message: str
+    timestamp: int
+
+# ========== 4. DANGER PREDICTION (NEW) ==========
+
+class DangerPredictionResponse(BaseModel):
+    """Response schema for danger prediction"""
+    danger_score: float = Field(..., ge=0, le=100)
+    recommended_action: str  # 'SAFE', 'CAUTION', 'SLOW_DOWN', 'STOP'
+    time_to_collision: Optional[float] = None  # seconds, can be None
     confidence: float = Field(..., ge=0, le=1)
-    all_probabilities: dict[str, float]
-    intensity: str
+    message: str
+    timestamp: int
+
+# ========== 5. ENVIRONMENT CLASSIFICATION (NEW) ==========
+
+class EnvironmentClassificationResponse(BaseModel):
+    """Response schema for environment classification"""
+    environment_type: str  # 'indoor', 'outdoor', 'crowded', 'open_space', 'narrow_corridor'
+    lighting_condition: str  # 'bright', 'dim', 'dark'
+    complexity_level: str  # 'simple', 'moderate', 'complex'
+    confidence: float = Field(..., ge=0, le=1)
+    message: str
+    timestamp: int

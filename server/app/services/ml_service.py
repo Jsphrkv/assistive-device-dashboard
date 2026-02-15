@@ -1,15 +1,25 @@
 import numpy as np
 from app.ml_models.model_loader import model_loader
-from typing import Dict, List, Tuple
+from typing import Dict, List
 import math
 
 class MLService:
-    """ML inference service for IoT predictions"""
+    """
+    ML inference service for IoT predictions
+    Supports 5 models:
+    1. Anomaly Detection
+    2. Maintenance Prediction
+    3. Object Detection
+    4. Danger Prediction (NEW)
+    5. Environment Classification (NEW)
+    """
     
     def __init__(self):
         self._anomaly_model = None
-        self._activity_model = None
         self._maintenance_model = None
+        self._object_detection_model = None
+        self._danger_prediction_model = None
+        self._environment_classifier = None
         self._models_loaded = False
         print("ML service initialized (models load on first use)")
 
@@ -28,14 +38,6 @@ class MLService:
             except Exception as e:
                 print(f"⚠ Anomaly model not loaded: {e}")
             
-            # Load activity recognition model
-            try:
-                activity_data = model_loader.load_model('activity_model')
-                self._activity_model = activity_data
-                print("✓ Activity recognition model loaded")
-            except Exception as e:
-                print(f"⚠ Activity model not loaded: {e}")
-            
             # Load maintenance prediction model
             try:
                 maintenance_data = model_loader.load_model('maintenance_model')
@@ -44,46 +46,38 @@ class MLService:
             except Exception as e:
                 print(f"⚠ Maintenance model not loaded: {e}")
             
+            # Load object detection model
+            try:
+                object_data = model_loader.load_model('object_detection_model')
+                self._object_detection_model = object_data
+                print("✓ Object detection model loaded")
+            except Exception as e:
+                print(f"⚠ Object detection model not loaded: {e}")
+            
+            # Load danger prediction model (NEW)
+            try:
+                danger_data = model_loader.load_model('danger_prediction_model')
+                self._danger_prediction_model = danger_data
+                print("✓ Danger prediction model loaded")
+            except Exception as e:
+                print(f"⚠ Danger prediction model not loaded: {e}")
+            
+            # Load environment classifier (NEW)
+            try:
+                env_data = model_loader.load_model('environment_classifier')
+                self._environment_classifier = env_data
+                print("✓ Environment classifier loaded")
+            except Exception as e:
+                print(f"⚠ Environment classifier not loaded: {e}")
+            
             self._models_loaded = True
             
         except Exception as e:
             print(f"Error loading models: {e}")
-
-    def _load_models(self):
-        """Load all trained models on initialization"""
-        try:
-            print("Loading ML models...")
-            
-            # Load anomaly detection model
-            try:
-                anomaly_data = model_loader.load_model('anomaly_model')
-                self._anomaly_model = anomaly_data
-                print("✓ Anomaly detection model loaded")
-            except FileNotFoundError:
-                print("⚠ Anomaly model not found - train it first with train_anomaly.py")
-            
-            # Load activity recognition model
-            try:
-                activity_data = model_loader.load_model('activity_model')
-                self._activity_model = activity_data
-                print("✓ Activity recognition model loaded")
-            except FileNotFoundError:
-                print("⚠ Activity model not found - train it first with train_activity.py")
-            
-            # Load maintenance prediction model
-            try:
-                maintenance_data = model_loader.load_model('maintenance_model')
-                self._maintenance_model = maintenance_data
-                print("✓ Maintenance prediction model loaded")
-            except FileNotFoundError:
-                print("⚠ Maintenance model not found - train it first with train_maintenance.py")
-                
-        except Exception as e:
-            print(f"Error loading models: {e}")
     
-    def detect_anomaly(self, telemetry_data):
-
-        self._ensure_models_loaded()
+    # ========== 1. ANOMALY DETECTION ==========
+    
+    def detect_anomaly(self, telemetry_data: dict) -> dict:
         """
         Detect anomalies in device telemetry
         
@@ -92,8 +86,18 @@ class MLService:
                           signal_strength, usage_hours
         
         Returns:
-            Dict with anomaly prediction results
+            Dict with anomaly prediction results:
+            {
+                'is_anomaly': bool,
+                'anomaly_score': float,
+                'confidence': float,
+                'severity': str,
+                'device_health_score': float,
+                'message': str
+            }
         """
+        self._ensure_models_loaded()
+        
         if self._anomaly_model is None:
             raise RuntimeError("Anomaly model not loaded. Please train the model first.")
         
@@ -119,6 +123,9 @@ class MLService:
             is_anomaly = bool(prediction == 1)
             anomaly_score = float(probabilities[1])
             
+            # Calculate device health score (100 = perfect, 0 = critical)
+            device_health_score = 100 * (1 - anomaly_score) if is_anomaly else 100.0
+            
             # Determine severity
             if anomaly_score > 0.8:
                 severity = 'high'
@@ -138,6 +145,7 @@ class MLService:
                 'anomaly_score': anomaly_score,
                 'confidence': anomaly_score if is_anomaly else (1 - anomaly_score),
                 'severity': severity,
+                'device_health_score': device_health_score,
                 'message': message
             }
             
@@ -145,82 +153,9 @@ class MLService:
             print(f"Anomaly detection error: {e}")
             raise
     
-    def recognize_activity(self, sensor_data):
-
-        self._ensure_models_loaded()
-        """
-        Recognize user activity from sensor data
-        
-        Args:
-            sensor_data: Dict with keys: accelerometer_x/y/z, gyroscope_x/y/z
-        
-        Returns:
-            Dict with activity prediction results
-        """
-        if self._activity_model is None:
-            raise RuntimeError("Activity model not loaded. Please train the model first.")
-        
-        try:
-            # Extract features
-            features = np.array([[
-                sensor_data.get('accelerometer_x', 0.0),
-                sensor_data.get('accelerometer_y', 0.0),
-                sensor_data.get('accelerometer_z', 0.0),
-                sensor_data.get('gyroscope_x', 0.0),
-                sensor_data.get('gyroscope_y', 0.0),
-                sensor_data.get('gyroscope_z', 0.0)
-            ]])
-            
-            # Scale features
-            scaler = self._activity_model['scaler']
-            features_scaled = scaler.transform(features)
-            
-            # Predict
-            model = self._activity_model['model']
-            encoder = self._activity_model['encoder']
-            
-            prediction_encoded = model.predict(features_scaled)[0]
-            probabilities = model.predict_proba(features_scaled)[0]
-            
-            # Decode prediction
-            activity = encoder.inverse_transform([prediction_encoded])[0]
-            confidence = float(probabilities[prediction_encoded])
-            
-            # Get all probabilities
-            activity_probabilities = {
-                encoder.inverse_transform([i])[0]: float(prob)
-                for i, prob in enumerate(probabilities)
-            }
-            
-            # Determine intensity based on sensor magnitudes
-            acc_magnitude = np.sqrt(
-                sensor_data.get('accelerometer_x', 0)**2 +
-                sensor_data.get('accelerometer_y', 0)**2 +
-                sensor_data.get('accelerometer_z', 0)**2
-            )
-            
-            if acc_magnitude > 2.0:
-                intensity = 'high'
-            elif acc_magnitude > 1.0:
-                intensity = 'medium'
-            else:
-                intensity = 'low'
-            
-            return {
-                'activity': activity,
-                'confidence': confidence,
-                'intensity': intensity,
-                'probabilities': activity_probabilities,
-                'message': f'User is {activity}'
-            }
-            
-        except Exception as e:
-            print(f"Activity recognition error: {e}")
-            raise
+    # ========== 2. MAINTENANCE PREDICTION ==========
     
-    def predict_maintenance(self, device_info):
-
-        self._ensure_models_loaded()
+    def predict_maintenance(self, device_info: dict) -> dict:
         """
         Predict if device needs maintenance
         
@@ -229,8 +164,19 @@ class MLService:
                         temperature_avg, error_count, uptime_days
         
         Returns:
-            Dict with maintenance prediction results
+            Dict with maintenance prediction results:
+            {
+                'needs_maintenance': bool,
+                'probability': float,
+                'confidence': float,
+                'days_until': int,
+                'priority': str,
+                'recommendations': dict,
+                'message': str
+            }
         """
+        self._ensure_models_loaded()
+        
         if self._maintenance_model is None:
             raise RuntimeError("Maintenance model not loaded. Please train the model first.")
         
@@ -294,356 +240,467 @@ class MLService:
             print(f"Maintenance prediction error: {e}")
             raise
     
-    def reload_models(self):
-        """Reload all models (useful after retraining)"""
-        model_loader.clear_cache()
-        self._load_models()
-
-    def _ensure_models_loaded(self):
-        """Lazy load models on first use"""
-        if self._models_loaded:
-            return
-        
-        self._load_models()
-        self._models_loaded = True
-
+    # ========== 3. OBJECT DETECTION ==========
+    
     def detect_object(self, detection_data: dict) -> dict:
-            """
-            Classify detected object and assess danger level
-            
-            Args:
-                detection_data: {
-                    object_detected: str,
-                    distance_cm: float,
-                    detection_source: str,
-                    detection_confidence: float
-                }
-            
-            Returns:
-                {
-                    object_detected: str,
-                    distance_cm: float,
-                    danger_level: str,
-                    detection_confidence: float,
-                    message: str
-                }
-            """
-            object_type = detection_data.get('object_detected', 'unknown').lower()
-            distance = detection_data.get('distance_cm', 999)
-            confidence = detection_data.get('detection_confidence', 0.85)
-            
-            # Define danger levels based on distance and object type
-            danger_level = self._calculate_danger_level(object_type, distance)
-            
-            # Generate message
-            message = self._generate_detection_message(object_type, distance, danger_level)
-            
-            return {
-                'object_detected': object_type,
-                'distance_cm': distance,
-                'danger_level': danger_level,
-                'detection_confidence': confidence,
-                'message': message
+        """
+        Classify detected object and assess danger level
+        
+        Args:
+            detection_data: {
+                'object_detected': str,
+                'distance_cm': float,
+                'detection_source': str (optional),
+                'detection_confidence': float (optional)
             }
         
+        Returns:
+            Dict with object detection results:
+            {
+                'object_detected': str,
+                'distance_cm': float,
+                'danger_level': str,
+                'detection_confidence': float,
+                'message': str
+            }
+        """
+        self._ensure_models_loaded()
+        
+        object_type = detection_data.get('object_detected', 'unknown').lower()
+        distance = detection_data.get('distance_cm', 999)
+        confidence = detection_data.get('detection_confidence', 0.85)
+        
+        # Define danger levels based on distance and object type
+        danger_level = self._calculate_danger_level(object_type, distance)
+        
+        # Generate message
+        message = self._generate_detection_message(object_type, distance, danger_level)
+        
+        return {
+            'object_detected': object_type,
+            'distance_cm': distance,
+            'danger_level': danger_level,
+            'detection_confidence': confidence,
+            'message': message
+        }
+    
     def _calculate_danger_level(self, object_type: str, distance_cm: float) -> str:
-            """Calculate danger level based on object type and distance"""
-            
-            # High-risk objects (vehicles, stairs, potholes)
-            high_risk_objects = ['vehicle', 'car', 'motorcycle', 'bicycle', 'stairs', 
-                                'stairs_down', 'pothole', 'cliff', 'traffic']
-            
-            if object_type in high_risk_objects:
-                if distance_cm < 100:
-                    return 'Critical'
-                elif distance_cm < 200:
-                    return 'High'
-                elif distance_cm < 400:
-                    return 'Medium'
-                else:
-                    return 'Low'
-            
-            # Medium-risk objects (people, walls, poles)
-            medium_risk_objects = ['person', 'wall', 'pole', 'tree', 'building', 
-                                'obstacle', 'barrier', 'door']
-            
-            if object_type in medium_risk_objects:
-                if distance_cm < 50:
-                    return 'High'
-                elif distance_cm < 150:
-                    return 'Medium'
-                else:
-                    return 'Low'
-            
-            # Low-risk objects (furniture, small objects)
-            if distance_cm < 30:
-                return 'Medium'
-            elif distance_cm < 100:
-                return 'Low'
-            else:
-                return 'Low'
+        """Calculate danger level based on object type and distance"""
         
-    def _generate_detection_message(self, object_type: str, distance: float, danger: str) -> str:
-            """Generate appropriate warning message"""
-            
-            if danger == 'Critical':
-                return f"⚠️ CRITICAL: {object_type.title()} very close at {distance:.0f}cm - STOP!"
-            elif danger == 'High':
-                return f"⚠️ WARNING: {object_type.title()} detected at {distance:.0f}cm - caution ahead"
-            elif danger == 'Medium':
-                return f"ℹ️ {object_type.title()} detected at {distance:.0f}cm"
-            else:
-                return f"{object_type.title()} detected at {distance:.0f}cm - clear path"
+        # High-risk objects (vehicles, stairs, potholes)
+        high_risk_objects = ['vehicle', 'car', 'motorcycle', 'bicycle', 'stairs', 
+                            'stairs_down', 'pothole', 'cliff', 'traffic']
         
-        # ========== FALL DETECTION ==========
-        
-    def detect_fall(self, sensor_data: dict) -> dict:
-            """
-            Detect if user has fallen based on accelerometer/gyroscope data
-            
-            Args:
-                sensor_data: {
-                    accelerometer_x: float,
-                    accelerometer_y: float,
-                    accelerometer_z: float,
-                    gyroscope_x: float (optional),
-                    gyroscope_y: float (optional),
-                    gyroscope_z: float (optional),
-                    time_since_last_movement: int (optional)
-                }
-            
-            Returns:
-                {
-                    fall_detected: bool,
-                    confidence: float,
-                    severity: str,
-                    post_fall_movement: bool,
-                    impact_magnitude: float,
-                    message: str,
-                    emergency_alert: bool
-                }
-            """
-            
-            # Calculate acceleration magnitude
-            acc_x = sensor_data.get('accelerometer_x', 0)
-            acc_y = sensor_data.get('accelerometer_y', 0)
-            acc_z = sensor_data.get('accelerometer_z', 0)
-            
-            magnitude = math.sqrt(acc_x**2 + acc_y**2 + acc_z**2)
-            
-            # Fall detection thresholds
-            FALL_THRESHOLD = 2.5  # g (sudden impact)
-            FREE_FALL_THRESHOLD = 0.5  # g (free fall before impact)
-            
-            # Check for sudden impact (high acceleration)
-            impact_detected = magnitude > FALL_THRESHOLD
-            
-            # Check for free fall before impact (low acceleration)
-            free_fall = magnitude < FREE_FALL_THRESHOLD
-            
-            # Check if user moved after potential fall
-            time_stationary = sensor_data.get('time_since_last_movement', 0)
-            post_fall_movement = time_stationary < 3  # User moved within 3 seconds
-            
-            # Determine if it's a fall
-            fall_detected = impact_detected and not post_fall_movement
-            
-            # Calculate confidence
-            confidence = 0.0
-            if impact_detected:
-                confidence += 0.5
-            if not post_fall_movement and time_stationary > 5:
-                confidence += 0.3
-            if free_fall:
-                confidence += 0.2
-            
-            confidence = min(confidence, 0.95)
-            
-            # Determine severity
-            severity = self._calculate_fall_severity(magnitude, time_stationary)
-            
-            # Emergency alert for critical falls
-            emergency_alert = fall_detected and severity in ['high', 'critical']
-            
-            # Generate message
-            if fall_detected:
-                if emergency_alert:
-                    message = f"🚨 FALL DETECTED! User unresponsive for {time_stationary}s - Emergency alert sent"
-                else:
-                    message = f"⚠️ Possible fall detected - checking user status..."
-            else:
-                message = "No fall detected - normal movement"
-            
-            return {
-                'fall_detected': fall_detected,
-                'confidence': confidence,
-                'severity': severity,
-                'post_fall_movement': post_fall_movement,
-                'impact_magnitude': magnitude,
-                'message': message,
-                'emergency_alert': emergency_alert
-            }
-        
-    def _calculate_fall_severity(self, impact_magnitude: float, time_stationary: int) -> str:
-            """Calculate fall severity based on impact and lack of movement"""
-            
-            if impact_magnitude > 4.0 and time_stationary > 10:
+        if object_type in high_risk_objects:
+            if distance_cm < 100:
                 return 'critical'
-            elif impact_magnitude > 3.0 and time_stationary > 5:
+            elif distance_cm < 200:
                 return 'high'
-            elif impact_magnitude > 2.5 or time_stationary > 3:
+            elif distance_cm < 400:
                 return 'medium'
             else:
                 return 'low'
         
-        # ========== ROUTE PREDICTION ==========
+        # Medium-risk objects (people, walls, poles)
+        medium_risk_objects = ['person', 'wall', 'pole', 'tree', 'building', 
+                            'obstacle', 'barrier', 'door']
         
-    def predict_route(self, route_data: dict) -> dict:
-            """
-            Predict best route from current location to destination
+        if object_type in medium_risk_objects:
+            if distance_cm < 50:
+                return 'high'
+            elif distance_cm < 150:
+                return 'medium'
+            else:
+                return 'low'
+        
+        # Low-risk objects (furniture, small objects)
+        if distance_cm < 30:
+            return 'medium'
+        elif distance_cm < 100:
+            return 'low'
+        else:
+            return 'low'
+    
+    def _generate_detection_message(self, object_type: str, distance: float, danger: str) -> str:
+        """Generate appropriate warning message"""
+        
+        if danger == 'critical':
+            return f"⚠️ CRITICAL: {object_type.title()} very close at {distance:.0f}cm - STOP!"
+        elif danger == 'high':
+            return f"⚠️ WARNING: {object_type.title()} detected at {distance:.0f}cm - caution ahead"
+        elif danger == 'medium':
+            return f"ℹ️ {object_type.title()} detected at {distance:.0f}cm"
+        else:
+            return f"{object_type.title()} detected at {distance:.0f}cm - clear path"
+    
+    # ========== 4. DANGER PREDICTION (NEW) ==========
+    
+    def predict_danger(self, sensor_data: dict) -> dict:
+        """
+        Predict danger level and recommend action based on sensor data
+        
+        Args:
+            sensor_data: {
+                'distance_sensors': List[float],  # distances from multiple sensors
+                'speed': float,  # current speed in m/s
+                'acceleration': float (optional),
+                'obstacles_detected': int (optional)
+            }
+        
+        Returns:
+            Dict with danger prediction results:
+            {
+                'danger_score': float (0-100),
+                'recommended_action': str ('SAFE', 'CAUTION', 'SLOW_DOWN', 'STOP'),
+                'time_to_collision': float (seconds, or None),
+                'confidence': float,
+                'message': str
+            }
+        """
+        self._ensure_models_loaded()
+        
+        try:
+            distance_sensors = sensor_data.get('distance_sensors', [500, 500, 500])
+            speed = sensor_data.get('speed', 0.0)  # m/s
+            acceleration = sensor_data.get('acceleration', 0.0)
+            obstacles = sensor_data.get('obstacles_detected', 0)
             
-            Args:
-                route_data: {
-                    current_location: {latitude: float, longitude: float},
-                    destination: {latitude: float, longitude: float},
-                    time_of_day: str,
-                    avoid_obstacles: List[str] (optional),
-                    max_detour_meters: int (optional)
-                }
+            # Calculate minimum distance
+            min_distance = min(distance_sensors) if distance_sensors else 500
             
-            Returns:
-                {
-                    predicted_route: List[{lat, lng}],
-                    route_confidence: float,
-                    estimated_obstacles: int,
-                    difficulty_score: float,
-                    estimated_time_minutes: int,
-                    recommendation: str
-                }
-            """
+            # Calculate time to collision
+            if speed > 0.1 and min_distance < 1000:  # Convert cm to m
+                time_to_collision = (min_distance / 100) / speed  # seconds
+            else:
+                time_to_collision = None
             
-            current = route_data['current_location']
-            destination = route_data['destination']
-            time_of_day = route_data.get('time_of_day', 'afternoon')
-            
-            # Calculate straight-line distance
-            distance_km = self._calculate_distance(
-                current['latitude'], current['longitude'],
-                destination['latitude'], destination['longitude']
+            # Calculate danger score (0-100)
+            danger_score = self._calculate_danger_score(
+                min_distance, 
+                speed, 
+                acceleration, 
+                obstacles,
+                time_to_collision
             )
             
-            # For now, predict simple waypoints (in production, use pathfinding algorithm)
-            # This is a simplified version - you'd integrate with Google Maps API or similar
-            waypoints = self._generate_simple_route(current, destination)
+            # Determine recommended action
+            recommended_action = self._determine_action(danger_score, time_to_collision)
             
-            # Estimate obstacles based on distance and time of day
-            estimated_obstacles = self._estimate_obstacles(distance_km, time_of_day)
-            
-            # Calculate difficulty (0-1 scale)
-            difficulty_score = self._calculate_route_difficulty(
-                distance_km, 
-                estimated_obstacles, 
-                time_of_day
+            # Calculate confidence
+            confidence = self._calculate_danger_confidence(
+                distance_sensors, 
+                speed, 
+                obstacles
             )
             
-            # Estimate time (walking speed ~5 km/h)
-            walking_speed_kmh = 5.0
-            estimated_time_minutes = int((distance_km / walking_speed_kmh) * 60)
-            
-            # Add buffer for obstacles
-            estimated_time_minutes += estimated_obstacles * 2  # 2 min per obstacle
-            
-            # Route confidence (higher for shorter routes)
-            route_confidence = max(0.6, 1.0 - (distance_km / 10.0))
-            
-            # Generate recommendation
-            recommendation = self._generate_route_recommendation(
-                difficulty_score, 
-                estimated_obstacles, 
-                time_of_day
+            # Generate message
+            message = self._generate_danger_message(
+                danger_score, 
+                recommended_action, 
+                time_to_collision
             )
             
             return {
-                'predicted_route': waypoints,
-                'route_confidence': route_confidence,
-                'estimated_obstacles': estimated_obstacles,
-                'difficulty_score': difficulty_score,
-                'estimated_time_minutes': estimated_time_minutes,
-                'recommendation': recommendation
+                'danger_score': danger_score,
+                'recommended_action': recommended_action,
+                'time_to_collision': time_to_collision,
+                'confidence': confidence,
+                'message': message
+            }
+            
+        except Exception as e:
+            print(f"Danger prediction error: {e}")
+            raise
+    
+    def _calculate_danger_score(self, distance: float, speed: float, 
+                                accel: float, obstacles: int, 
+                                ttc: float = None) -> float:
+        """Calculate danger score (0-100)"""
+        
+        score = 0.0
+        
+        # Distance factor (closer = more dangerous)
+        if distance < 50:
+            score += 40
+        elif distance < 100:
+            score += 30
+        elif distance < 200:
+            score += 20
+        elif distance < 400:
+            score += 10
+        
+        # Speed factor (faster = more dangerous)
+        if speed > 2.0:  # > 7.2 km/h
+            score += 25
+        elif speed > 1.0:  # > 3.6 km/h
+            score += 15
+        elif speed > 0.5:  # > 1.8 km/h
+            score += 5
+        
+        # Time to collision factor
+        if ttc is not None and ttc < 5:
+            score += 20 * (5 - ttc) / 5  # Up to 20 points
+        
+        # Obstacles factor
+        score += min(15, obstacles * 3)
+        
+        return min(100.0, score)
+    
+    def _determine_action(self, danger_score: float, ttc: float = None) -> str:
+        """Determine recommended action"""
+        
+        if danger_score >= 80 or (ttc is not None and ttc < 1.0):
+            return 'STOP'
+        elif danger_score >= 60 or (ttc is not None and ttc < 2.0):
+            return 'SLOW_DOWN'
+        elif danger_score >= 30:
+            return 'CAUTION'
+        else:
+            return 'SAFE'
+    
+    def _calculate_danger_confidence(self, distances: list, speed: float, 
+                                     obstacles: int) -> float:
+        """Calculate prediction confidence"""
+        
+        confidence = 0.7  # Base confidence
+        
+        # More sensors = higher confidence
+        if len(distances) >= 3:
+            confidence += 0.1
+        
+        # Consistent readings = higher confidence
+        if len(distances) > 1:
+            variance = np.var(distances)
+            if variance < 100:  # Low variance
+                confidence += 0.1
+        
+        # Speed data available = higher confidence
+        if speed > 0:
+            confidence += 0.1
+        
+        return min(0.95, confidence)
+    
+    def _generate_danger_message(self, score: float, action: str, 
+                                 ttc: float = None) -> str:
+        """Generate danger warning message"""
+        
+        if action == 'STOP':
+            if ttc:
+                return f"🚨 STOP! Collision imminent in {ttc:.1f}s (danger: {score:.0f}%)"
+            return f"🚨 STOP! Critical danger detected ({score:.0f}%)"
+        elif action == 'SLOW_DOWN':
+            return f"⚠️ SLOW DOWN - High danger ahead ({score:.0f}%)"
+        elif action == 'CAUTION':
+            return f"⚠️ CAUTION - Moderate danger ({score:.0f}%)"
+        else:
+            return f"✅ Path clear - Low danger ({score:.0f}%)"
+    
+    # ========== 5. ENVIRONMENT CLASSIFICATION (NEW) ==========
+    
+    def classify_environment(self, sensor_data: dict) -> dict:
+        """
+        Classify environment type based on sensor patterns
+        
+        Args:
+            sensor_data: {
+                'ambient_light': float,  # lux
+                'noise_level': float,  # decibels
+                'obstacle_density': float,  # obstacles per meter
+                'space_width': float (optional),  # meters
+                'gps_accuracy': float (optional)  # meters
             }
         
-    def _calculate_distance(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-            """Calculate distance between two GPS coordinates using Haversine formula"""
-            
-            R = 6371  # Earth's radius in kilometers
-            
-            lat1_rad = math.radians(lat1)
-            lat2_rad = math.radians(lat2)
-            dlat = math.radians(lat2 - lat1)
-            dlon = math.radians(lon2 - lon1)
-            
-            a = math.sin(dlat/2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon/2)**2
-            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
-            
-            return R * c
+        Returns:
+            Dict with environment classification:
+            {
+                'environment_type': str (indoor/outdoor/crowded/open_space/narrow_corridor),
+                'lighting_condition': str (bright/dim/dark),
+                'complexity_level': str (simple/moderate/complex),
+                'confidence': float,
+                'message': str
+            }
+        """
+        self._ensure_models_loaded()
         
-    def _generate_simple_route(self, start: dict, end: dict) -> list:
-            """Generate simple waypoints (in production, use real routing API)"""
+        try:
+            ambient_light = sensor_data.get('ambient_light', 500)  # lux
+            noise_level = sensor_data.get('noise_level', 60)  # dB
+            obstacle_density = sensor_data.get('obstacle_density', 0.5)  # per meter
+            space_width = sensor_data.get('space_width', 3.0)  # meters
+            gps_accuracy = sensor_data.get('gps_accuracy', 10.0)  # meters
             
-            # Simple linear interpolation for demo
-            waypoints = [
-                start,  # Starting point
-                {
-                    'latitude': (start['latitude'] + end['latitude']) / 2,
-                    'longitude': (start['longitude'] + end['longitude']) / 2
-                },  # Midpoint
-                end  # Destination
-            ]
+            # Classify lighting condition
+            lighting_condition = self._classify_lighting(ambient_light)
             
-            return waypoints
+            # Classify environment type
+            environment_type = self._classify_environment_type(
+                gps_accuracy,
+                space_width,
+                obstacle_density,
+                noise_level
+            )
+            
+            # Classify complexity level
+            complexity_level = self._classify_complexity(
+                obstacle_density,
+                lighting_condition,
+                space_width
+            )
+            
+            # Calculate confidence
+            confidence = self._calculate_environment_confidence(
+                ambient_light,
+                gps_accuracy,
+                obstacle_density
+            )
+            
+            # Generate message
+            message = self._generate_environment_message(
+                environment_type,
+                lighting_condition,
+                complexity_level
+            )
+            
+            return {
+                'environment_type': environment_type,
+                'lighting_condition': lighting_condition,
+                'complexity_level': complexity_level,
+                'confidence': confidence,
+                'message': message
+            }
+            
+        except Exception as e:
+            print(f"Environment classification error: {e}")
+            raise
+    
+    def _classify_lighting(self, lux: float) -> str:
+        """Classify lighting condition"""
         
-    def _estimate_obstacles(self, distance_km: float, time_of_day: str) -> int:
-            """Estimate number of obstacles based on distance and time"""
-            
-            # Base obstacles per km
-            obstacles_per_km = 3
-            
-            # Adjust for time of day
-            if time_of_day in ['morning', 'evening']:
-                obstacles_per_km += 2  # Rush hour, more people
-            elif time_of_day == 'night':
-                obstacles_per_km -= 1  # Less people, but reduced visibility
-            
-            return int(distance_km * obstacles_per_km)
+        if lux > 500:
+            return 'bright'
+        elif lux > 100:
+            return 'dim'
+        else:
+            return 'dark'
+    
+    def _classify_environment_type(self, gps_accuracy: float, width: float,
+                                   density: float, noise: float) -> str:
+        """Classify environment type"""
         
-    def _calculate_route_difficulty(self, distance_km: float, obstacles: int, time: str) -> float:
-            """Calculate route difficulty score (0-1)"""
-            
-            difficulty = 0.0
-            
-            # Distance factor
-            difficulty += min(0.3, distance_km / 10.0)
-            
-            # Obstacles factor
-            difficulty += min(0.4, obstacles / 20.0)
-            
-            # Time of day factor
-            if time == 'night':
-                difficulty += 0.2
-            elif time in ['morning', 'evening']:
-                difficulty += 0.1
-            
-            return min(1.0, difficulty)
-        
-    def _generate_route_recommendation(self, difficulty: float, obstacles: int, time: str) -> str:
-            """Generate route recommendation text"""
-            
-            if difficulty > 0.7:
-                return f"⚠️ Challenging route with {obstacles} estimated obstacles. Consider alternative route or companion."
-            elif difficulty > 0.5:
-                return f"ℹ️ Moderate difficulty route. {obstacles} obstacles expected. Stay alert."
+        # Indoor detection (poor GPS + narrow space)
+        if gps_accuracy > 20 and width < 5:
+            # Narrow corridor
+            if width < 2:
+                return 'narrow_corridor'
+            # Crowded indoor
+            elif density > 1.0 or noise > 70:
+                return 'crowded'
+            # Regular indoor
             else:
-                return f"✅ Easy route. Clear path with minimal obstacles expected."
+                return 'indoor'
+        
+        # Outdoor detection (good GPS)
+        else:
+            # Crowded outdoor (high density or noise)
+            if density > 1.5 or noise > 75:
+                return 'crowded'
+            # Open space (wide + low density)
+            elif width > 10 and density < 0.3:
+                return 'open_space'
+            # Regular outdoor
+            else:
+                return 'outdoor'
+    
+    def _classify_complexity(self, density: float, lighting: str, 
+                            width: float) -> str:
+        """Classify complexity level"""
+        
+        complexity_score = 0
+        
+        # Density factor
+        if density > 1.5:
+            complexity_score += 2
+        elif density > 0.8:
+            complexity_score += 1
+        
+        # Lighting factor
+        if lighting == 'dark':
+            complexity_score += 2
+        elif lighting == 'dim':
+            complexity_score += 1
+        
+        # Space factor
+        if width < 2:
+            complexity_score += 2
+        elif width < 5:
+            complexity_score += 1
+        
+        # Classify based on score
+        if complexity_score >= 4:
+            return 'complex'
+        elif complexity_score >= 2:
+            return 'moderate'
+        else:
+            return 'simple'
+    
+    def _calculate_environment_confidence(self, light: float, gps: float, 
+                                         density: float) -> float:
+        """Calculate classification confidence"""
+        
+        confidence = 0.6  # Base confidence
+        
+        # Clear lighting reading
+        if light > 10:  # Not in complete darkness
+            confidence += 0.15
+        
+        # Good GPS signal (or very poor, indicating indoor)
+        if gps < 10 or gps > 30:
+            confidence += 0.15
+        
+        # Obstacle data available
+        if density > 0:
+            confidence += 0.1
+        
+        return min(0.95, confidence)
+    
+    def _generate_environment_message(self, env_type: str, lighting: str, 
+                                     complexity: str) -> str:
+        """Generate environment description message"""
+        
+        messages = {
+            'indoor': f"📍 Indoor environment - {lighting} lighting, {complexity} navigation",
+            'outdoor': f"🌤️ Outdoor environment - {lighting} lighting, {complexity} navigation",
+            'crowded': f"👥 Crowded area - {lighting} lighting, {complexity} navigation",
+            'open_space': f"🏞️ Open space - {lighting} lighting, {complexity} navigation",
+            'narrow_corridor': f"🚪 Narrow corridor - {lighting} lighting, {complexity} navigation"
+        }
+        
+        return messages.get(env_type, f"Environment detected - {lighting}, {complexity}")
+    
+    # ========== UTILITY METHODS ==========
+    
+    def reload_models(self):
+        """Reload all models (useful after retraining)"""
+        model_loader.clear_cache()
+        self._models_loaded = False
+        self._ensure_models_loaded()
+    
+    def get_model_status(self) -> dict:
+        """Get status of all models"""
+        return {
+            'anomaly': self._anomaly_model is not None,
+            'maintenance': self._maintenance_model is not None,
+            'object_detection': self._object_detection_model is not None,
+            'danger_prediction': self._danger_prediction_model is not None,
+            'environment_classification': self._environment_classifier is not None,
+            'all_loaded': all([
+                self._anomaly_model is not None,
+                self._maintenance_model is not None,
+                self._object_detection_model is not None,
+                self._danger_prediction_model is not None,
+                self._environment_classifier is not None
+            ])
+        }
 
 
 # Global instance

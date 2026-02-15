@@ -13,7 +13,9 @@ from .detection import (
     DetectionCreate,
     AnomalyDetectionResponse,
     MaintenancePredictionResponse,
-    ActivityRecognitionResponse
+    ObjectDetectionResponse,
+    DangerPredictionResponse,
+    EnvironmentClassificationResponse
 )
 
 from .user import (
@@ -34,12 +36,14 @@ __all__ = [
     'DeviceSensorData',
     'DeviceAnalysisRequest',
 
-    # Detection schemas
+    # Detection schemas (5 models)
     'Detection',
     'DetectionCreate',
     'AnomalyDetectionResponse',
     'MaintenancePredictionResponse',
-    'ActivityRecognitionResponse',
+    'ObjectDetectionResponse',
+    'DangerPredictionResponse',
+    'EnvironmentClassificationResponse',
     
     # User schemas
     'User',

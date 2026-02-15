@@ -1,6 +1,8 @@
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any
+from typing import Optional, List
 from datetime import datetime
+
+# ========== BASIC DEVICE SCHEMAS ==========
 
 class DeviceBase(BaseModel):
     """Base device schema"""
@@ -29,56 +31,46 @@ class Device(DeviceBase):
     class Config:
         from_attributes = True
 
-# class DeviceTelemetry(BaseModel):
-#     """Device telemetry data for ML anomaly detection"""
-#     battery_level: float = Field(..., ge=0, le=100, description="Battery percentage")
-#     usage_duration: float = Field(..., ge=0, description="Usage duration in minutes")
-#     temperature: float = Field(..., description="Device temperature in Celsius")
-#     signal_strength: float = Field(..., ge=-100, le=0, description="Signal strength in dBm")
-#     error_count: int = Field(..., ge=0, description="Number of errors")
+# ========== ML MODEL INPUT SCHEMAS ==========
 
-# class DeviceMaintenanceInfo(BaseModel):
-#     """Device information for maintenance prediction"""
-#     device_age_days: int = Field(..., ge=0, description="Device age in days")
-#     battery_cycles: int = Field(..., ge=0, description="Number of battery charge cycles")
-#     usage_intensity: float = Field(..., ge=0, le=1, description="Usage intensity (0-1)")
-#     error_rate: float = Field(..., ge=0, description="Average errors per day")
-#     last_maintenance_days: int = Field(..., ge=0, description="Days since last maintenance")
-
-# class DeviceSensorData(BaseModel):
-#     """Device sensor data for activity recognition"""
-#     acc_x: float = Field(..., description="Accelerometer X-axis")
-#     acc_y: float = Field(..., description="Accelerometer Y-axis")
-#     acc_z: float = Field(..., description="Accelerometer Z-axis")
-#     gyro_x: float = Field(..., description="Gyroscope X-axis")
-#     gyro_y: float = Field(..., description="Gyroscope Y-axis")
-#     gyro_z: float = Field(..., description="Gyroscope Z-axis")
-
+# 1. Anomaly Detection Input
 class DeviceTelemetry(BaseModel):
-    temperature: float = Field(default=37.0)
-    heart_rate: float = Field(default=75.0)
-    battery_level: float = Field(default=80.0)
-    signal_strength: float = Field(default=-50.0)
-    usage_hours: float = Field(default=8.0)
+    """
+    Device telemetry data for ML anomaly detection
+    Used by: /api/ml/detect/anomaly
+    """
+    device_id: str
+    temperature: float = Field(default=37.0, description="Temperature in Celsius")
+    heart_rate: float = Field(default=75.0, description="Heart rate in BPM")
+    battery_level: float = Field(default=80.0, ge=0, le=100, description="Battery percentage")
+    signal_strength: float = Field(default=-50.0, description="Signal strength in dBm")
+    usage_hours: float = Field(default=8.0, ge=0, description="Usage hours")
 
-class DeviceSensorData(BaseModel):
-    accelerometer_x: float = Field(default=0.0)
-    accelerometer_y: float = Field(default=0.0)
-    accelerometer_z: float = Field(default=0.0)
-    gyroscope_x: float = Field(default=0.0)
-    gyroscope_y: float = Field(default=0.0)
-    gyroscope_z: float = Field(default=0.0)
-
+# 2. Maintenance Prediction Input
 class DeviceMaintenanceInfo(BaseModel):
-    battery_health: float = Field(default=80.0)
-    charge_cycles: int = Field(default=100)
-    temperature_avg: float = Field(default=35.0)
-    error_count: int = Field(default=0)
-    uptime_days: int = Field(default=30)
+    """
+    Device maintenance information for predictive maintenance
+    Used by: /api/ml/predict/maintenance
+    """
+    device_id: str
+    battery_health: float = Field(default=80.0, ge=0, le=100, description="Battery health percentage")
+    charge_cycles: int = Field(default=100, ge=0, description="Number of charge cycles")
+    temperature_avg: float = Field(default=35.0, description="Average temperature in Celsius")
+    error_count: int = Field(default=0, ge=0, description="Number of errors")
+    uptime_days: int = Field(default=30, ge=0, description="Days since last reboot")
+
+# 3. Object Detection Input (handled by ml_types.py ObjectDetectionRequest)
+# 4. Danger Prediction Input (handled by ml_types.py DangerPredictionRequest)
+# 5. Environment Classification Input (handled by ml_types.py EnvironmentClassificationRequest)
+
+# ========== COMPREHENSIVE ANALYSIS ==========
 
 class DeviceAnalysisRequest(BaseModel):
-    """Comprehensive device analysis request"""
-    telemetry: Optional[DeviceTelemetry] = None
-    device_info: Optional[DeviceMaintenanceInfo] = None
-    sensor_data: Optional[DeviceSensorData] = None
+    """
+    Comprehensive device analysis request
+    Can include multiple types of data for different ML models
+    """
+    device_id: str
+    telemetry: Optional[DeviceTelemetry] = None  # For anomaly detection
+    device_info: Optional[DeviceMaintenanceInfo] = None  # For maintenance prediction
 
