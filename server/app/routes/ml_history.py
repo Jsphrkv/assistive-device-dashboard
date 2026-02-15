@@ -16,7 +16,7 @@ def get_ml_history():
         # Get query parameters
         limit = request.args.get('limit', 50, type=int)
         offset = request.args.get('offset', 0, type=int)
-        prediction_type = request.args.get('type')  # anomaly, activity, maintenance, detection
+        prediction_type = request.args.get('type')  # anomaly, maintenance, object_detection, danger_prediction, environment_classification
         source = request.args.get('source', 'all')  # 'predictions', 'detections', 'all'
         anomalies_only = request.args.get('anomalies_only', 'false').lower() == 'true'
         start_date = request.args.get('start_date')
@@ -45,7 +45,7 @@ def get_ml_history():
         
         combined_data = []
         
-        # ✅ Fetch from ml_predictions table
+        # ✅ Fetch from ml_predictions table (UPDATED FOR NEW SCHEMA)
         if source in ['all', 'predictions']:
             ml_query = supabase.table('ml_predictions')\
                 .select('*, user_devices(device_name)')
@@ -53,8 +53,16 @@ def get_ml_history():
             if device_ids:
                 ml_query = ml_query.in_('device_id', device_ids)
             
-            if prediction_type and prediction_type != 'detection':
-                ml_query = ml_query.eq('prediction_type', prediction_type)
+            # Map frontend type names to database names
+            if prediction_type:
+                type_mapping = {
+                    'danger': 'danger_prediction',
+                    'environment': 'environment_classification',
+                }
+                db_type = type_mapping.get(prediction_type, prediction_type)
+                
+                if db_type != 'detection':
+                    ml_query = ml_query.eq('prediction_type', db_type)
             
             if anomalies_only:
                 ml_query = ml_query.eq('is_anomaly', True)
@@ -67,48 +75,68 @@ def get_ml_history():
             
             ml_response = ml_query.order('created_at', desc=True).limit(limit).execute()
             
-            # Transform ML predictions
+            # Transform ML predictions (UPDATED FOR NEW SCHEMA)
             for item in ml_response.data:
                 result = {}
                 confidence = 0
                 
-                if item.get('prediction_type') == 'anomaly':
+                pred_type = item.get('prediction_type', 'unknown')
+                
+                if pred_type == 'anomaly':
                     result = {
                         'score': item.get('anomaly_score'),
                         'severity': item.get('anomaly_severity'),
-                        'message': item.get('anomaly_message')
+                        'device_health_score': item.get('device_health_score')
                     }
                     confidence = item.get('anomaly_score', 0)
-                elif item.get('prediction_type') == 'maintenance':
+                    
+                elif pred_type == 'maintenance':
                     result = {
                         'needs_maintenance': item.get('needs_maintenance'),
                         'confidence': item.get('maintenance_confidence'),
                         'priority': item.get('maintenance_priority'),
-                        'recommendation': item.get('maintenance_recommendation')
+                        'days_until': item.get('days_until_maintenance')
                     }
                     confidence = item.get('maintenance_confidence', 0)
-                elif item.get('prediction_type') == 'activity':
+                    
+                elif pred_type == 'object_detection':
                     result = {
-                        'activity': item.get('detected_activity'),
-                        'confidence': item.get('activity_confidence'),
-                        'intensity': item.get('activity_intensity'),
-                        'probabilities': item.get('activity_probabilities')
+                        'object': item.get('object_detected'),
+                        'distance_cm': item.get('distance_cm'),
+                        'danger_level': item.get('danger_level'),
+                        'confidence': item.get('detection_confidence')
                     }
-                    confidence = item.get('activity_confidence', 0)
+                    confidence = item.get('detection_confidence', 0)
+                    
+                elif pred_type == 'danger_prediction':
+                    result = {
+                        'danger_score': item.get('danger_score'),
+                        'recommended_action': item.get('recommended_action'),
+                        'time_to_collision': item.get('time_to_collision')
+                    }
+                    confidence = item.get('danger_score', 0) / 100  # Normalize to 0-1
+                    
+                elif pred_type == 'environment_classification':
+                    result = {
+                        'environment_type': item.get('environment_type'),
+                        'lighting_condition': item.get('lighting_condition'),
+                        'complexity_level': item.get('complexity_level')
+                    }
+                    confidence = 0.85  # Default confidence for environment
                 
                 combined_data.append({
                     'id': item['id'],
                     'device_id': item['device_id'],
                     'device_name': item.get('user_devices', {}).get('device_name', 'Unknown'),
-                    'prediction_type': item['prediction_type'],
-                    'is_anomaly': item['is_anomaly'],
+                    'prediction_type': pred_type,
+                    'is_anomaly': item.get('is_anomaly', False),
                     'confidence_score': confidence,
                     'timestamp': item['created_at'],
                     'result': result,
                     'source': 'ml_prediction'
                 })
         
-        # ✅ Fetch from detection_logs table
+        # ✅ Fetch from detection_logs table (unchanged)
         if source in ['all', 'detections'] and prediction_type in [None, 'detection']:
             det_query = supabase.table('detection_logs')\
                 .select('*, user_devices!detection_logs_device_id_fkey(device_name)')
@@ -136,7 +164,7 @@ def get_ml_history():
                     'device_name': item.get('user_devices', {}).get('device_name', 'Unknown'),
                     'prediction_type': 'detection',
                     'is_anomaly': item['danger_level'] in ['High', 'Critical'],
-                    'confidence_score': 0.85,  # Default confidence for detections
+                    'confidence_score': 0.85,
                     'timestamp': item['detected_at'],
                     'result': {
                         'obstacle_type': item['obstacle_type'],
@@ -194,7 +222,7 @@ def get_anomalies():
         
         combined_anomalies = []
         
-        # ✅ Get ML prediction anomalies
+        # ✅ Get ML prediction anomalies (UPDATED FOR NEW SCHEMA)
         if device_ids:
             ml_response = supabase.table('ml_predictions')\
                 .select('*, user_devices(device_name)')\
@@ -212,14 +240,39 @@ def get_anomalies():
                 .execute()
         
         for item in ml_response.data:
+            # Determine score and message based on type
+            pred_type = item.get('prediction_type', 'unknown')
+            score = 0
+            message = 'Anomaly detected'
+            severity = 'medium'
+            
+            if pred_type == 'anomaly':
+                score = item.get('anomaly_score', 0)
+                severity = item.get('anomaly_severity', 'medium')
+                message = f"Device anomaly detected (health: {item.get('device_health_score', 0):.1f}%)"
+                
+            elif pred_type == 'danger_prediction':
+                score = item.get('danger_score', 0) / 100  # Normalize
+                action = item.get('recommended_action', 'UNKNOWN')
+                severity = 'high' if score > 0.7 else 'medium'
+                message = f"Danger detected - {action} recommended"
+                
+            elif pred_type == 'object_detection':
+                score = item.get('detection_confidence', 0)
+                danger = item.get('danger_level', 'low')
+                severity = danger.lower()
+                obj = item.get('object_detected', 'object')
+                distance = item.get('distance_cm', 0)
+                message = f"{obj.capitalize()} detected at {distance}cm"
+            
             combined_anomalies.append({
                 'id': item['id'],
                 'device_id': item['device_id'],
                 'device_name': item.get('user_devices', {}).get('device_name', 'Unknown'),
-                'type': item['prediction_type'],
-                'severity': item.get('anomaly_severity', 'medium'),
-                'message': item.get('anomaly_message', 'Anomaly detected'),
-                'score': item.get('anomaly_score', 0),
+                'type': pred_type,
+                'severity': severity,
+                'message': message,
+                'score': score,
                 'timestamp': item['created_at'],
                 'source': 'ml_prediction'
             })
@@ -269,7 +322,7 @@ def get_anomalies():
 @ml_history_bp.route('/stats', methods=['GET'])
 @token_required
 def get_ml_stats():
-    """Get combined statistics from both tables"""
+    """Get combined statistics from both tables (UPDATED FOR NEW SCHEMA)"""
     try:
         user_id = request.current_user['user_id']
         user_role = request.current_user['role']
@@ -359,13 +412,20 @@ def get_ml_stats():
         total_anomalies = ml_anomalies.count + det_anomalies.count
         anomaly_rate = (total_anomalies / total_predictions * 100) if total_predictions > 0 else 0
         
-        # Count by type
-        by_type = {}
+        # Count by type (UPDATED FOR NEW SCHEMA)
+        by_type = {
+            'anomaly': 0,
+            'maintenance': 0,
+            'object_detection': 0,
+            'danger_prediction': 0,
+            'environment_classification': 0,
+            'detection': det_total.count
+        }
+        
         for pred in ml_total.data:
             pred_type = pred.get('prediction_type', 'unknown')
-            by_type[pred_type] = by_type.get(pred_type, 0) + 1
-        
-        by_type['detection'] = det_total.count
+            if pred_type in by_type:
+                by_type[pred_type] += 1
         
         # By source
         by_source = {
@@ -373,15 +433,19 @@ def get_ml_stats():
             'detection_logs': det_total.count
         }
         
-        # Average confidence
+        # Average confidence (UPDATED FOR NEW SCHEMA)
         confidence_scores = []
         for pred in ml_total.data:
-            if pred.get('anomaly_score'):
+            pred_type = pred.get('prediction_type')
+            
+            if pred_type == 'anomaly' and pred.get('anomaly_score'):
                 confidence_scores.append(pred['anomaly_score'])
-            elif pred.get('activity_confidence'):
-                confidence_scores.append(pred['activity_confidence'])
-            elif pred.get('maintenance_confidence'):
+            elif pred_type == 'maintenance' and pred.get('maintenance_confidence'):
                 confidence_scores.append(pred['maintenance_confidence'])
+            elif pred_type == 'object_detection' and pred.get('detection_confidence'):
+                confidence_scores.append(pred['detection_confidence'])
+            elif pred_type == 'danger_prediction' and pred.get('danger_score'):
+                confidence_scores.append(pred['danger_score'] / 100)  # Normalize
         
         avg_confidence = (sum(confidence_scores) / len(confidence_scores)) if confidence_scores else 0.75
         

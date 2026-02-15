@@ -48,29 +48,17 @@ def detect_anomaly():
         result = ml_service.detect_anomaly(telemetry.dict())
         print(f"✅ [Anomaly] ML result: {result}")
         
-        # Save to ml_predictions table
+        # Save to ml_predictions table (FIXED: removed user_id)
         try:
             supabase = get_supabase()
             
-            # Get user_id from device
-            device_query = supabase.table('user_devices')\
-                .select('user_id')\
-                .eq('id', device_id)\
-                .single()\
-                .execute()
-            
-            user_id = device_query.data.get('user_id') if device_query.data else None
-            
             prediction = {
-                'user_id': user_id,
                 'device_id': device_id,
                 'prediction_type': 'anomaly',
                 'is_anomaly': result.get('is_anomaly', False),
                 'anomaly_score': result.get('anomaly_score', 0),
                 'anomaly_severity': result.get('severity', 'low'),
-                'anomaly_message': result.get('message', ''),
-                'telemetry_data': telemetry.dict(),
-                'model_version': 'v1.0'
+                'device_health_score': result.get('device_health_score', 100)
             }
             
             print(f"💾 [Anomaly] Saving to DB: {prediction}")
@@ -130,29 +118,17 @@ def predict_maintenance():
         result = ml_service.predict_maintenance(device_info.dict())
         print(f"✅ [Maintenance] ML result: {result}")
         
-        # Save to ml_predictions table
+        # Save to ml_predictions table (FIXED: removed user_id)
         try:
             supabase = get_supabase()
             
-            # Get user_id from device
-            device_query = supabase.table('user_devices')\
-                .select('user_id')\
-                .eq('id', device_id)\
-                .single()\
-                .execute()
-            
-            user_id = device_query.data.get('user_id') if device_query.data else None
-            
             prediction = {
-                'user_id': user_id,
                 'device_id': device_id,
                 'prediction_type': 'maintenance',
                 'needs_maintenance': result.get('needs_maintenance', False),
                 'maintenance_confidence': result.get('probability', 0),
                 'maintenance_priority': result.get('priority', 'low'),
-                'maintenance_recommendations': result.get('recommendations', {}),
-                'telemetry_data': device_info.dict(),
-                'model_version': 'v1.0'
+                'days_until_maintenance': result.get('days_until', None)
             }
             
             print(f"💾 [Maintenance] Saving to DB: {prediction}")
@@ -214,30 +190,18 @@ def detect_object():
         result = ml_service.detect_object(detection_request.dict())
         print(f"✅ [Object Detection] Result: {result}")
         
-        # Save to database
+        # Save to database (FIXED: removed user_id)
         try:
             supabase = get_supabase()
             
-            # Get user_id from device
-            device_query = supabase.table('user_devices')\
-                .select('user_id')\
-                .eq('id', device_id)\
-                .single()\
-                .execute()
-            
-            user_id = device_query.data.get('user_id') if device_query.data else None
-            
             prediction = {
-                'user_id': user_id,
                 'device_id': device_id,
                 'prediction_type': 'object_detection',
                 'object_detected': result.get('object_detected'),
                 'distance_cm': result.get('distance_cm'),
                 'danger_level': result.get('danger_level'),
-                'detection_source': data.get('detection_source'),
                 'detection_confidence': result.get('detection_confidence'),
-                'is_anomaly': result.get('danger_level') in ['High', 'Critical'],
-                'model_version': 'v1.0'
+                'is_anomaly': result.get('danger_level') in ['High', 'Critical']
             }
             
             print(f"💾 [Object Detection] Saving to DB: {prediction}")
@@ -296,29 +260,17 @@ def predict_danger():
         result = ml_service.predict_danger(danger_request.dict())
         print(f"✅ [Danger Prediction] Result: {result}")
         
-        # Save to database
+        # Save to database (FIXED: removed user_id, using new schema columns)
         try:
             supabase = get_supabase()
             
-            # Get user_id from device
-            device_query = supabase.table('user_devices')\
-                .select('user_id')\
-                .eq('id', device_id)\
-                .single()\
-                .execute()
-            
-            user_id = device_query.data.get('user_id') if device_query.data else None
-            
             prediction = {
-                'user_id': user_id,
                 'device_id': device_id,
                 'prediction_type': 'danger_prediction',
                 'danger_score': result.get('danger_score'),
                 'recommended_action': result.get('recommended_action'),
                 'time_to_collision': result.get('time_to_collision'),
-                'is_anomaly': result.get('danger_score', 0) > 70,
-                'sensor_data': danger_request.dict(),
-                'model_version': 'v1.0'
+                'is_anomaly': result.get('danger_score', 0) > 70
             }
             
             print(f"💾 [Danger Prediction] Saving to DB: {prediction}")
@@ -377,30 +329,17 @@ def classify_environment():
         result = ml_service.classify_environment(env_request.dict())
         print(f"✅ [Environment] Result: {result}")
         
-        # Save to database
+        # Save to database (FIXED: removed user_id, using new schema columns)
         try:
             supabase = get_supabase()
             
-            # Get user_id from device
-            device_query = supabase.table('user_devices')\
-                .select('user_id')\
-                .eq('id', device_id)\
-                .single()\
-                .execute()
-            
-            user_id = device_query.data.get('user_id') if device_query.data else None
-            
             prediction = {
-                'user_id': user_id,
                 'device_id': device_id,
                 'prediction_type': 'environment_classification',
                 'environment_type': result.get('environment_type'),
                 'lighting_condition': result.get('lighting_condition'),
                 'complexity_level': result.get('complexity_level'),
-                'environment_confidence': result.get('confidence'),
-                'is_anomaly': False,
-                'sensor_data': env_request.dict(),
-                'model_version': 'v1.0'
+                'is_anomaly': False
             }
             
             print(f"💾 [Environment] Saving to DB: {prediction}")
