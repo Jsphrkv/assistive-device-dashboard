@@ -17,7 +17,7 @@ const AnomalyAlert = ({ deviceId }) => {
     try {
       setLoading(true);
 
-      // ✅ Use getAnomalies to get recent anomalies
+      // ✅ Use getAnomalies to get recent anomalies (this works!)
       const response = await mlAPI.getAnomalies(5);
       const anomalies = response.data?.data || [];
 

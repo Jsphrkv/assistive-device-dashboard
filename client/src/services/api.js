@@ -145,26 +145,50 @@ export const settingsAPI = {
 };
 
 export const mlAPI = {
-  // Anomaly Detection
+  // ========== Anomaly Detection ==========
   detectAnomaly: (telemetryData) =>
     api.post("/ml/detect/anomaly", telemetryData),
 
-  // Activity Recognition
-  recognizeActivity: (sensorData) =>
-    api.post("/ml/recognize/activity", sensorData),
-
-  // Maintenance Prediction
+  // ========== Maintenance Prediction ==========
   predictMaintenance: (deviceData) =>
     api.post("/ml/predict/maintenance", deviceData),
 
-  // ML History (when backend is ready)
-  // getHistory: (deviceId, limit = 100) =>
-  //   api.get(`/ml/history/${deviceId}?limit=${limit}`),
+  // ========== Object Detection ==========
+  detectObject: (detectionData) =>
+    api.post("/ml/detect/object", {
+      device_id: detectionData.device_id,
+      distance_cm: detectionData.distance_cm,
+      detection_confidence: detectionData.detection_confidence || 0.85,
+      proximity_value: detectionData.proximity_value || 5000,
+      ambient_light: detectionData.ambient_light || 400,
+      detection_source: detectionData.detection_source || "ultrasonic",
+    }),
 
-  // // ML Statistics (when backend is ready)
-  // getStatistics: (deviceId, timeRange = "24h") =>
-  //   api.get(`/ml/statistics/${deviceId}?range=${timeRange}`),
-  // ✅ UPDATED: Change from /ml/history to /ml-history
+  // ========== Danger Prediction (NEW) ==========
+  predictDanger: (dangerData) =>
+    api.post("/ml/predict/danger", {
+      device_id: dangerData.device_id,
+      distance_cm: dangerData.distance_cm,
+      rate_of_change: dangerData.rate_of_change,
+      proximity_value: dangerData.proximity_value || 5000,
+      object_type: dangerData.object_type || "obstacle",
+      current_speed_estimate: dangerData.current_speed_estimate || 1.0,
+    }),
+
+  // ========== Environment Classification (NEW) ==========
+  classifyEnvironment: (environmentData) =>
+    api.post("/ml/classify/environment", {
+      device_id: environmentData.device_id,
+      ambient_light_avg: environmentData.ambient_light_avg,
+      ambient_light_variance: environmentData.ambient_light_variance,
+      detection_frequency: environmentData.detection_frequency,
+      average_obstacle_distance: environmentData.average_obstacle_distance,
+      proximity_pattern_complexity:
+        environmentData.proximity_pattern_complexity,
+      distance_variance: environmentData.distance_variance,
+    }),
+
+  // ========== ML History & Statistics ==========
   getHistory: (params = {}) => {
     const queryParams = new URLSearchParams();
     if (params.limit) queryParams.append("limit", params.limit);
@@ -175,55 +199,12 @@ export const mlAPI = {
     if (params.start_date) queryParams.append("start_date", params.start_date);
     if (params.end_date) queryParams.append("end_date", params.end_date);
 
-    // ✅ Changed from /ml/history to /ml-history
     return api.get(`/ml-history?${queryParams.toString()}`);
   },
 
-  // ✅ Changed from /ml/history/anomalies to /ml-history/anomalies
   getAnomalies: (limit = 20) => api.get(`/ml-history/anomalies?limit=${limit}`),
 
-  // ✅ Changed from /ml/history/stats to /ml-history/stats
   getStats: (days = 7) => api.get(`/ml-history/stats?days=${days}`),
-
-  detectObject: (detectionData) =>
-    api.post("/ml/detect/object", {
-      device_id: detectionData.device_id,
-      object_detected: detectionData.object_detected,
-      distance_cm: detectionData.distance_cm,
-      detection_source: detectionData.detection_source || "camera",
-      detection_confidence: detectionData.detection_confidence || 0.85,
-      image_data: detectionData.image_data, // Optional base64 image
-    }),
-
-  // ✅ NEW: Fall Detection
-  detectFall: (sensorData) =>
-    api.post("/ml/detect/fall", {
-      device_id: sensorData.device_id,
-      accelerometer_x: sensorData.accelerometer_x,
-      accelerometer_y: sensorData.accelerometer_y,
-      accelerometer_z: sensorData.accelerometer_z,
-      gyroscope_x: sensorData.gyroscope_x,
-      gyroscope_y: sensorData.gyroscope_y,
-      gyroscope_z: sensorData.gyroscope_z,
-      time_since_last_movement: sensorData.time_since_last_movement || 0,
-    }),
-
-  // ✅ NEW: Route Prediction
-  predictRoute: (routeData) =>
-    api.post("/ml/predict/route", {
-      device_id: routeData.device_id,
-      current_location: {
-        latitude: routeData.current_location.latitude,
-        longitude: routeData.current_location.longitude,
-      },
-      destination: {
-        latitude: routeData.destination.latitude,
-        longitude: routeData.destination.longitude,
-      },
-      time_of_day: routeData.time_of_day || "afternoon",
-      avoid_obstacles: routeData.avoid_obstacles || [],
-      max_detour_meters: routeData.max_detour_meters || 500,
-    }),
 };
 
 export default api;

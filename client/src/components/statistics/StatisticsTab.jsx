@@ -4,7 +4,11 @@ import { statisticsAPI } from "../../services/api";
 import AlertsChart from "./AlertsChart";
 import ObstaclesChart from "./ObstaclesChart";
 import PeakTimesChart from "./PeakTimesChart";
-import MLStatistics from "../ml/MLStatistics";
+import AnomalyAlert from "../ml/AnomalyAlert";
+import DeviceHealthMonitor from "../ml/DeviceHealthMonitor";
+import MaintenanceStatus from "../ml/MaintenanceStatus";
+import DangerMonitor from "../ml/DangerMonitor";
+import EnvironmentMonitor from "../ml/EnvironmentMonitor";
 
 const StatisticsTab = ({ deviceId }) => {
   const [dailyStats, setDailyStats] = useState([]);
@@ -70,11 +74,11 @@ const StatisticsTab = ({ deviceId }) => {
         detections: item.detection_count || item.detections || 0,
       }));
 
-      // ✅ FIX: Use "value" instead of "count" for the pie chart
+      // Transform obstacles data
       const transformedObstacles = obstaclesRaw.map((item) => ({
         name:
           item.obstacle_type || item.object_detected || item.name || "unknown",
-        value: item.total_count || item.count || 0, // ✅ Changed from "count" to "value"
+        value: item.total_count || item.count || 0,
       }));
 
       console.log("📊 Transformed daily data:", transformedDaily);
@@ -207,7 +211,7 @@ const StatisticsTab = ({ deviceId }) => {
         </div>
       )}
 
-      {/* Charts Grid */}
+      {/* Charts Grid - Detection Analytics */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <AlertsChart data={dailyStats} loading={loading} />
         <ObstaclesChart data={obstacleStats} loading={loading} />
@@ -218,9 +222,25 @@ const StatisticsTab = ({ deviceId }) => {
         <PeakTimesChart data={hourlyStats} loading={loading} />
       </div>
 
-      {/* ML Statistics Component */}
+      {/* ML Statistics Section - All 5 Components */}
       <div className="mt-8">
-        <MLStatistics deviceId={deviceId} />
+        <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+          <BarChart3 className="w-5 h-5 text-blue-600" />
+          ML Statistics
+        </h3>
+
+        {/* First Row: 3 columns */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+          <AnomalyAlert deviceId={deviceId} />
+          <DeviceHealthMonitor deviceId={deviceId} />
+          <MaintenanceStatus deviceId={deviceId} />
+        </div>
+
+        {/* Second Row: 2 columns */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <DangerMonitor deviceId={deviceId} />
+          <EnvironmentMonitor deviceId={deviceId} />
+        </div>
       </div>
     </div>
   );

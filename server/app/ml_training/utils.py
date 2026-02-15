@@ -265,143 +265,179 @@ def generate_synthetic_data(n_samples=1000, dataset_type='anomaly'):
     np.random.seed(42)
     
     if dataset_type == 'anomaly':
-        # Generate anomaly detection data
-        n_normal = int(n_samples * 0.85)  # 85% normal
-        n_anomaly = n_samples - n_normal   # 15% anomalies
-        
-        # ❌ WRONG: This creates 2D array
-        # 'heart_rate': np.random.choice([
-        #     np.random.normal(50, 5, n_anomaly//2),
-        #     np.random.normal(120, 15, n_anomaly//2)
-        # ]).flatten()[:n_anomaly],
-        
-        # ✅ CORRECT: Generate data properly
-        
-        # Normal samples
-        normal_data = {
-            'temperature': np.random.normal(37, 0.5, n_normal),
-            'humidity': np.random.normal(65, 10, n_normal),
-            'battery_level': np.random.normal(85, 10, n_normal),
-            'signal_strength': np.random.normal(-60, 10, n_normal),
-            'error_count': np.random.poisson(2, n_normal),
-            'is_anomaly': np.zeros(n_normal, dtype=int)  # 0 = normal
-        }
-        
-        # Anomaly samples (split between two types)
-        n_anomaly_high = n_anomaly // 2
-        n_anomaly_low = n_anomaly - n_anomaly_high
-        
-        # Type 1: High temperature anomalies
-        anomaly_high = {
-            'temperature': np.random.normal(42, 2, n_anomaly_high),  # High temp
-            'humidity': np.random.normal(65, 10, n_anomaly_high),
-            'battery_level': np.random.normal(85, 10, n_anomaly_high),
-            'signal_strength': np.random.normal(-60, 10, n_anomaly_high),
-            'error_count': np.random.poisson(15, n_anomaly_high),  # High errors
-            'is_anomaly': np.ones(n_anomaly_high, dtype=int)
-        }
-        
-        # Type 2: Low battery + weak signal anomalies
-        anomaly_low = {
-            'temperature': np.random.normal(37, 0.5, n_anomaly_low),
-            'humidity': np.random.normal(65, 10, n_anomaly_low),
-            'battery_level': np.random.normal(20, 10, n_anomaly_low),  # Low battery
-            'signal_strength': np.random.normal(-95, 5, n_anomaly_low),  # Weak signal
-            'error_count': np.random.poisson(20, n_anomaly_low),  # High errors
-            'is_anomaly': np.ones(n_anomaly_low, dtype=int)
-        }
-        
-        # Combine all samples
+        # Device anomaly detection data
         df = pd.DataFrame({
-            col: np.concatenate([
-                normal_data[col],
-                anomaly_high[col],
-                anomaly_low[col]
-            ])
-            for col in normal_data.keys()
+            'temperature_c': np.random.normal(37, 8, n_samples),  # CPU temp
+            'battery_level': np.random.randint(10, 100, n_samples),
+            'cpu_usage': np.random.randint(20, 100, n_samples),
+            'rssi': np.random.randint(-90, -30, n_samples),  # WiFi signal
+            'error_count': np.random.randint(0, 20, n_samples),
+            'is_anomaly': np.random.choice([0, 1], n_samples, p=[0.85, 0.15])
         })
-        
-        # Shuffle the data
-        df = df.sample(frac=1, random_state=42).reset_index(drop=True)
-        
-    elif dataset_type == 'activity':
-        # Generate activity recognition data
-        activities = ['resting', 'walking', 'using_device']
-        n_per_activity = n_samples // 3
-        
-        activity_data = []
-        
-        for activity in activities:
-            if activity == 'resting':
-                data = {
-                    'accel_x': np.random.normal(0, 0.1, n_per_activity),
-                    'accel_y': np.random.normal(0, 0.1, n_per_activity),
-                    'accel_z': np.random.normal(9.8, 0.2, n_per_activity),
-                    'gyro_x': np.random.normal(0, 0.05, n_per_activity),
-                    'gyro_y': np.random.normal(0, 0.05, n_per_activity),
-                    'gyro_z': np.random.normal(0, 0.05, n_per_activity),
-                    'activity': [activity] * n_per_activity
-                }
-            elif activity == 'walking':
-                data = {
-                    'accel_x': np.random.normal(2, 1, n_per_activity),
-                    'accel_y': np.random.normal(1, 0.5, n_per_activity),
-                    'accel_z': np.random.normal(9.8, 2, n_per_activity),
-                    'gyro_x': np.random.normal(0.5, 0.3, n_per_activity),
-                    'gyro_y': np.random.normal(0.5, 0.3, n_per_activity),
-                    'gyro_z': np.random.normal(0.2, 0.2, n_per_activity),
-                    'activity': [activity] * n_per_activity
-                }
-            else:  # using_device
-                data = {
-                    'accel_x': np.random.normal(0.5, 0.3, n_per_activity),
-                    'accel_y': np.random.normal(0.5, 0.3, n_per_activity),
-                    'accel_z': np.random.normal(9.8, 0.5, n_per_activity),
-                    'gyro_x': np.random.normal(0.1, 0.1, n_per_activity),
-                    'gyro_y': np.random.normal(0.1, 0.1, n_per_activity),
-                    'gyro_z': np.random.normal(0.1, 0.1, n_per_activity),
-                    'activity': [activity] * n_per_activity
-                }
-            
-            activity_data.append(pd.DataFrame(data))
-        
-        df = pd.concat(activity_data, ignore_index=True)
-        df = df.sample(frac=1, random_state=42).reset_index(drop=True)
-        
+        return df
+    
     elif dataset_type == 'maintenance':
-        # Generate maintenance prediction data
-        n_no_maintenance = int(n_samples * 0.7)  # 70% don't need maintenance
-        n_needs_maintenance = n_samples - n_no_maintenance
-        
-        # Devices that don't need maintenance
-        no_maintenance = {
-            'battery_health': np.random.uniform(80, 100, n_no_maintenance),
-            'charge_cycles': np.random.randint(0, 300, n_no_maintenance),
-            'temperature_avg': np.random.normal(37, 2, n_no_maintenance),
-            'error_count': np.random.poisson(1, n_no_maintenance),
-            'uptime_days': np.random.randint(1, 100, n_no_maintenance),
-            'needs_maintenance': np.zeros(n_no_maintenance, dtype=int)
-        }
-        
-        # Devices that need maintenance
-        needs_maintenance = {
-            'battery_health': np.random.uniform(10, 60, n_needs_maintenance),
-            'charge_cycles': np.random.randint(500, 2000, n_needs_maintenance),
-            'temperature_avg': np.random.normal(42, 3, n_needs_maintenance),
-            'error_count': np.random.poisson(10, n_needs_maintenance),
-            'uptime_days': np.random.randint(100, 365, n_needs_maintenance),
-            'needs_maintenance': np.ones(n_needs_maintenance, dtype=int)
-        }
-        
-        # Combine
+        # Predictive maintenance data
         df = pd.DataFrame({
-            col: np.concatenate([no_maintenance[col], needs_maintenance[col]])
-            for col in no_maintenance.keys()
+            'battery_health': np.random.randint(40, 100, n_samples),
+            'usage_hours': np.random.randint(0, 1000, n_samples),
+            'temperature_avg': np.random.normal(35, 5, n_samples),
+            'error_count': np.random.randint(0, 30, n_samples),
+            'days_since_last_maintenance': np.random.randint(0, 180, n_samples),
+            'needs_maintenance': np.random.choice([0, 1], n_samples, p=[0.75, 0.25])
         })
+        return df
+    
+    elif dataset_type == 'object_detection':
+        # Object/obstacle detection and classification
+        df = pd.DataFrame({
+            'distance_cm': np.random.uniform(10, 500, n_samples),
+            'detection_confidence': np.random.uniform(0.5, 1.0, n_samples),
+            'proximity_value': np.random.randint(50, 10000, n_samples),
+            'ambient_light': np.random.randint(100, 800, n_samples),
+            'object_detected': np.random.choice(
+                ['obstacle', 'person', 'vehicle', 'wall', 'stairs_down', 
+                 'stairs_up', 'curb', 'door', 'pole'],
+                n_samples
+            )
+        })
+        return df
+    
+    elif dataset_type == 'danger_prediction':
+        # Danger prediction (NEW)
+        # Features: distance, rate_of_change, proximity, object_type, speed
+        # Targets: danger_score (0-100), recommended_action
         
-        df = df.sample(frac=1, random_state=42).reset_index(drop=True)
+        distances = np.random.uniform(10, 400, n_samples)
+        rates_of_change = np.random.normal(-10, 30, n_samples)  # negative = approaching
+        
+        # Generate danger scores based on distance and rate
+        danger_scores = []
+        actions = []
+        
+        for dist, rate in zip(distances, rates_of_change):
+            # Calculate danger based on distance and approach rate
+            if dist < 30 and rate < -20:
+                danger = np.random.uniform(80, 100)
+                action = 'STOP'
+            elif dist < 100 and rate < -10:
+                danger = np.random.uniform(60, 85)
+                action = np.random.choice(['STOP', 'SLOW_DOWN'])
+            elif dist < 200:
+                danger = np.random.uniform(30, 65)
+                action = np.random.choice(['SLOW_DOWN', 'CAUTION'])
+            else:
+                danger = np.random.uniform(0, 35)
+                action = 'SAFE'
+            
+            danger_scores.append(danger)
+            actions.append(action)
+        
+        df = pd.DataFrame({
+            'distance_cm': distances,
+            'rate_of_change': rates_of_change,  # cm/s (negative = approaching)
+            'proximity_value': np.random.randint(1000, 10000, n_samples),
+            'object_type_encoded': np.random.randint(0, 5, n_samples),  # 0=obstacle, 1=person, 2=vehicle, etc.
+            'current_speed_estimate': np.random.uniform(0, 5, n_samples),  # m/s
+            'danger_score': danger_scores,
+            'recommended_action': actions
+        })
+        return df
+    
+    elif dataset_type == 'environment_classification':
+        # Environment classification (NEW)
+        # Features: light patterns, detection frequency, distances
+        # Targets: environment_type, lighting, complexity
+        
+        environments = []
+        lightings = []
+        complexities = []
+        
+        ambient_lights = []
+        light_variances = []
+        detection_freqs = []
+        avg_distances = []
+        complexities_score = []
+        distance_vars = []
+        
+        for _ in range(n_samples):
+            # Generate correlated environment features
+            env_type = np.random.choice(['indoor', 'outdoor', 'crowded', 'open_space', 'narrow_corridor'])
+            
+            if env_type == 'indoor':
+                ambient = np.random.uniform(200, 500)
+                light_var = np.random.uniform(50, 150)
+                det_freq = np.random.uniform(2, 8)
+                avg_dist = np.random.uniform(100, 300)
+                complexity = np.random.uniform(5, 12)
+                dist_var = np.random.uniform(30, 100)
+                lighting = np.random.choice(['dim', 'bright'], p=[0.6, 0.4])
+                complex_level = np.random.choice(['moderate', 'complex'], p=[0.6, 0.4])
+                
+            elif env_type == 'outdoor':
+                ambient = np.random.uniform(500, 900)
+                light_var = np.random.uniform(100, 300)
+                det_freq = np.random.uniform(0.5, 3)
+                avg_dist = np.random.uniform(200, 600)
+                complexity = np.random.uniform(2, 8)
+                dist_var = np.random.uniform(50, 200)
+                lighting = np.random.choice(['bright', 'dim'], p=[0.7, 0.3])
+                complex_level = np.random.choice(['simple', 'moderate'], p=[0.6, 0.4])
+                
+            elif env_type == 'crowded':
+                ambient = np.random.uniform(300, 600)
+                light_var = np.random.uniform(100, 250)
+                det_freq = np.random.uniform(8, 15)
+                avg_dist = np.random.uniform(50, 150)
+                complexity = np.random.uniform(12, 20)
+                dist_var = np.random.uniform(20, 60)
+                lighting = np.random.choice(['bright', 'dim'], p=[0.5, 0.5])
+                complex_level = 'complex'
+                
+            elif env_type == 'open_space':
+                ambient = np.random.uniform(600, 900)
+                light_var = np.random.uniform(80, 200)
+                det_freq = np.random.uniform(0.2, 1.5)
+                avg_dist = np.random.uniform(400, 800)
+                complexity = np.random.uniform(1, 5)
+                dist_var = np.random.uniform(100, 300)
+                lighting = 'bright'
+                complex_level = 'simple'
+                
+            else:  # narrow_corridor
+                ambient = np.random.uniform(150, 400)
+                light_var = np.random.uniform(30, 100)
+                det_freq = np.random.uniform(4, 10)
+                avg_dist = np.random.uniform(80, 200)
+                complexity = np.random.uniform(8, 15)
+                dist_var = np.random.uniform(20, 50)
+                lighting = np.random.choice(['dim', 'dark'], p=[0.6, 0.4])
+                complex_level = 'complex'
+            
+            ambient_lights.append(ambient)
+            light_variances.append(light_var)
+            detection_freqs.append(det_freq)
+            avg_distances.append(avg_dist)
+            complexities_score.append(complexity)
+            distance_vars.append(dist_var)
+            environments.append(env_type)
+            lightings.append(lighting)
+            complexities.append(complex_level)
+        
+        df = pd.DataFrame({
+            'ambient_light_avg': ambient_lights,
+            'ambient_light_variance': light_variances,
+            'detection_frequency': detection_freqs,  # detections per minute
+            'average_obstacle_distance': avg_distances,
+            'proximity_pattern_complexity': complexities_score,
+            'distance_variance': distance_vars,
+            'environment_type': environments,
+            'lighting_condition': lightings,
+            'complexity_level': complexities
+        })
+        return df
     
     else:
         raise ValueError(f"Unknown dataset_type: {dataset_type}")
-    
+
     return df

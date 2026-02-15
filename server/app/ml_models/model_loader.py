@@ -1,135 +1,264 @@
 """
-Model Loader - Load and manage trained ML models
-Fixed to return proper dictionary structure
+Model Loader - Centralized ML model management
+Loads and manages all trained models
 """
 
 import os
 import joblib
-from datetime import datetime
+from pathlib import Path
 
 class ModelLoader:
-    """Load and cache trained ML models"""
-    
     def __init__(self):
-        self.models_dir = os.path.join(
-            os.path.dirname(__file__), 'saved_models'
-        )
-        self._models_cache = {}
-        self._scalers_cache = {}
-        self._encoders_cache = {}
-        self._metadata_cache = {}
+        self.models = {}
+        self.scalers = {}
+        self.label_encoders = {}
+        self.models_dir = Path(__file__).parent / 'saved_models'
         
-    def load_model(self, model_name, force_reload=False):
-        """
-        Load a trained model from disk
+        # Ensure models directory exists
+        self.models_dir.mkdir(exist_ok=True)
         
-        Args:
-            model_name: Name of the model (e.g., 'anomaly_model')
-            force_reload: Force reload even if cached
+    def load_model(self, model_name):
+        """Load a specific model by name"""
+        try:
+            model_path = self.models_dir / f'{model_name}.joblib'
+            scaler_path = self.models_dir / f'{model_name}_scaler.joblib'
+            encoder_path = self.models_dir / f'{model_name}_label_encoder.joblib'
             
-        Returns:
-            dict with 'model', 'scaler', 'metadata', 'encoder' (if available)
-        """
-        # Return cached if available
-        if not force_reload and model_name in self._models_cache:
-            return {
-                'model': self._models_cache[model_name],
-                'scaler': self._scalers_cache.get(model_name),
-                'encoder': self._encoders_cache.get(model_name),
-                'metadata': self._metadata_cache.get(model_name)
-            }
+            if not model_path.exists():
+                print(f"⚠️  Model not found: {model_path}")
+                return False
+            
+            # Load model
+            self.models[model_name] = joblib.load(model_path)
+            print(f"✅ Loaded model: {model_name}")
+            
+            # Load scaler if exists
+            if scaler_path.exists():
+                self.scalers[model_name] = joblib.load(scaler_path)
+                print(f"✅ Loaded scaler for: {model_name}")
+            
+            # Load label encoder if exists (for classification models)
+            if encoder_path.exists():
+                self.label_encoders[model_name] = joblib.load(encoder_path)
+                print(f"✅ Loaded label encoder for: {model_name}")
+            
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error loading {model_name}: {e}")
+            return False
+    
+    def load_all_models(self):
+        """Load all available models"""
+        model_names = [
+            'anomaly_model',
+            'maintenance_model',
+            'activity_model',
+            'object_detection_model',
+            'fall_detection_model',
+            'route_prediction_model'
+        ]
         
-        # Load model
-        model_path = os.path.join(self.models_dir, f'{model_name}.pkl')
-        if not os.path.exists(model_path):
-            raise FileNotFoundError(
-                f"Model '{model_name}' not found at {model_path}. "
-                f"Please train the model first."
-            )
+        print("="*60)
+        print("LOADING ML MODELS")
+        print("="*60)
         
-        model = joblib.load(model_path)
-        self._models_cache[model_name] = model
+        loaded_count = 0
+        for model_name in model_names:
+            if self.load_model(model_name):
+                loaded_count += 1
         
-        # Load scaler
-        scaler_path = os.path.join(self.models_dir, f'{model_name}_scaler.pkl')
-        if os.path.exists(scaler_path):
-            scaler = joblib.load(scaler_path)
-            self._scalers_cache[model_name] = scaler
+        print("="*60)
+        print(f"✅ Loaded {loaded_count}/{len(model_names)} models successfully")
+        print("="*60)
+        
+        return loaded_count > 0
+    
+    def get_model(self, model_name):
+        """Get a loaded model"""
+        return self.models.get(model_name)
+    
+    def get_scaler(self, model_name):
+        """Get a model's scaler"""
+        return self.scalers.get(model_name)
+    
+    def get_label_encoder(self, model_name):
+        """Get a model's label encoder"""
+        return self.label_encoders.get(model_name)
+    
+    def is_loaded(self, model_name):
+        """Check if a model is loaded"""
+        return model_name in self.models
+    
+    def predict_anomaly(self, features):
+        """Predict anomaly using loaded model"""
+        if not self.is_loaded('anomaly_model'):
+            raise RuntimeError("Anomaly model not loaded")
+        
+        model = self.get_model('anomaly_model')
+        scaler = self.get_scaler('anomaly_model')
+        
+        # Scale features
+        if scaler:
+            features_scaled = scaler.transform([features])
         else:
-            scaler = None
+            features_scaled = [features]
         
-        # Load encoder (for multiclass models)
-        encoder_path = os.path.join(self.models_dir, f'{model_name}_encoder.pkl')
-        if os.path.exists(encoder_path):
-            encoder = joblib.load(encoder_path)
-            self._encoders_cache[model_name] = encoder
-        else:
-            encoder = None
+        # Predict
+        prediction = model.predict(features_scaled)[0]
+        probability = model.predict_proba(features_scaled)[0]
         
-        # Load metadata
-        metadata_path = os.path.join(self.models_dir, f'{model_name}_metadata.pkl')
-        if os.path.exists(metadata_path):
-            metadata = joblib.load(metadata_path)
-            self._metadata_cache[model_name] = metadata
-        else:
-            metadata = {}
-        
-        print(f"✓ Loaded {model_name}")
-        
-        # CRITICAL: Return a dictionary, not just the model
         return {
-            'model': model,
-            'scaler': scaler,
-            'encoder': encoder,
-            'metadata': metadata
+            'is_anomaly': bool(prediction),
+            'anomaly_score': float(probability[1]),
+            'confidence': float(max(probability))
         }
     
-    def get_model_info(self, model_name):
-        """Get metadata about a model without loading it"""
-        metadata_path = os.path.join(self.models_dir, f'{model_name}_metadata.pkl')
-        if os.path.exists(metadata_path):
-            return joblib.load(metadata_path)
-        return None
-    
-    def list_available_models(self):
-        """List all available trained models"""
-        if not os.path.exists(self.models_dir):
-            return []
+    def predict_maintenance(self, features):
+        """Predict maintenance using loaded model"""
+        if not self.is_loaded('maintenance_model'):
+            raise RuntimeError("Maintenance model not loaded")
         
-        models = []
-        for filename in os.listdir(self.models_dir):
-            if filename.endswith('.pkl') and not any(
-                x in filename for x in ['scaler', 'encoder', 'metadata']
-            ):
-                model_name = filename.replace('.pkl', '')
-                models.append(model_name)
+        model = self.get_model('maintenance_model')
+        scaler = self.get_scaler('maintenance_model')
         
-        return models
+        # Scale features
+        if scaler:
+            features_scaled = scaler.transform([features])
+        else:
+            features_scaled = [features]
+        
+        # Predict
+        prediction = model.predict(features_scaled)[0]
+        probability = model.predict_proba(features_scaled)[0]
+        
+        return {
+            'needs_maintenance': bool(prediction),
+            'probability': float(probability[1]),
+            'confidence': float(max(probability))
+        }
     
-    def clear_cache(self):
-        """Clear all cached models"""
-        self._models_cache.clear()
-        self._scalers_cache.clear()
-        self._encoders_cache.clear()
-        self._metadata_cache.clear()
-        print("✓ Model cache cleared")
+    def predict_activity(self, features):
+        """Predict activity using loaded model"""
+        if not self.is_loaded('activity_model'):
+            raise RuntimeError("Activity model not loaded")
+        
+        model = self.get_model('activity_model')
+        scaler = self.get_scaler('activity_model')
+        encoder = self.get_label_encoder('activity_model')
+        
+        # Scale features
+        if scaler:
+            features_scaled = scaler.transform([features])
+        else:
+            features_scaled = [features]
+        
+        # Predict
+        prediction_encoded = model.predict(features_scaled)[0]
+        probabilities = model.predict_proba(features_scaled)[0]
+        
+        # Decode activity
+        if encoder:
+            activity = encoder.inverse_transform([prediction_encoded])[0]
+            activity_probs = {
+                encoder.inverse_transform([i])[0]: float(prob)
+                for i, prob in enumerate(probabilities)
+            }
+        else:
+            activity = str(prediction_encoded)
+            activity_probs = {}
+        
+        return {
+            'activity': activity,
+            'confidence': float(max(probabilities)),
+            'probabilities': activity_probs
+        }
+    
+    def predict_object(self, features):
+        """Predict object/obstacle using loaded model"""
+        if not self.is_loaded('object_detection_model'):
+            raise RuntimeError("Object detection model not loaded")
+        
+        model = self.get_model('object_detection_model')
+        scaler = self.get_scaler('object_detection_model')
+        encoder = self.get_label_encoder('object_detection_model')
+        
+        # Scale features
+        if scaler:
+            features_scaled = scaler.transform([features])
+        else:
+            features_scaled = [features]
+        
+        # Predict
+        prediction_encoded = model.predict(features_scaled)[0]
+        probabilities = model.predict_proba(features_scaled)[0]
+        
+        # Decode object
+        if encoder:
+            object_type = encoder.inverse_transform([prediction_encoded])[0]
+        else:
+            object_type = str(prediction_encoded)
+        
+        return {
+            'object_detected': object_type,
+            'confidence': float(max(probabilities)),
+            'detection_confidence': float(max(probabilities))
+        }
+    
+    def predict_fall(self, features):
+        """Predict fall using loaded model"""
+        if not self.is_loaded('fall_detection_model'):
+            raise RuntimeError("Fall detection model not loaded")
+        
+        model = self.get_model('fall_detection_model')
+        scaler = self.get_scaler('fall_detection_model')
+        
+        # Scale features
+        if scaler:
+            features_scaled = scaler.transform([features])
+        else:
+            features_scaled = [features]
+        
+        # Predict
+        prediction = model.predict(features_scaled)[0]
+        probability = model.predict_proba(features_scaled)[0]
+        
+        return {
+            'fall_detected': bool(prediction),
+            'confidence': float(probability[1]),
+            'probability': float(probability[1])
+        }
+    
+    def predict_route(self, features):
+        """Predict route metrics using loaded model"""
+        if not self.is_loaded('route_prediction_model'):
+            raise RuntimeError("Route prediction model not loaded")
+        
+        model = self.get_model('route_prediction_model')
+        scaler = self.get_scaler('route_prediction_model')
+        
+        # Scale features
+        if scaler:
+            features_scaled = scaler.transform([features])
+        else:
+            features_scaled = [features]
+        
+        # Predict (multi-output: difficulty, time, obstacles)
+        prediction = model.predict(features_scaled)[0]
+        
+        return {
+            'difficulty_score': float(prediction[0]),
+            'estimated_time_minutes': int(prediction[1]),
+            'estimated_obstacles': int(prediction[2])
+        }
 
 
-# Global instance
+# Global singleton instance
 model_loader = ModelLoader()
 
-
-# Convenience functions
-def load_anomaly_model():
-    """Load anomaly detection model"""
-    return model_loader.load_model('anomaly_model')
-
-
-def load_activity_model():
-    """Load activity recognition model"""
-    return model_loader.load_model('activity_model')
-
-
-def load_maintenance_model():
-    """Load maintenance prediction model"""
-    return model_loader.load_model('maintenance_model')
+# Auto-load models on import
+try:
+    model_loader.load_all_models()
+except Exception as e:
+    print(f"⚠️  Could not auto-load models: {e}")
+    print("   Models will need to be loaded manually")

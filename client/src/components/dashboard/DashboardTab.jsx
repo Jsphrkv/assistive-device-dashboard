@@ -10,8 +10,8 @@ import {
 import { deviceAPI, detectionsAPI, mlAPI } from "../../services/api";
 import { formatRelativeTime } from "../../utils/helpers";
 import AnomalyAlert from "../ml/AnomalyAlert";
-import ActivityMonitor from "../ml/ActivityMonitor";
 import MaintenanceStatus from "../ml/MaintenanceStatus";
+import DangerMonitor from "../ml/DangerMonitor";
 
 const DashboardTab = () => {
   const [deviceStatus, setDeviceStatus] = useState(null);
@@ -180,7 +180,7 @@ const DashboardTab = () => {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 opacity-50">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 opacity-50">
           <div className="bg-white rounded-lg shadow p-6">
             <h4 className="font-semibold text-gray-500 mb-2">
               Anomaly Detection
@@ -188,18 +188,15 @@ const DashboardTab = () => {
             <p className="text-sm text-gray-400">No data available</p>
           </div>
           <div className="bg-white rounded-lg shadow p-6">
+            <h4 className="font-semibold text-gray-500 mb-2">Danger Monitor</h4>
+            <p className="text-sm text-gray-400">No data available</p>
+          </div>
+          <div className="bg-white rounded-lg shadow p-6">
             <h4 className="font-semibold text-gray-500 mb-2">
-              Activity Monitor
+              Maintenance Status
             </h4>
             <p className="text-sm text-gray-400">No data available</p>
           </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-6 opacity-50">
-          <h4 className="font-semibold text-gray-500 mb-2">
-            Maintenance Status
-          </h4>
-          <p className="text-sm text-gray-400">No data available</p>
         </div>
       </div>
     );
@@ -257,8 +254,8 @@ const DashboardTab = () => {
               AI-Powered Analysis
             </h3>
             <p className="text-sm text-gray-600">
-              Real-time machine learning insights for device health, anomalies,
-              and user activity
+              Real-time machine learning insights for device health, danger
+              detection, and maintenance predictions
             </p>
           </div>
           {mlStats && (
@@ -272,21 +269,20 @@ const DashboardTab = () => {
         </div>
       </div>
 
-      {/* ML Components - They now fetch their own data */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* ML Components Grid - 3 columns */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <AnomalyAlert deviceId={deviceStatus?.deviceId || "device-001"} />
-        <ActivityMonitor deviceId={deviceStatus?.deviceId || "device-001"} />
+        <DangerMonitor deviceId={deviceStatus?.deviceId || "device-001"} />
+        <MaintenanceStatus deviceId={deviceStatus?.deviceId || "device-001"} />
       </div>
 
-      <MaintenanceStatus deviceId={deviceStatus?.deviceId || "device-001"} />
-
-      {/* Quick Stats - Real Data (3 cards only) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+      {/* Quick Stats - Real Data (3 cards) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Anomalies */}
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">Anomalies</p>
+              <p className="text-sm text-gray-600 mb-1">Anomalies Detected</p>
               <p className="text-2xl font-bold text-red-600">{anomalyCount}</p>
               {mlStats && (
                 <p className="text-xs text-gray-500 mt-1">
