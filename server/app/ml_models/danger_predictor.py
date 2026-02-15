@@ -1,14 +1,15 @@
 """
-Danger Predictor - Wrapper for danger prediction model
-Predicts danger level and recommends action
+Danger Predictor - Predicts danger level and recommends action
 """
 
 import numpy as np
-from .model_loader import model_loader
+
 
 class DangerPredictor:
     def __init__(self):
-        self.model_name = 'danger_prediction_model'
+        self.score_model = None
+        self.action_model = None
+        self.scaler = None
         
     def predict(self, danger_data):
         """
@@ -19,17 +20,21 @@ class DangerPredictor:
                 - distance_cm (float)
                 - rate_of_change (float): cm/s, negative = approaching
                 - proximity_value (int)
-                - object_type (str): 'obstacle', 'person', 'vehicle', etc.
+                - object_type (str)
                 - current_speed_estimate (float): m/s
         
         Returns:
-            dict with:
-                - danger_score (float): 0-100
-                - recommended_action (str): STOP/SLOW_DOWN/CAUTION/SAFE
-                - time_to_collision (float): seconds
-                - confidence (float)
-                - message (str)
+            dict with danger prediction results
         """
+        if not self.score_model or not self.action_model:
+            return {
+                'danger_score': 0.0,
+                'recommended_action': 'SAFE',
+                'time_to_collision': 999.0,
+                'confidence': 0.0,
+                'message': 'Model not loaded'
+            }
+        
         try:
             # Encode object type
             object_encoding = {
@@ -37,40 +42,49 @@ class DangerPredictor:
                 'person': 1,
                 'vehicle': 2,
                 'wall': 3,
+                'stairs': 4,
                 'stairs_down': 4,
                 'stairs_up': 4,
                 'door': 3,
-                'pole': 0
+                'pole': 0,
+                'unknown': 0
             }
             
             object_type = danger_data.get('object_type', 'obstacle')
             object_encoded = object_encoding.get(object_type, 0)
             
-            # Extract features in correct order
-            features = [
+            # Extract features
+            features = np.array([[
                 danger_data.get('distance_cm', 100.0),
                 danger_data.get('rate_of_change', 0.0),
                 danger_data.get('proximity_value', 5000),
                 object_encoded,
                 danger_data.get('current_speed_estimate', 1.0)
-            ]
+            ]])
             
-            # Get prediction from model_loader
-            result = model_loader.predict_danger(features)
+            # Scale if scaler available
+            if self.scaler:
+                features = self.scaler.transform(features)
             
-            danger_score = result['danger_score']
-            recommended_action = result['recommended_action']
+            # Predict danger score
+            danger_score = self.score_model.predict(features)[0]
+            danger_score = max(0.0, min(100.0, danger_score))
+            
+            # Predict recommended action
+            action_prediction = self.action_model.predict(features)[0]
+            actions = ['SAFE', 'CAUTION', 'SLOW_DOWN', 'STOP']
+            recommended_action = actions[action_prediction] if action_prediction < len(actions) else 'SAFE'
             
             # Calculate time to collision
             distance = danger_data.get('distance_cm', 100)
             speed = abs(danger_data.get('rate_of_change', 0))
             
-            if speed > 1:  # Moving
+            if speed > 1:
                 time_to_collision = distance / speed
             else:
-                time_to_collision = 999  # Stationary
+                time_to_collision = 999.0
             
-            # Generate message based on danger level
+            # Generate message
             if danger_score >= 80:
                 message = f"🚨 CRITICAL: {object_type.upper()} at {distance:.0f}cm! {recommended_action} immediately!"
             elif danger_score >= 60:
@@ -80,7 +94,7 @@ class DangerPredictor:
             else:
                 message = f"ℹ️ Safe: {object_type} at {distance:.0f}cm. Proceed normally."
             
-            # Confidence based on data quality
+            # Calculate confidence
             if speed > 0:
                 confidence = min(0.95, 0.7 + (speed / 100))
             else:
@@ -95,4 +109,11 @@ class DangerPredictor:
             }
             
         except Exception as e:
-            raise RuntimeError(f"Danger prediction failed: {e}")
+            print(f"Error in danger prediction: {e}")
+            return {
+                'danger_score': 0.0,
+                'recommended_action': 'SAFE',
+                'time_to_collision': 999.0,
+                'confidence': 0.0,
+                'message': f"Prediction error: {str(e)}"
+            }

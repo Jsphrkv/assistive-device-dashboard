@@ -7,12 +7,6 @@ import joblib
 from pathlib import Path
 from typing import Optional
 
-from .anomaly_detector import AnomalyDetector
-from .maintenance_predictor import MaintenancePredictor
-from .object_detector import ObjectDetector
-from .danger_predictor import DangerPredictor
-from .environment_classifier import EnvironmentClassifier
-
 
 class ModelLoader:
     """Singleton class to load and manage ML models"""
@@ -21,31 +15,38 @@ class ModelLoader:
         self.models_dir = Path(__file__).parent / 'saved_models'
         self.models_dir.mkdir(parents=True, exist_ok=True)
         
-        # Initialize model instances
-        self.anomaly_detector: Optional[AnomalyDetector] = None
-        self.maintenance_predictor: Optional[MaintenancePredictor] = None
-        self.object_detector: Optional[ObjectDetector] = None
-        self.danger_predictor: Optional[DangerPredictor] = None
-        self.environment_classifier: Optional[EnvironmentClassifier] = None
+        # Initialize model instances to None - will be set during loading
+        self.anomaly_detector = None
+        self.maintenance_predictor = None
+        self.object_detector = None
+        self.danger_predictor = None
+        self.environment_classifier = None
         
         self.models_loaded = False
         self.load_count = 0
         
     def load_all_models(self):
         """Load all available ML models"""
+        # Import here to avoid circular imports
+        from .anomaly_detector import AnomalyDetector
+        from .maintenance_predictor import MaintenancePredictor
+        from .object_detector import ObjectDetector
+        from .danger_predictor import DangerPredictor
+        from .environment_classifier import EnvironmentClassifier
+        
         print("\n" + "="*60)
         print("LOADING ML MODELS")
         print("="*60)
         
         self.load_count = 0
-        total_models = 5  # We have 5 models now, not 6
+        total_models = 5  # We have 5 models now
         
         # Load each model
-        self._load_anomaly_model()
-        self._load_maintenance_model()
-        self._load_object_detection_model()
-        self._load_danger_prediction_model()
-        self._load_environment_classification_model()
+        self._load_anomaly_model(AnomalyDetector)
+        self._load_maintenance_model(MaintenancePredictor)
+        self._load_object_detection_model(ObjectDetector)
+        self._load_danger_prediction_model(DangerPredictor)
+        self._load_environment_classification_model(EnvironmentClassifier)
         
         print("="*60)
         print(f"✅ Loaded {self.load_count}/{total_models} models successfully")
@@ -54,7 +55,7 @@ class ModelLoader:
         self.models_loaded = True
         return self.load_count == total_models
     
-    def _load_anomaly_model(self):
+    def _load_anomaly_model(self, AnomalyDetector):
         """Load anomaly detection model"""
         model_path = self.models_dir / 'anomaly_model.joblib'
         try:
@@ -70,7 +71,7 @@ class ModelLoader:
         except Exception as e:
             print(f"❌ Failed to load anomaly model: {e}")
     
-    def _load_maintenance_model(self):
+    def _load_maintenance_model(self, MaintenancePredictor):
         """Load maintenance prediction model"""
         model_path = self.models_dir / 'maintenance_model.joblib'
         try:
@@ -86,7 +87,7 @@ class ModelLoader:
         except Exception as e:
             print(f"❌ Failed to load maintenance model: {e}")
     
-    def _load_object_detection_model(self):
+    def _load_object_detection_model(self, ObjectDetector):
         """Load object detection model"""
         model_path = self.models_dir / 'object_detection_model.joblib'
         try:
@@ -102,7 +103,7 @@ class ModelLoader:
         except Exception as e:
             print(f"❌ Failed to load object detection model: {e}")
     
-    def _load_danger_prediction_model(self):
+    def _load_danger_prediction_model(self, DangerPredictor):
         """Load danger prediction model"""
         model_path = self.models_dir / 'danger_prediction_model.joblib'
         try:
@@ -119,7 +120,7 @@ class ModelLoader:
         except Exception as e:
             print(f"❌ Failed to load danger prediction model: {e}")
     
-    def _load_environment_classification_model(self):
+    def _load_environment_classification_model(self, EnvironmentClassifier):
         """Load environment classification model"""
         model_path = self.models_dir / 'environment_classification_model.joblib'
         try:

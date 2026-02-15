@@ -1,13 +1,14 @@
 """
-Maintenance Predictor - Wrapper for maintenance prediction model
+Maintenance Predictor - Predicts device maintenance needs
 """
 
 import numpy as np
-from .model_loader import model_loader
+
 
 class MaintenancePredictor:
     def __init__(self):
-        self.model_name = 'maintenance_model'
+        self.model = None
+        self.scaler = None
         
     def predict(self, device_data):
         """
@@ -22,31 +23,44 @@ class MaintenancePredictor:
                 - days_since_last_maintenance (int)
         
         Returns:
-            dict with:
-                - needs_maintenance (bool)
-                - probability (float)
-                - priority (str)
-                - days_until (int)
-                - message (str)
-                - recommendations (dict)
+            dict with maintenance prediction results
         """
+        if not self.model:
+            return {
+                'needs_maintenance': False,
+                'probability': 0.0,
+                'priority': 'low',
+                'days_until': 90,
+                'message': 'Model not loaded',
+                'recommendations': {}
+            }
+        
         try:
-            # Extract features in correct order
-            features = [
+            # Extract features
+            features = np.array([[
                 device_data.get('battery_health', 100),
                 device_data.get('usage_hours', 0),
                 device_data.get('temperature_avg', 25.0),
                 device_data.get('error_count', 0),
                 device_data.get('days_since_last_maintenance', 0)
-            ]
+            ]])
             
-            # Get prediction
-            result = model_loader.predict_maintenance(features)
+            # Scale if scaler available
+            if self.scaler:
+                features = self.scaler.transform(features)
             
-            probability = result['probability']
-            needs_maintenance = result['needs_maintenance']
+            # Predict
+            prediction = self.model.predict(features)[0]
             
-            # Determine priority
+            # Get probability
+            try:
+                probability = self.model.predict_proba(features)[0][1]
+            except:
+                probability = 0.5 if prediction == 1 else 0.1
+            
+            needs_maintenance = bool(prediction == 1)
+            
+            # Determine priority and days
             if probability >= 0.8:
                 priority = 'high'
                 days_until = 7
@@ -71,13 +85,20 @@ class MaintenancePredictor:
             
             return {
                 'needs_maintenance': needs_maintenance,
-                'probability': probability,
-                'confidence': result['confidence'],
+                'probability': float(probability),
                 'priority': priority,
-                'days_until': days_until,
+                'days_until': int(days_until),
                 'message': message,
                 'recommendations': recommendations
             }
             
         except Exception as e:
-            raise RuntimeError(f"Maintenance prediction failed: {e}")
+            print(f"Error in maintenance prediction: {e}")
+            return {
+                'needs_maintenance': False,
+                'probability': 0.0,
+                'priority': 'low',
+                'days_until': 90,
+                'message': f"Prediction error: {str(e)}",
+                'recommendations': {}
+            }

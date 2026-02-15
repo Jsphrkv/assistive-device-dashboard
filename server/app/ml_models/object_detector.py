@@ -1,15 +1,16 @@
 """
-Object Detector - Wrapper for object/obstacle detection model
+Object Detector - Detects and classifies objects/obstacles
 """
 
 import numpy as np
-from .model_loader import model_loader
+
 
 class ObjectDetector:
     def __init__(self):
-        self.model_name = 'object_detection_model'
+        self.model = None
+        self.scaler = None
         
-    def detect(self, detection_data):
+    def predict(self, detection_data):
         """
         Detect and classify objects/obstacles
         
@@ -21,30 +22,46 @@ class ObjectDetector:
                 - ambient_light (int)
         
         Returns:
-            dict with:
-                - object_detected (str)
-                - distance_cm (float)
-                - danger_level (str)
-                - detection_confidence (float)
-                - message (str)
+            dict with object detection results
         """
+        if not self.model:
+            return {
+                'object_detected': 'unknown',
+                'distance_cm': detection_data.get('distance_cm', 100.0),
+                'danger_level': 'Low',
+                'detection_confidence': 0.0,
+                'message': 'Model not loaded'
+            }
+        
         try:
-            # Extract features in correct order
-            features = [
+            # Extract features
+            features = np.array([[
                 detection_data.get('distance_cm', 100.0),
                 detection_data.get('detection_confidence', 0.85),
                 detection_data.get('proximity_value', 500),
                 detection_data.get('ambient_light', 400)
-            ]
+            ]])
             
-            # Get prediction
-            result = model_loader.predict_object(features)
+            # Scale if scaler available
+            if self.scaler:
+                features = self.scaler.transform(features)
             
-            object_type = result['object_detected']
+            # Predict
+            prediction = self.model.predict(features)[0]
+            
+            # Get confidence
+            try:
+                confidence = np.max(self.model.predict_proba(features)[0])
+            except:
+                confidence = 0.85
+            
+            # Map prediction to object type
+            object_types = ['obstacle', 'person', 'vehicle', 'wall', 'stairs', 'door', 'pole']
+            object_type = object_types[prediction] if prediction < len(object_types) else 'unknown'
+            
             distance = detection_data.get('distance_cm', 100.0)
-            confidence = result['detection_confidence']
             
-            # Determine danger level based on distance and object type
+            # Determine danger level
             if distance < 30:
                 danger_level = 'Critical'
                 message = f"DANGER: {object_type.upper()} very close ({distance:.0f}cm)!"
@@ -60,11 +77,18 @@ class ObjectDetector:
             
             return {
                 'object_detected': object_type,
-                'distance_cm': distance,
+                'distance_cm': float(distance),
                 'danger_level': danger_level,
-                'detection_confidence': confidence,
+                'detection_confidence': float(confidence),
                 'message': message
             }
             
         except Exception as e:
-            raise RuntimeError(f"Object detection failed: {e}")
+            print(f"Error in object detection: {e}")
+            return {
+                'object_detected': 'unknown',
+                'distance_cm': detection_data.get('distance_cm', 100.0),
+                'danger_level': 'Low',
+                'detection_confidence': 0.0,
+                'message': f"Detection error: {str(e)}"
+            }
