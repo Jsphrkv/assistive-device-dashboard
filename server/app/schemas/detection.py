@@ -1,10 +1,11 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import Optional
+from uuid import UUID
 
 class DetectionBase(BaseModel):
     """Base detection schema"""
-    device_id: str
+    device_id: UUID
     detection_type: str = Field(..., description="Type of detection (anomaly, maintenance, object_detection, danger_prediction, environment_classification)")
     severity: str = Field(..., description="Severity level (low, medium, high, critical)")
     message: str

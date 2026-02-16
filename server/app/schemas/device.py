@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime
+from uuid import UUID
 
 # ========== BASIC DEVICE SCHEMAS ==========
 
@@ -39,7 +40,7 @@ class DeviceTelemetry(BaseModel):
     Device telemetry data for ML anomaly detection
     Used by: /api/ml/detect/anomaly
     """
-    device_id: str
+    device_id: UUID
     temperature: float = Field(default=37.0, description="Temperature in Celsius")
     heart_rate: float = Field(default=75.0, description="Heart rate in BPM")
     battery_level: float = Field(default=80.0, ge=0, le=100, description="Battery percentage")
@@ -52,7 +53,7 @@ class DeviceMaintenanceInfo(BaseModel):
     Device maintenance information for predictive maintenance
     Used by: /api/ml/predict/maintenance
     """
-    device_id: str
+    device_id: UUID
     battery_health: float = Field(default=80.0, ge=0, le=100, description="Battery health percentage")
     charge_cycles: int = Field(default=100, ge=0, description="Number of charge cycles")
     temperature_avg: float = Field(default=35.0, description="Average temperature in Celsius")
@@ -70,7 +71,7 @@ class DeviceAnalysisRequest(BaseModel):
     Comprehensive device analysis request
     Can include multiple types of data for different ML models
     """
-    device_id: str
+    device_id: UUID
     telemetry: Optional[DeviceTelemetry] = None  # For anomaly detection
     device_info: Optional[DeviceMaintenanceInfo] = None  # For maintenance prediction
 
