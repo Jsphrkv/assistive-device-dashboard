@@ -17,6 +17,8 @@ import {
   ChevronLeft,
   ChevronRight,
   FileText,
+  Shield,
+  MapPin,
 } from "lucide-react";
 import {
   LineChart,
@@ -30,19 +32,28 @@ import {
 } from "recharts";
 import { useMLHistory } from "../../hooks/ml/useMLHistory";
 
-// Type icons mapping
+// ✅ UPDATED - Type icons mapping with all types
 const TYPE_ICONS = {
   anomaly: AlertTriangle,
-  activity: Activity,
   maintenance: Package,
   detection: Camera,
+  object_detection: Camera, // Backend sends this
+  danger_prediction: Shield,
+  danger: Shield, // Alias
+  environment_classification: MapPin,
+  environment: MapPin, // Alias
 };
 
+// ✅ UPDATED - Type colors with all types
 const TYPE_COLORS = {
   anomaly: "bg-red-50 text-red-700 border-red-200",
-  activity: "bg-blue-50 text-blue-700 border-blue-200",
   maintenance: "bg-orange-50 text-orange-700 border-orange-200",
   detection: "bg-purple-50 text-purple-700 border-purple-200",
+  object_detection: "bg-purple-50 text-purple-700 border-purple-200",
+  danger_prediction: "bg-red-50 text-red-700 border-red-200",
+  danger: "bg-red-50 text-red-700 border-red-200",
+  environment_classification: "bg-blue-50 text-blue-700 border-blue-200",
+  environment: "bg-blue-50 text-blue-700 border-blue-200",
 };
 
 const HistoricalDataTab = () => {
@@ -71,14 +82,6 @@ const HistoricalDataTab = () => {
     fetchStats(7);
   }, [fetchStats]);
 
-  // Helper to detect log type
-  const detectLogType = (item) => {
-    if (item.prediction_type) {
-      return item.prediction_type;
-    }
-    return "unknown";
-  };
-
   // ✅ Filter logs for table view (individual entries, not aggregated)
   const filteredLogs = useMemo(() => {
     let filtered = [...history];
@@ -91,7 +94,23 @@ const HistoricalDataTab = () => {
     // Type filter
     if (filterType !== "all") {
       filtered = filtered.filter((item) => {
-        const type = item.prediction_type || detectLogType(item);
+        const type = item.prediction_type;
+        // Handle aliases
+        if (
+          filterType === "detection" &&
+          (type === "detection" || type === "object_detection")
+        ) {
+          return true;
+        }
+        if (filterType === "danger" && type === "danger_prediction") {
+          return true;
+        }
+        if (
+          filterType === "environment" &&
+          type === "environment_classification"
+        ) {
+          return true;
+        }
         return type === filterType;
       });
     }
@@ -159,11 +178,13 @@ const HistoricalDataTab = () => {
       const maintenance = dayLogs.filter(
         (item) => item.prediction_type === "maintenance",
       ).length;
-      const activities = dayLogs.filter(
-        (item) => item.prediction_type === "activity",
-      ).length;
       const detections = dayLogs.filter(
-        (item) => item.prediction_type === "detection",
+        (item) =>
+          item.prediction_type === "detection" ||
+          item.prediction_type === "object_detection",
+      ).length;
+      const dangers = dayLogs.filter(
+        (item) => item.prediction_type === "danger_prediction",
       ).length;
 
       const confidences = dayLogs.map((item) => item.confidence_score || 0.85);
@@ -180,8 +201,8 @@ const HistoricalDataTab = () => {
         }),
         anomalies,
         maintenance_alerts: maintenance,
-        activity_changes: activities,
         detections,
+        danger_predictions: dangers,
         avg_confidence: avgConfidence,
         total_logs: dayLogs.length,
       };
@@ -199,8 +220,12 @@ const HistoricalDataTab = () => {
       (sum, d) => sum + d.maintenance_alerts,
       0,
     );
-    const totalActivity = historicalData.reduce(
-      (sum, d) => sum + d.activity_changes,
+    const totalDetections = historicalData.reduce(
+      (sum, d) => sum + d.detections,
+      0,
+    );
+    const totalDangers = historicalData.reduce(
+      (sum, d) => sum + d.danger_predictions,
       0,
     );
     const avgConfidence =
@@ -212,7 +237,8 @@ const HistoricalDataTab = () => {
     return {
       totalAnomalies,
       totalMaintenance,
-      totalActivity,
+      totalDetections,
+      totalDangers,
       avgConfidence,
     };
   }, [historicalData]);
@@ -228,7 +254,8 @@ const HistoricalDataTab = () => {
           "Date",
           "Anomalies",
           "Maintenance",
-          "Activity",
+          "Detections",
+          "Dangers",
           "Avg Confidence",
           "Total Logs",
         ],
@@ -236,7 +263,8 @@ const HistoricalDataTab = () => {
           row.date,
           row.anomalies,
           row.maintenance_alerts,
-          row.activity_changes,
+          row.detections,
+          row.danger_predictions,
           row.avg_confidence.toFixed(2),
           row.total_logs,
         ]),
@@ -286,7 +314,7 @@ const HistoricalDataTab = () => {
     }
   };
 
-  // ✅ Render result details
+  // ✅ UPDATED - Render result details with all types
   const renderResult = (item) => {
     const result = item.result || {};
     const type = item.prediction_type || "unknown";
@@ -306,25 +334,6 @@ const HistoricalDataTab = () => {
             {result.severity && (
               <span className="ml-2 text-xs text-red-600">
                 Severity: {result.severity}
-              </span>
-            )}
-          </div>
-        );
-
-      case "activity":
-        return (
-          <div className="text-sm">
-            <p className="text-gray-700 font-medium">
-              {result.activity || "Activity detected"}
-            </p>
-            {result.confidence && (
-              <span className="text-xs text-blue-600">
-                {(result.confidence * 100).toFixed(1)}% confident
-              </span>
-            )}
-            {result.intensity && (
-              <span className="ml-2 text-xs text-blue-600">
-                Intensity: {result.intensity}
               </span>
             )}
           </div>
@@ -352,19 +361,60 @@ const HistoricalDataTab = () => {
         );
 
       case "detection":
+      case "object_detection":
         return (
           <div className="text-sm">
             <p className="text-gray-700">
-              {result.obstacle_type || "Object detected"}
+              {result.obstacle_type || result.object || "Object detected"}
             </p>
-            {result.distance && (
+            {(result.distance || result.distance_cm) && (
               <span className="text-xs text-purple-600">
-                {result.distance.toFixed(1)} cm
+                {(result.distance || result.distance_cm).toFixed(1)} cm
               </span>
             )}
             {result.danger_level && (
               <span className="ml-2 text-xs text-purple-600">
                 {result.danger_level} danger
+              </span>
+            )}
+          </div>
+        );
+
+      case "danger_prediction":
+        return (
+          <div className="text-sm">
+            <p className="text-gray-700 font-medium">
+              {result.message ||
+                `Action: ${result.recommended_action || "Unknown"}`}
+            </p>
+            {result.danger_score !== undefined && (
+              <span className="text-xs text-red-600">
+                Danger: {result.danger_score.toFixed(1)}/100
+              </span>
+            )}
+            {result.time_to_collision && (
+              <span className="ml-2 text-xs text-red-600">
+                TTC: {result.time_to_collision.toFixed(1)}s
+              </span>
+            )}
+          </div>
+        );
+
+      case "environment_classification":
+        return (
+          <div className="text-sm">
+            <p className="text-gray-700">
+              {result.message ||
+                `${result.environment_type || "Unknown"} environment`}
+            </p>
+            {result.lighting_condition && (
+              <span className="text-xs text-blue-600">
+                {result.lighting_condition} lighting
+              </span>
+            )}
+            {result.complexity_level && (
+              <span className="ml-2 text-xs text-blue-600">
+                {result.complexity_level} complexity
               </span>
             )}
           </div>
@@ -511,7 +561,7 @@ const HistoricalDataTab = () => {
         </div>
       )}
 
-      {/* ========== CHARTS VIEW (unchanged) ========== */}
+      {/* ========== CHARTS VIEW ========== */}
       {history.length > 0 && viewMode === "charts" && (
         <>
           {/* ML Predictions Over Time */}
@@ -545,11 +595,19 @@ const HistoricalDataTab = () => {
                   />
                   <Line
                     type="monotone"
-                    dataKey="activity_changes"
-                    stroke="#3B82F6"
+                    dataKey="detections"
+                    stroke="#8B5CF6"
                     strokeWidth={2}
-                    name="Activities"
-                    dot={{ fill: "#3B82F6", r: 4 }}
+                    name="Detections"
+                    dot={{ fill: "#8B5CF6", r: 4 }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="danger_predictions"
+                    stroke="#DC2626"
+                    strokeWidth={2}
+                    name="Danger Predictions"
+                    dot={{ fill: "#DC2626", r: 4 }}
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -564,7 +622,7 @@ const HistoricalDataTab = () => {
           </div>
 
           {/* Summary Statistics */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div className="bg-white rounded-lg shadow p-4">
               <p className="text-sm text-gray-600 mb-1">Total Anomalies</p>
               <p className="text-2xl font-bold text-red-600">
@@ -588,11 +646,19 @@ const HistoricalDataTab = () => {
             </div>
 
             <div className="bg-white rounded-lg shadow p-4">
-              <p className="text-sm text-gray-600 mb-1">Activity Changes</p>
-              <p className="text-2xl font-bold text-blue-600">
-                {summaryStats.totalActivity}
+              <p className="text-sm text-gray-600 mb-1">Detections</p>
+              <p className="text-2xl font-bold text-purple-600">
+                {summaryStats.totalDetections}
               </p>
-              <p className="text-xs text-gray-500 mt-1">State transitions</p>
+              <p className="text-xs text-gray-500 mt-1">Object detections</p>
+            </div>
+
+            <div className="bg-white rounded-lg shadow p-4">
+              <p className="text-sm text-gray-600 mb-1">Danger Predictions</p>
+              <p className="text-2xl font-bold text-red-600">
+                {summaryStats.totalDangers}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">Risk assessments</p>
             </div>
 
             <div className="bg-white rounded-lg shadow p-4">
@@ -626,7 +692,10 @@ const HistoricalDataTab = () => {
                         Maintenance
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                        Activity
+                        Detections
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Dangers
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                         Confidence
@@ -656,8 +725,13 @@ const HistoricalDataTab = () => {
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
-                              {row.activity_changes}
+                            <span className="px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">
+                              {row.detections}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+                              {row.danger_predictions}
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -691,7 +765,7 @@ const HistoricalDataTab = () => {
         </>
       )}
 
-      {/* ========== LOGS VIEW (Individual Entries with Pagination) ========== */}
+      {/* ========== LOGS VIEW ========== */}
       {history.length > 0 && viewMode === "logs" && (
         <>
           {/* Statistics Cards */}
@@ -712,12 +786,6 @@ const HistoricalDataTab = () => {
                   {stats.anomalyRate}% rate
                 </p>
               </div>
-              <div className="bg-blue-50 rounded-lg shadow p-4">
-                <p className="text-xs text-blue-600 mb-1">Activities</p>
-                <p className="text-2xl font-bold text-blue-600">
-                  {stats.byType?.activity || 0}
-                </p>
-              </div>
               <div className="bg-orange-50 rounded-lg shadow p-4">
                 <p className="text-xs text-orange-600 mb-1">Maintenance</p>
                 <p className="text-2xl font-bold text-orange-600">
@@ -725,8 +793,15 @@ const HistoricalDataTab = () => {
                 </p>
               </div>
               <div className="bg-purple-50 rounded-lg shadow p-4">
-                <p className="text-xs text-purple-600 mb-1">Avg Confidence</p>
+                <p className="text-xs text-purple-600 mb-1">Detections</p>
                 <p className="text-2xl font-bold text-purple-600">
+                  {(stats.byType?.object_detection || 0) +
+                    (stats.byType?.detection || 0)}
+                </p>
+              </div>
+              <div className="bg-green-50 rounded-lg shadow p-4">
+                <p className="text-xs text-green-600 mb-1">Avg Confidence</p>
+                <p className="text-2xl font-bold text-green-600">
                   {stats.avgConfidence}%
                 </p>
               </div>
@@ -759,9 +834,10 @@ const HistoricalDataTab = () => {
               >
                 <option value="all">All Types</option>
                 <option value="anomaly">Anomalies</option>
-                <option value="activity">Activities</option>
                 <option value="maintenance">Maintenance</option>
-                <option value="detection">Detections</option>
+                <option value="detection">Object Detection</option>
+                <option value="danger">Danger Prediction</option>
+                <option value="environment">Environment</option>
               </select>
 
               <select
@@ -856,7 +932,7 @@ const HistoricalDataTab = () => {
                                   <TypeIcon className="w-4 h-4" />
                                 </div>
                                 <span className="text-sm font-medium text-gray-900 capitalize">
-                                  {type}
+                                  {type.replace("_", " ")}
                                 </span>
                               </div>
                             </td>
