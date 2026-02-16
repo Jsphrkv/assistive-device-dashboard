@@ -449,7 +449,7 @@ def regenerate_device_token(device_id):
 # DEVICE STATUS (Runtime data)
 # ============================================
 
-@device_bp.route('/status', methods=['GET'])
+@devices_bp.route('/status', methods=['GET'])
 @token_required
 def get_device_status():
     """Get device status with real-time online detection"""
