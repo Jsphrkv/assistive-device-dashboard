@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from pydantic import ValidationError
 from app.services.supabase_client import get_supabase
-from app.middleware.auth import token_required
+from app.middleware.auth import device_token_required  # ✅ CHANGED from token_required
 import time
 from datetime import datetime, timezone
 from app.services.ml_service import ml_service
@@ -21,19 +21,19 @@ ml_bp = Blueprint('ml', __name__, url_prefix='/api/ml')
 # ========== DEVICE ANOMALY DETECTION ==========
 
 @ml_bp.route('/detect/anomaly', methods=['POST'])
-@token_required
+@device_token_required  # ✅ CHANGED - RPi uses device token
 def detect_anomaly():
     """Detect anomalies in device telemetry"""
     try:
+        device_id = request.current_device['id']  # ✅ CHANGED - Get from device context
         data = request.get_json()
         print(f"🔍 [Anomaly] Received data: {data}")
         
         if not data:
             return jsonify({'error': 'Missing telemetry data'}), 400
         
-        device_id = data.get('device_id')
-        if not device_id:
-            return jsonify({'error': 'device_id is required'}), 400
+        # ✅ CHANGED - Use device_id from auth context
+        data['device_id'] = device_id
         
         # Validate input
         try:
@@ -48,7 +48,7 @@ def detect_anomaly():
         result = ml_service.detect_anomaly(telemetry.dict())
         print(f"✅ [Anomaly] ML result: {result}")
         
-        # Save to ml_predictions table (FIXED: removed user_id)
+        # Save to ml_predictions table
         try:
             supabase = get_supabase()
             
@@ -91,19 +91,19 @@ def detect_anomaly():
 # ========== PREDICTIVE MAINTENANCE ==========
 
 @ml_bp.route('/predict/maintenance', methods=['POST'])
-@token_required
+@device_token_required  # ✅ CHANGED - RPi uses device token
 def predict_maintenance():
     """Predict if device needs maintenance"""
     try:
+        device_id = request.current_device['id']  # ✅ CHANGED
         data = request.get_json()
         print(f"🔍 [Maintenance] Received data: {data}")
         
         if not data:
             return jsonify({'error': 'Missing device data'}), 400
         
-        device_id = data.get('device_id')
-        if not device_id:
-            return jsonify({'error': 'device_id is required'}), 400
+        # ✅ CHANGED - Use device_id from auth context
+        data['device_id'] = device_id
         
         # Validate input
         try:
@@ -118,7 +118,7 @@ def predict_maintenance():
         result = ml_service.predict_maintenance(device_info.dict())
         print(f"✅ [Maintenance] ML result: {result}")
         
-        # Save to ml_predictions table (FIXED: removed user_id)
+        # Save to ml_predictions table
         try:
             supabase = get_supabase()
             
@@ -163,19 +163,19 @@ def predict_maintenance():
 # ========== OBJECT/OBSTACLE DETECTION ==========
 
 @ml_bp.route('/detect/object', methods=['POST'])
-@token_required
+@device_token_required  # ✅ CHANGED - RPi uses device token
 def detect_object():
     """Detect and classify objects/obstacles"""
     try:
+        device_id = request.current_device['id']  # ✅ CHANGED
         data = request.get_json()
         print(f"🔍 [Object Detection] Received data: {data}")
         
         if not data:
             return jsonify({'error': 'Missing detection data'}), 400
         
-        device_id = data.get('device_id')
-        if not device_id:
-            return jsonify({'error': 'device_id is required'}), 400
+        # ✅ CHANGED - Use device_id from auth context
+        data['device_id'] = device_id
         
         # Validate input
         try:
@@ -190,7 +190,7 @@ def detect_object():
         result = ml_service.detect_object(detection_request.dict())
         print(f"✅ [Object Detection] Result: {result}")
         
-        # Save to database (FIXED: removed user_id)
+        # Save to database
         try:
             supabase = get_supabase()
             
@@ -233,19 +233,19 @@ def detect_object():
 # ========== DANGER PREDICTION (NEW) ==========
 
 @ml_bp.route('/predict/danger', methods=['POST'])
-@token_required
+@device_token_required  # ✅ CHANGED - RPi uses device token
 def predict_danger():
     """Predict danger level and recommend action"""
     try:
+        device_id = request.current_device['id']  # ✅ CHANGED
         data = request.get_json()
         print(f"🔍 [Danger Prediction] Received data: {data}")
         
         if not data:
             return jsonify({'error': 'Missing danger data'}), 400
         
-        device_id = data.get('device_id')
-        if not device_id:
-            return jsonify({'error': 'device_id is required'}), 400
+        # ✅ CHANGED - Use device_id from auth context
+        data['device_id'] = device_id
         
         # Validate input
         try:
@@ -260,7 +260,7 @@ def predict_danger():
         result = ml_service.predict_danger(danger_request.dict())
         print(f"✅ [Danger Prediction] Result: {result}")
         
-        # Save to database (FIXED: removed user_id, using new schema columns)
+        # Save to database
         try:
             supabase = get_supabase()
             
@@ -302,19 +302,19 @@ def predict_danger():
 # ========== ENVIRONMENT CLASSIFICATION (NEW) ==========
 
 @ml_bp.route('/classify/environment', methods=['POST'])
-@token_required
+@device_token_required  # ✅ CHANGED - RPi uses device token
 def classify_environment():
     """Classify environment type based on sensor patterns"""
     try:
+        device_id = request.current_device['id']  # ✅ CHANGED
         data = request.get_json()
         print(f"🔍 [Environment] Received data: {data}")
         
         if not data:
             return jsonify({'error': 'Missing environment data'}), 400
         
-        device_id = data.get('device_id')
-        if not device_id:
-            return jsonify({'error': 'device_id is required'}), 400
+        # ✅ CHANGED - Use device_id from auth context
+        data['device_id'] = device_id
         
         # Validate input
         try:
@@ -329,7 +329,7 @@ def classify_environment():
         result = ml_service.classify_environment(env_request.dict())
         print(f"✅ [Environment] Result: {result}")
         
-        # Save to database (FIXED: removed user_id, using new schema columns)
+        # Save to database
         try:
             supabase = get_supabase()
             
@@ -369,16 +369,19 @@ def classify_environment():
 
 
 # ========== Aliases for frontend compatibility ==========
+# NOTE: These use @token_required because they're called by the dashboard, not RPi
+
+from app.middleware.auth import token_required
 
 @ml_bp.route('/anomaly-detection', methods=['POST'])
-@token_required
+@token_required  # ✅ Dashboard uses user token
 def detect_anomaly_alias():
     """Alias for /detect/anomaly to match frontend"""
     return detect_anomaly()
 
 
 @ml_bp.route('/maintenance-prediction', methods=['POST'])
-@token_required
+@token_required  # ✅ Dashboard uses user token
 def predict_maintenance_alias():
     """Alias for /predict/maintenance to match frontend"""
     return predict_maintenance()
