@@ -7,7 +7,7 @@ from app.constants.detection_categories import (
     get_alert_type_from_object,
     DETECTION_CATEGORIES
 )
-from datetime import datetime
+from datetime import datetime, timezone
 import base64
 import uuid
 import csv
@@ -498,6 +498,65 @@ def log_detection():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
+@detections_bp.route('', methods=['POST'])
+@device_token_required
+def create_detection():
+    """Create a new detection log"""
+    try:
+        device_id = request.current_device['id']
+        user_id = request.current_device.get('user_id')
+        data = request.get_json()
+        
+        supabase = get_supabase()
+        
+        # Your existing detection insertion code
+        detection_data = {
+            'device_id': device_id,
+            'user_id': user_id,
+            'obstacle_type': data.get('obstacleType'),
+            'distance_cm': data.get('distance'),
+            'danger_level': data.get('dangerLevel'),
+            # ... other fields ...
+        }
+        
+        detection_result = supabase.table('detection_logs')\
+            .insert(detection_data)\
+            .execute()
+        
+        # ✅ ADD THIS: Update last_seen in user_devices table
+        try:
+            supabase.table('user_devices')\
+                .update({
+                    'last_seen': datetime.now(timezone.utc).isoformat(),
+                })\
+                .eq('id', device_id)\
+                .execute()
+        except Exception as e:
+            print(f"⚠️ Failed to update last_seen: {e}")
+        
+        # ✅ ADD THIS: Update last_seen in device_status table if it exists
+        try:
+            supabase.table('device_status')\
+                .update({
+                    'last_seen': datetime.now(timezone.utc).isoformat(),
+                })\
+                .eq('device_id', device_id)\
+                .execute()
+        except Exception as e:
+            # device_status might not exist yet, that's ok
+            pass
+        
+        return jsonify({
+            'message': 'Detection logged successfully',
+            'data': detection_result.data
+        }), 201
+        
+    except Exception as e:
+        print(f"❌ Create detection error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Failed to log detection'}), 500
 
 # ========== STATISTICS UPDATE FUNCTION (UPDATED TO 1-HOUR INTERVALS) ==========
 
