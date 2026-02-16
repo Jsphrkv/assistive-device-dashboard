@@ -58,33 +58,43 @@ const TYPE_COLORS = {
 
 const HistoricalDataTab = () => {
   const [dateRange, setDateRange] = useState("7days");
-  const [viewMode, setViewMode] = useState("charts"); // 'charts' or 'logs'
+  const [viewMode, setViewMode] = useState("charts");
+  const [logsDateRange, setLogsDateRange] = useState("all"); // ✅ NEW
 
-  // ✅ Pagination state for logs
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(20);
 
-  // ✅ Filter states for logs view
   const [filterType, setFilterType] = useState("all");
   const [filterSource, setFilterSource] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [showAnomaliesOnly, setShowAnomaliesOnly] = useState(false);
 
-  // Get ML history
   const { history, stats, loading, error, refresh, fetchStats } = useMLHistory({
-    limit: 500,
+    limit: 10000, // ✅ INCREASED
     autoFetch: true,
     cacheDuration: 30000,
   });
 
-  // Fetch stats on mount
   useEffect(() => {
     fetchStats(7);
   }, [fetchStats]);
 
-  // ✅ Filter logs for table view (individual entries, not aggregated)
+  // ✅ UPDATED with date filtering
   const filteredLogs = useMemo(() => {
     let filtered = [...history];
+
+    // ✅ DATE RANGE FILTER
+    if (logsDateRange !== "all") {
+      const days =
+        logsDateRange === "7days" ? 7 : logsDateRange === "30days" ? 30 : 90;
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - days);
+
+      filtered = filtered.filter((item) => {
+        const itemDate = new Date(item.timestamp);
+        return itemDate >= cutoffDate;
+      });
+    }
 
     // Anomalies filter
     if (showAnomaliesOnly) {
@@ -95,7 +105,6 @@ const HistoricalDataTab = () => {
     if (filterType !== "all") {
       filtered = filtered.filter((item) => {
         const type = item.prediction_type;
-        // Handle aliases
         if (
           filterType === "detection" &&
           (type === "detection" || type === "object_detection")
@@ -136,7 +145,14 @@ const HistoricalDataTab = () => {
     }
 
     return filtered;
-  }, [history, filterType, filterSource, searchQuery, showAnomaliesOnly]);
+  }, [
+    history,
+    logsDateRange,
+    filterType,
+    filterSource,
+    searchQuery,
+    showAnomaliesOnly,
+  ]);
 
   // ✅ Paginate filtered logs
   const paginatedLogs = useMemo(() => {
@@ -542,6 +558,22 @@ const HistoricalDataTab = () => {
           </button>
         </div>
       </div>
+      {/* Date Range Filter for Logs View */}
+      {viewMode === "logs" && (
+        <div className="flex items-center space-x-2">
+          <Calendar className="w-5 h-5 text-gray-600" />
+          <select
+            value={logsDateRange}
+            onChange={(e) => setLogsDateRange(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">All Time</option>
+            <option value="7days">Last 7 Days</option>
+            <option value="30days">Last 30 Days</option>
+            <option value="90days">Last 90 Days</option>
+          </select>
+        </div>
+      )}
 
       {/* Empty State */}
       {history.length === 0 && (
@@ -774,16 +806,24 @@ const HistoricalDataTab = () => {
               <div className="bg-white rounded-lg shadow p-4">
                 <p className="text-xs text-gray-600 mb-1">Total Entries</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {filteredLogs.length}
+                  {filteredLogs.length} {/* ✅ CHANGED from stats count */}
                 </p>
               </div>
               <div className="bg-red-50 rounded-lg shadow p-4">
                 <p className="text-xs text-red-600 mb-1">Anomalies</p>
                 <p className="text-2xl font-bold text-red-600">
-                  {stats.anomalyCount}
+                  {filteredLogs.filter((log) => log.is_anomaly).length}{" "}
+                  {/* ✅ CHANGED */}
                 </p>
                 <p className="text-xs text-red-500 mt-1">
-                  {stats.anomalyRate}% rate
+                  {filteredLogs.length > 0
+                    ? (
+                        (filteredLogs.filter((log) => log.is_anomaly).length /
+                          filteredLogs.length) *
+                        100
+                      ).toFixed(1)
+                    : 0}
+                  % rate
                 </p>
               </div>
               <div className="bg-orange-50 rounded-lg shadow p-4">

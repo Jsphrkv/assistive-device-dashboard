@@ -14,7 +14,10 @@ def get_ml_history():
         user_role = request.current_user['role']
         
         # Get query parameters
-        limit = request.args.get('limit', 50, type=int)
+        limit = request.args.get('limit', 1000, type=int)  # ✅ Increased default
+        max_limit = 1000  # ✅ Safety cap
+        if limit > max_limit:
+            limit = max_limit
         offset = request.args.get('offset', 0, type=int)
         prediction_type = request.args.get('type')  # anomaly, maintenance, detection, danger, environment
         source = request.args.get('source', 'all')  # 'predictions', 'detections', 'all'

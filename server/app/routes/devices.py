@@ -449,70 +449,72 @@ def regenerate_device_token(device_id):
 # DEVICE STATUS (Runtime data)
 # ============================================
 
-@devices_bp.route('/status', methods=['GET'])
+@device_bp.route('/status', methods=['GET'])
 @token_required
-@check_permission('device', 'read')
 def get_device_status():
-    """Get current device status (for dashboard)"""
+    """Get device status with real-time online detection"""
     try:
         user_id = request.current_user['user_id']
         supabase = get_supabase()
         
-        # Get user's active device
-        device = supabase.table('user_devices')\
+        # Get user's device
+        device_response = supabase.table('user_devices')\
             .select('*')\
             .eq('user_id', user_id)\
-            .eq('status', 'active')\
             .limit(1)\
             .execute()
         
-        if not device.data:
-            # Return default empty status instead of 404
-            return jsonify({
-                'deviceOnline': False,
-                'cameraStatus': 'offline',
-                'batteryLevel': 0,
-                'lastObstacle': None,
-                'lastDetectionTime': None,
-                'hasDevice': False,
-                'message': 'No active device registered'
-            }), 200
+        if not device_response.data or len(device_response.data) == 0:
+            return jsonify({'hasDevice': False}), 200
         
-        device_id = device.data[0]['id']
+        device = device_response.data[0]
         
-        # Get latest status
-        response = supabase.table('device_status')\
-            .select('*')\
-            .eq('device_id', device_id)\
-            .order('updated_at', desc=True)\
+        # ✅ CRITICAL: Calculate online status based on last_seen timestamp
+        last_seen = device.get('last_seen') or device.get('updated_at')
+        device_online = False
+        
+        if last_seen:
+            last_seen_time = datetime.fromisoformat(last_seen.replace('Z', '+00:00'))
+            now = datetime.now(timezone.utc)
+            time_diff = now - last_seen_time
+            
+            # Consider online if seen in last 2 minutes
+            device_online = time_diff.total_seconds() < 120
+            
+            print(f"📊 Device last seen: {last_seen}")
+            print(f"⏰ Time since last seen: {time_diff.total_seconds():.0f}s")
+            print(f"🔌 Device online: {device_online}")
+        
+        # Get recent detection for lastObstacle
+        recent_detection = supabase.table('detection_logs')\
+            .select('obstacle_type, detected_at')\
+            .eq('device_id', device['id'])\
+            .order('detected_at', desc=True)\
             .limit(1)\
             .execute()
         
-        if not response.data:
-            # Return default status for registered device without status data
-            return jsonify({
-                'deviceOnline': False,
-                'cameraStatus': 'offline',
-                'batteryLevel': 0,
-                'lastObstacle': None,
-                'lastDetectionTime': None,
-                'hasDevice': True,
-                'message': 'Device registered but no status data yet'
-            }), 200
+        last_obstacle = None
+        last_detection_time = None
         
-        status = response.data[0]
+        if recent_detection.data and len(recent_detection.data) > 0:
+            last_obstacle = recent_detection.data[0].get('obstacle_type')
+            last_detection_time = recent_detection.data[0].get('detected_at')
         
+        # ✅ Return real-time calculated status
         return jsonify({
-            'deviceOnline': status.get('device_online', False),
-            'cameraStatus': status.get('camera_status', 'offline'),
-            'batteryLevel': status.get('battery_level', 0),
-            'lastObstacle': status.get('last_obstacle'),
-            'lastDetectionTime': status.get('last_detection_time'),
-            'hasDevice': True
+            'hasDevice': True,
+            'deviceId': device['id'],
+            'deviceName': device.get('device_name', 'Unknown'),
+            'deviceOnline': device_online,  # ✅ Real-time calculation
+            'lastSeen': last_seen,  # ✅ CRITICAL: Must return this
+            'batteryLevel': device.get('battery_level', 100),
+            'cameraStatus': 'Active' if device_online else 'Inactive',
+            'lastObstacle': last_obstacle,
+            'lastDetectionTime': last_detection_time
         }), 200
         
     except Exception as e:
-        print(f"Get device status error: {str(e)}")
+        print(f"❌ Error getting device status: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'Failed to get device status'}), 500
@@ -525,27 +527,53 @@ def update_device_status():
         device_id = request.current_device['id']
         data = request.get_json()
         
+        print(f"📊 [POST /status] Update from device: {device_id}")
+        print(f"   Payload: {data}")
+        
         if not data:
             return jsonify({'error': 'No data provided'}), 400
         
         supabase = get_supabase()
         
-        # Prepare update data
+        # ✅ CRITICAL: Always update last_seen timestamp
         update_data = {
             'device_id': device_id,
+            'last_seen': datetime.now(timezone.utc).isoformat(),  # ✅ NEW
             'updated_at': 'now()'
         }
         
+        # ✅ Handle all possible field variations (camelCase and snake_case)
         if 'deviceOnline' in data:
             update_data['device_online'] = data['deviceOnline']
         if 'cameraStatus' in data:
             update_data['camera_status'] = data['cameraStatus']
+        
+        # ✅ IMPROVED: Handle both battery_level and batteryLevel
         if 'batteryLevel' in data:
             update_data['battery_level'] = data['batteryLevel']
+            print(f"   Battery: {data['batteryLevel']}%")
+        elif 'battery_level' in data:
+            update_data['battery_level'] = data['battery_level']
+            print(f"   Battery: {data['battery_level']}%")
+        
         if 'lastObstacle' in data:
             update_data['last_obstacle'] = data['lastObstacle']
         if 'lastDetectionTime' in data:
             update_data['last_detection_time'] = data['lastDetectionTime']
+        
+        # ✅ IMPROVED: Also update the user_devices table for last_seen
+        # This ensures the GET /status endpoint can calculate online status
+        try:
+            supabase.table('user_devices')\
+                .update({
+                    'last_seen': datetime.now(timezone.utc).isoformat(),
+                    'battery_level': update_data.get('battery_level', 100)
+                })\
+                .eq('id', device_id)\
+                .execute()
+            print(f"   ✅ Updated user_devices.last_seen")
+        except Exception as e:
+            print(f"   ⚠️ Failed to update user_devices: {e}")
         
         # Check if a status row exists for this device
         existing = supabase.table('device_status')\
@@ -561,14 +589,22 @@ def update_device_status():
                 .update(update_data)\
                 .eq('id', status_id)\
                 .execute()
+            print(f"   ✅ Updated device_status (id: {status_id})")
         else:
             # Insert new row
             response = supabase.table('device_status').insert(update_data).execute()
+            print(f"   ✅ Created device_status entry")
         
-        return jsonify({'message': 'Device status updated', 'data': response.data}), 200
+        print(f"✅ [POST /status] Device status updated successfully")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Device status updated', 
+            'data': response.data
+        }), 200
         
     except Exception as e:
-        print(f"Update device status error: {e}")
+        print(f"❌ [POST /status] Error: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'Failed to update device status'}), 500

@@ -22,7 +22,7 @@ const DashboardTab = () => {
   const [totalDetections, setTotalDetections] = useState(0);
   const [mlStats, setMlStats] = useState(null);
   const [anomalyCount, setAnomalyCount] = useState(0);
-  const [deviceUptime, setDeviceUptime] = useState(null);
+  const [lastSeenTime, setLastSeenTime] = useState(null); // ✅ NEW: Store raw timestamp
 
   useEffect(() => {
     fetchAllData();
@@ -40,7 +40,6 @@ const DashboardTab = () => {
       fetchDeviceStatus(),
       fetchDetectionStats(),
       fetchMLStats(),
-      fetchAnomalies(),
     ]);
   };
 
@@ -49,19 +48,31 @@ const DashboardTab = () => {
       const response = await deviceAPI.getStatus();
       const data = response.data;
 
+      console.log("📊 [Dashboard] Device Status Response:", data); // ✅ DEBUG
+
       setDeviceStatus(data);
       setHasDevice(data.hasDevice !== false);
 
-      // Check both possible field names
-      const lastSeenTime = data.lastSeen || data.last_seen;
-      if (lastSeenTime) {
-        const uptime = calculateUptime(lastSeenTime);
-        setDeviceUptime(uptime);
+      // ✅ IMPROVED: Try all possible field name variations
+      const lastSeen =
+        data.lastSeen ||
+        data.last_seen ||
+        data.lastSeenAt ||
+        data.last_seen_at ||
+        data.updatedAt ||
+        data.updated_at;
+
+      if (lastSeen) {
+        console.log("⏰ [Dashboard] Last Seen Time:", lastSeen); // ✅ DEBUG
+        setLastSeenTime(lastSeen);
+      } else {
+        console.warn("⚠️ [Dashboard] No lastSeen field found in device status");
+        setLastSeenTime(null);
       }
 
       setLoading(false);
     } catch (error) {
-      console.error("Error fetching device status:", error);
+      console.error("❌ [Dashboard] Error fetching device status:", error);
 
       if (error.response?.status === 404) {
         setHasDevice(false);
@@ -77,8 +88,9 @@ const DashboardTab = () => {
       const response = await detectionsAPI.getRecent();
       const detections = response.data?.detections || [];
       setTotalDetections(detections.length);
+      console.log(`📸 [Dashboard] Total detections: ${detections.length}`); // ✅ DEBUG
     } catch (error) {
-      console.error("Error fetching detection stats:", error);
+      console.error("❌ [Dashboard] Error fetching detection stats:", error);
       setTotalDetections(0);
     }
   };
@@ -86,35 +98,80 @@ const DashboardTab = () => {
   const fetchMLStats = async () => {
     try {
       const response = await mlAPI.getStats(7); // Last 7 days
-      setMlStats(response.data);
-    } catch (error) {
-      console.error("Error fetching ML stats:", error);
-      setMlStats(null);
-    }
-  };
+      const stats = response.data;
 
-  const fetchAnomalies = async () => {
-    try {
-      const response = await mlAPI.getAnomalies(10);
-      const anomalies = response.data?.data || [];
-      setAnomalyCount(anomalies.length);
+      console.log("🤖 [Dashboard] ML Stats Response:", stats); // ✅ DEBUG
+
+      setMlStats(stats);
+
+      // ✅ FIXED: Use anomalyCount from ML stats (more efficient and accurate)
+      if (stats && stats.anomalyCount !== undefined) {
+        setAnomalyCount(stats.anomalyCount);
+        console.log(`🚨 [Dashboard] Anomaly count: ${stats.anomalyCount}`); // ✅ DEBUG
+      } else {
+        setAnomalyCount(0);
+      }
     } catch (error) {
-      console.error("Error fetching anomalies:", error);
+      console.error("❌ [Dashboard] Error fetching ML stats:", error);
+      setMlStats(null);
       setAnomalyCount(0);
     }
   };
 
-  const calculateUptime = (lastSeen) => {
-    const now = new Date();
-    const lastSeenDate = new Date(lastSeen);
-    const diffMs = now - lastSeenDate;
-    const diffMins = Math.floor(diffMs / 60000);
+  // ✅ NEW: Dynamic calculation that updates every render
+  const getLastActiveDisplay = () => {
+    if (!lastSeenTime) {
+      return "N/A";
+    }
 
-    if (diffMins < 60) return `${diffMins}m`;
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours}h`;
-    const diffDays = Math.floor(diffHours / 24);
-    return `${diffDays}d`;
+    try {
+      const now = new Date();
+      const lastSeenDate = new Date(lastSeenTime);
+
+      // Check if date is valid
+      if (isNaN(lastSeenDate.getTime())) {
+        console.warn("⚠️ Invalid date for lastSeenTime:", lastSeenTime);
+        return "N/A";
+      }
+
+      const diffMs = now - lastSeenDate;
+      const diffMins = Math.floor(diffMs / 60000);
+
+      // If less than 1 minute, show "Just now"
+      if (diffMins < 1) return "Just now";
+
+      // Minutes
+      if (diffMins < 60) return `${diffMins}m ago`;
+
+      // Hours
+      const diffHours = Math.floor(diffMins / 60);
+      if (diffHours < 24) return `${diffHours}h ago`;
+
+      // Days
+      const diffDays = Math.floor(diffHours / 24);
+      return `${diffDays}d ago`;
+    } catch (error) {
+      console.error("❌ Error calculating last active time:", error);
+      return "N/A";
+    }
+  };
+
+  // ✅ IMPROVED: Better online status determination
+  const isDeviceOnline = () => {
+    if (deviceStatus?.deviceOnline !== undefined) {
+      return deviceStatus.deviceOnline;
+    }
+
+    // Fallback: Consider online if last seen within 2 minutes
+    if (lastSeenTime) {
+      const now = new Date();
+      const lastSeenDate = new Date(lastSeenTime);
+      const diffMs = now - lastSeenDate;
+      const diffMins = Math.floor(diffMs / 60000);
+      return diffMins < 2;
+    }
+
+    return false;
   };
 
   if (loading) {
@@ -202,6 +259,8 @@ const DashboardTab = () => {
     );
   }
 
+  const deviceOnline = isDeviceOnline();
+
   return (
     <div className="space-y-6">
       {/* Device Status */}
@@ -211,11 +270,11 @@ const DashboardTab = () => {
           <div className="flex items-center gap-2">
             <div
               className={`w-2 h-2 rounded-full ${
-                deviceStatus?.deviceOnline ? "bg-green-500" : "bg-red-500"
+                deviceOnline ? "bg-green-500" : "bg-red-500"
               } animate-pulse`}
             ></div>
             <span className="text-sm text-gray-600">
-              {deviceStatus?.deviceOnline ? "Online" : "Offline"}
+              {deviceOnline ? "Online" : "Offline"}
             </span>
           </div>
         </div>
@@ -226,15 +285,18 @@ const DashboardTab = () => {
             value={deviceStatus?.batteryLevel > 50 ? "Good" : "Warning"}
             icon={Activity}
             color={deviceStatus?.batteryLevel > 50 ? "green" : "orange"}
-            subtitle={
-              deviceStatus?.deviceOnline ? "All systems operational" : "Offline"
-            }
+            subtitle={deviceOnline ? "All systems operational" : "Offline"}
           />
           <StatusCard
             title="Camera Status"
             value={deviceStatus?.cameraStatus || "Unknown"}
             icon={Camera}
-            color={deviceStatus?.cameraStatus === "online" ? "green" : "orange"}
+            color={
+              deviceStatus?.cameraStatus === "Active" ||
+              deviceStatus?.cameraStatus === "active"
+                ? "green"
+                : "orange"
+            }
             subtitle={
               totalDetections > 0
                 ? `${totalDetections} detections`
@@ -278,7 +340,7 @@ const DashboardTab = () => {
 
       {/* Quick Stats - Real Data (3 cards) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Anomalies */}
+        {/* Anomalies - ✅ FIXED: Shows real total count */}
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center justify-between">
             <div>
@@ -286,7 +348,7 @@ const DashboardTab = () => {
               <p className="text-2xl font-bold text-red-600">{anomalyCount}</p>
               {mlStats && (
                 <p className="text-xs text-gray-500 mt-1">
-                  {mlStats.anomalyRate}% rate
+                  {mlStats.anomalyRate}% rate (last 7 days)
                 </p>
               )}
             </div>
@@ -294,37 +356,41 @@ const DashboardTab = () => {
           </div>
         </div>
 
-        {/* Last Active */}
+        {/* Last Active - ✅ FIXED: Shows real time ago */}
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 mb-1">Last Active</p>
               <p className="text-2xl font-bold text-gray-900">
-                {deviceUptime || "N/A"}
+                {getLastActiveDisplay()}
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                {deviceStatus?.deviceOnline ? "Online now" : "Offline"}
+                {deviceOnline ? "Online now" : "Offline"}
               </p>
             </div>
-            <Zap className="w-8 h-8 text-green-500" />
+            <Zap
+              className={`w-8 h-8 ${deviceOnline ? "text-green-500" : "text-gray-400"}`}
+            />
           </div>
         </div>
 
-        {/* Last Obstacle */}
+        {/* Last Obstacle - ✅ IMPROVED: Better display */}
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 mb-1">Last Obstacle</p>
-              <p className="text-xl font-bold text-gray-900 truncate max-w-[120px]">
+              <p className="text-xl font-bold text-gray-900 truncate max-w-[120px] capitalize">
                 {deviceStatus?.lastObstacle || "None"}
               </p>
               {deviceStatus?.lastDetectionTime && (
                 <p className="text-xs text-gray-500 mt-1">
-                  {formatRelativeTime(deviceStatus?.lastDetectionTime)}
+                  {formatRelativeTime(deviceStatus.lastDetectionTime)}
                 </p>
               )}
             </div>
-            <AlertTriangle className="w-8 h-8 text-orange-500" />
+            <AlertTriangle
+              className={`w-8 h-8 ${deviceStatus?.lastObstacle ? "text-orange-500" : "text-gray-300"}`}
+            />
           </div>
         </div>
       </div>
