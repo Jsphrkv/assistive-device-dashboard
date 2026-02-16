@@ -7,7 +7,7 @@ from app.constants.detection_categories import (
     get_alert_type_from_object,
     DETECTION_CATEGORIES
 )
-from datetime import datetime, timezone
+from datetime import datetime
 import base64
 import uuid
 import csv
@@ -337,13 +337,12 @@ def log_detection():
         
         user_id = device_query.data['user_id']
         print(f"✅ Detection from device {device_id} (user: {user_id})")
-        print(f"   User ID type: {type(user_id)}, Value: {user_id}")  # Debug
         
-        # Extract detection data
-        object_detected = data.get('object_detected', 'unknown')
-        distance_cm = data.get('distance_cm')
-        detection_source = data.get('detection_source', 'ultrasonic')
-        detection_confidence = data.get('detection_confidence', 85.0)
+        # Extract detection data - ✅ SUPPORT BOTH FIELD NAME FORMATS
+        object_detected = data.get('object_detected') or data.get('objectDetected') or 'unknown'
+        distance_cm = data.get('distance_cm') or data.get('distanceCm')
+        detection_source = data.get('detection_source') or data.get('detectionSource', 'ultrasonic')
+        detection_confidence = data.get('detection_confidence') or data.get('detectionConfidence', 85.0)
         
         # Get object classification info
         obj_info = get_detection_info(object_detected)
@@ -353,23 +352,24 @@ def log_detection():
             danger_level = get_danger_level_from_object(object_detected, distance_cm)
             alert_type = get_alert_type_from_object(object_detected, distance_cm)
         else:
-            danger_level = data.get('danger_level', 'Low')
-            alert_type = data.get('alert_type', 'Audio')
+            danger_level = data.get('danger_level') or data.get('dangerLevel', 'Low')
+            alert_type = data.get('alert_type') or data.get('alertType', 'Audio')
         
         # Handle image upload
         image_url = None
-        if data.get('image_data'):
+        if data.get('image_data') or data.get('imageData'):
             try:
-                image_url = _upload_image_to_supabase(device_id, data['image_data'])
+                image_data = data.get('image_data') or data.get('imageData')
+                image_url = _upload_image_to_supabase(device_id, image_data)
                 print(f"✅ Image uploaded: {image_url}")
             except Exception as img_error:
                 print(f"⚠️ Image upload failed: {img_error}")
 
-        # Parse numeric fields
-        raw_distance = data.get('distance_cm')
-        raw_proximity = data.get('proximity_value')
-        raw_ambient = data.get('ambient_light')
-        raw_confidence = data.get('detection_confidence', 85.0)
+        # Parse numeric fields safely
+        raw_distance = data.get('distance_cm') or data.get('distanceCm')
+        raw_proximity = data.get('proximity_value') or data.get('proximityValue')
+        raw_ambient = data.get('ambient_light') or data.get('ambientLight')
+        raw_confidence = data.get('detection_confidence') or data.get('detectionConfidence', 85.0)
 
         try:
             parsed_distance = float(raw_distance) if raw_distance is not None else None
@@ -394,14 +394,21 @@ def log_detection():
         # Get timestamp
         detected_at = datetime.utcnow().isoformat()
 
-        # ✅ BUILD THE PAYLOAD WITH GUARANTEED VALUES
+        # ✅ BUILD THE PAYLOAD - FIXED OBSTACLE_TYPE MAPPING
         detection_log = {
             # Required UUID fields
             'user_id': str(user_id),
             'device_id': str(device_id),
             
-            # Required text fields - ALWAYS provide a value
-            'obstacle_type': str(data.get('obstacle_type') or obj_info['description'] or 'unknown')[:255],
+            # ✅ FIXED: Check object_detected FIRST, then fallback to obstacle_type
+            'obstacle_type': str(
+                data.get('obstacle_type') or 
+                data.get('obstacleType') or 
+                object_detected or  # ← THIS IS THE KEY FIX
+                obj_info.get('description') or 
+                'unknown'
+            )[:255],
+            
             'object_detected': str(object_detected or 'unknown')[:255],
             'object_category': str(obj_info.get('category') or 'unknown')[:255],
             'danger_level': str(danger_level or 'Low')[:255],
@@ -412,7 +419,7 @@ def log_detection():
             'detected_at': str(detected_at),
             
             # Boolean (defaults to False)
-            'camera_enabled': bool(data.get('camera_enabled', False)),
+            'camera_enabled': bool(data.get('camera_enabled') or data.get('cameraEnabled', False)),
         }
         
         # Optional numeric fields - only add if valid
@@ -433,10 +440,8 @@ def log_detection():
             detection_log['image_url'] = str(image_url)
         
         print(f"📝 Inserting detection: {object_detected} at {parsed_distance}cm")
-        print(f"🔍 Payload keys: {list(detection_log.keys())}")
-        print(f"🔍 user_id in payload: {detection_log.get('user_id')}")  # Debug
         
-        # ✅ INSERT
+        # ✅ INSERT DETECTION
         try:
             response = supabase.table('detection_logs')\
                 .insert(detection_log)\
@@ -448,7 +453,6 @@ def log_detection():
             
             detection_id = response.data[0]['id']
             print(f"✅ Detection logged! ID: {detection_id}")
-            print(f"   Saved user_id: {response.data[0].get('user_id')}")  # Debug
             
         except Exception as db_error:
             print(f"❌ Database insert failed!")
@@ -460,27 +464,36 @@ def log_detection():
                 'details': str(db_error)
             }), 500
         
+        # ✅ UPDATE LAST_SEEN (THIS IS THE CRITICAL FIX FOR DASHBOARD ONLINE STATUS!)
+        try:
+            print(f"⏰ Updating last_seen for device {device_id}")
+            supabase.table('user_devices')\
+                .update({
+                    'last_seen': datetime.utcnow().isoformat(),
+                })\
+                .eq('id', device_id)\
+                .execute()
+            print(f"   ✅ last_seen updated")
+        except Exception as e:
+            print(f"   ⚠️ last_seen update failed (non-critical): {e}")
+        
         # ✅ Update statistics (optional)
         try:
-            print(f"📊 Updating statistics...")
             _update_user_statistics_safe(
                 user_id=user_id,
                 object_detected=object_detected,
                 detected_at=detected_at
             )
-            print(f"✅ Statistics updated for user {user_id}")
         except Exception as stats_error:
             print(f"⚠️ Statistics update failed (non-critical): {stats_error}")
         
         # ✅ Update device status (optional)
         try:
-            print(f"🔄 Updating device status...")
             _update_device_status_safe(
                 device_id=device_id,
                 detection_log=detection_log,
                 detected_at=detected_at
             )
-            print(f"✅ Device status updated")
         except Exception as status_error:
             print(f"⚠️ Device status update failed (non-critical): {status_error}")
         
@@ -498,65 +511,6 @@ def log_detection():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
-
-@detections_bp.route('', methods=['POST'])
-@device_token_required
-def create_detection():
-    """Create a new detection log"""
-    try:
-        device_id = request.current_device['id']
-        user_id = request.current_device.get('user_id')
-        data = request.get_json()
-        
-        supabase = get_supabase()
-        
-        # Your existing detection insertion code
-        detection_data = {
-            'device_id': device_id,
-            'user_id': user_id,
-            'obstacle_type': data.get('obstacleType'),
-            'distance_cm': data.get('distance'),
-            'danger_level': data.get('dangerLevel'),
-            # ... other fields ...
-        }
-        
-        detection_result = supabase.table('detection_logs')\
-            .insert(detection_data)\
-            .execute()
-        
-        # ✅ ADD THIS: Update last_seen in user_devices table
-        try:
-            supabase.table('user_devices')\
-                .update({
-                    'last_seen': datetime.now(timezone.utc).isoformat(),
-                })\
-                .eq('id', device_id)\
-                .execute()
-        except Exception as e:
-            print(f"⚠️ Failed to update last_seen: {e}")
-        
-        # ✅ ADD THIS: Update last_seen in device_status table if it exists
-        try:
-            supabase.table('device_status')\
-                .update({
-                    'last_seen': datetime.now(timezone.utc).isoformat(),
-                })\
-                .eq('device_id', device_id)\
-                .execute()
-        except Exception as e:
-            # device_status might not exist yet, that's ok
-            pass
-        
-        return jsonify({
-            'message': 'Detection logged successfully',
-            'data': detection_result.data
-        }), 201
-        
-    except Exception as e:
-        print(f"❌ Create detection error: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': 'Failed to log detection'}), 500
 
 # ========== STATISTICS UPDATE FUNCTION (UPDATED TO 1-HOUR INTERVALS) ==========
 
