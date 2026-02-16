@@ -34,20 +34,20 @@ class MaintenancePredictionRequest(BaseModel):
 class ObjectDetectionRequest(BaseModel):
     """Request schema for object detection"""
     device_id: UUID
-    object_detected: str = Field(..., description="Type of object detected")
     distance_cm: float = Field(..., ge=0, description="Distance in centimeters")
-    detection_source: Optional[str] = Field(None, description="Source of detection (ultrasonic, camera, lidar)")
-    detection_confidence: Optional[float] = Field(0.85, ge=0, le=1, description="Detection confidence")
-
-# ========== 4. DANGER PREDICTION (NEW) ==========
+    detection_confidence: Optional[float] = Field(0.85, ge=0, le=1)
+    proximity_value: Optional[int] = Field(0, description="Proximity sensor value")
+    ambient_light: Optional[int] = Field(0, description="Ambient light sensor value")
+    detection_source: Optional[str] = Field("ultrasonic", description="Detection source")
 
 class DangerPredictionRequest(BaseModel):
     """Request schema for danger prediction"""
     device_id: UUID
-    distance_sensors: List[float] = Field(..., description="Array of distance readings from sensors (in cm)")
-    speed: float = Field(..., ge=0, description="Current speed in m/s")
-    acceleration: Optional[float] = Field(0.0, description="Current acceleration in m/s²")
-    obstacles_detected: Optional[int] = Field(0, ge=0, description="Number of obstacles detected")
+    distance_cm: float = Field(..., ge=0, description="Current distance in cm")
+    rate_of_change: float = Field(0.0, description="Rate of distance change (cm/s)")
+    proximity_value: Optional[int] = Field(0, description="Proximity sensor reading")
+    object_type: str = Field("obstacle", description="Type of object detected")
+    current_speed_estimate: float = Field(1.0, ge=0, description="User speed estimate (m/s)")
 
 # ========== 5. ENVIRONMENT CLASSIFICATION (NEW) ==========
 
