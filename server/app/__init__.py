@@ -53,6 +53,7 @@ def create_app(config_name=None):
     from app.routes.ml_history import ml_history_bp
     from app.routes.statistics import statistics_bp
     from app.routes.settings import settings_bp
+    from app.routes.camera_routes import camera_bp
     
     
     # app.register_blueprint(auth_bp, url_prefix='/api/auth')
@@ -72,6 +73,7 @@ def create_app(config_name=None):
     app.register_blueprint(ml_history_bp)  
     app.register_blueprint(statistics_bp)    
     app.register_blueprint(settings_bp)
+    app.register_blueprint(camera_bp)
 
     @app.before_request
     def handle_preflight():

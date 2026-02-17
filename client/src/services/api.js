@@ -144,6 +144,10 @@ export const settingsAPI = {
   reset: () => api.post("/settings/reset"),
 };
 
+export const cameraAPI = {
+  getSnapshot: () => api.get("/camera/snapshot"),
+};
+
 export const mlAPI = {
   // ========== Anomaly Detection ==========
   detectAnomaly: (telemetryData) =>
