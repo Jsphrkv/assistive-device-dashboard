@@ -1,9 +1,27 @@
 import React from "react";
 import { DISTANCE_THRESHOLDS, ALERT_MODE_OPTIONS } from "../../utils/constants";
 
-const SettingsForm = ({ settings, onChange, onSave, loading }) => {
+const SettingsForm = ({
+  settings,
+  onChange,
+  onSave,
+  onEdit,
+  onCancel,
+  editMode,
+  loading,
+}) => {
   return (
     <div className="space-y-6">
+      {/* View mode banner */}
+      {/* {!editMode && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+          <p className="text-sm text-gray-600">
+            📋 Viewing current settings. Click <strong>Edit Settings</strong> to
+            make changes.
+          </p>
+        </div>
+      )} */}
+
       {/* Sensitivity */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -15,7 +33,8 @@ const SettingsForm = ({ settings, onChange, onSave, loading }) => {
           max="100"
           value={settings.sensitivity}
           onChange={(e) => onChange("sensitivity", parseInt(e.target.value))}
-          className="w-full"
+          disabled={!editMode}
+          className={`w-full ${!editMode ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
         />
         <div className="flex justify-between text-xs text-gray-400 mt-1">
           <span>Low (fewer alerts)</span>
@@ -33,7 +52,12 @@ const SettingsForm = ({ settings, onChange, onSave, loading }) => {
           onChange={(e) =>
             onChange("distanceThreshold", parseInt(e.target.value))
           }
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          disabled={!editMode}
+          className={`w-full px-3 py-2 border border-gray-300 rounded-lg ${
+            !editMode
+              ? "bg-gray-100 opacity-60 cursor-not-allowed"
+              : "focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          }`}
         >
           {DISTANCE_THRESHOLDS.map((threshold) => (
             <option key={threshold} value={threshold}>
@@ -55,7 +79,11 @@ const SettingsForm = ({ settings, onChange, onSave, loading }) => {
           {ALERT_MODE_OPTIONS.map((option) => (
             <label
               key={option.value}
-              className="flex items-center p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100"
+              className={`flex items-center p-3 bg-gray-50 rounded-lg ${
+                editMode
+                  ? "cursor-pointer hover:bg-gray-100"
+                  : "opacity-60 cursor-not-allowed"
+              }`}
             >
               <input
                 type="radio"
@@ -63,6 +91,7 @@ const SettingsForm = ({ settings, onChange, onSave, loading }) => {
                 value={option.value}
                 checked={settings.alertMode === option.value}
                 onChange={(e) => onChange("alertMode", e.target.value)}
+                disabled={!editMode}
                 className="mr-3"
               />
               <span className="text-sm text-gray-900">{option.label}</span>
@@ -77,7 +106,13 @@ const SettingsForm = ({ settings, onChange, onSave, loading }) => {
           Enable / Disable Sensors
         </h3>
 
-        <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100">
+        <label
+          className={`flex items-center justify-between p-3 bg-gray-50 rounded-lg ${
+            editMode
+              ? "cursor-pointer hover:bg-gray-100"
+              : "opacity-60 cursor-not-allowed"
+          }`}
+        >
           <div>
             <span className="text-sm font-medium text-gray-900">
               Ultrasonic Sensor
@@ -90,11 +125,18 @@ const SettingsForm = ({ settings, onChange, onSave, loading }) => {
             type="checkbox"
             checked={settings.ultrasonicEnabled}
             onChange={(e) => onChange("ultrasonicEnabled", e.target.checked)}
-            className="w-4 h-4 cursor-pointer"
+            disabled={!editMode}
+            className={`w-4 h-4 ${editMode ? "cursor-pointer" : "cursor-not-allowed"}`}
           />
         </label>
 
-        <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100">
+        <label
+          className={`flex items-center justify-between p-3 bg-gray-50 rounded-lg ${
+            editMode
+              ? "cursor-pointer hover:bg-gray-100"
+              : "opacity-60 cursor-not-allowed"
+          }`}
+        >
           <div>
             <span className="text-sm font-medium text-gray-900">
               Camera Sensor
@@ -107,19 +149,40 @@ const SettingsForm = ({ settings, onChange, onSave, loading }) => {
             type="checkbox"
             checked={settings.cameraEnabled}
             onChange={(e) => onChange("cameraEnabled", e.target.checked)}
-            className="w-4 h-4 cursor-pointer"
+            disabled={!editMode}
+            className={`w-4 h-4 ${editMode ? "cursor-pointer" : "cursor-not-allowed"}`}
           />
         </label>
       </div>
 
-      {/* Save Button */}
-      <button
-        onClick={onSave}
-        disabled={loading}
-        className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 font-medium"
-      >
-        {loading ? "Saving..." : "Save Settings"}
-      </button>
+      {/* Buttons */}
+      {!editMode ? (
+        // View mode - show Edit button
+        <button
+          onClick={onEdit}
+          className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+        >
+          ✏️ Edit Settings
+        </button>
+      ) : (
+        // Edit mode - show Save + Cancel
+        <div className="flex gap-3">
+          <button
+            onClick={onCancel}
+            disabled={loading}
+            className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg hover:bg-gray-200 transition-colors font-medium disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onSave}
+            disabled={loading}
+            className="flex-1 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50"
+          >
+            {loading ? "Saving..." : "💾 Save Settings"}
+          </button>
+        </div>
+      )}
     </div>
   );
 };

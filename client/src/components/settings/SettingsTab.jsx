@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import SettingsForm from "./SettingsForm";
 import { settingsAPI } from "../../services/api";
 
-const APPLY_DELAY_SECONDS = 30; // Pi polls every 30s
+const APPLY_DELAY_SECONDS = 30;
 
 const SettingsTab = ({ currentUser }) => {
   const [settings, setSettings] = useState({
@@ -12,10 +12,12 @@ const SettingsTab = ({ currentUser }) => {
     ultrasonicEnabled: true,
     cameraEnabled: true,
   });
+  const [editMode, setEditMode] = useState(false);
+  const [pendingSettings, setPendingSettings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState(null); // { type: 'success'|'error', text: string }
-  const [countdown, setCountdown] = useState(null); // seconds remaining
+  const [message, setMessage] = useState(null);
+  const [countdown, setCountdown] = useState(null);
   const countdownRef = useRef(null);
 
   useEffect(() => {
@@ -29,8 +31,9 @@ const SettingsTab = ({ currentUser }) => {
     setLoading(true);
     try {
       const response = await settingsAPI.get();
-      if (response.data) {
-        setSettings(response.data);
+      if (response.data?.data) {
+        setSettings(response.data.data);
+        setPendingSettings(response.data.data);
       }
     } catch (error) {
       console.error("Error fetching settings:", error);
@@ -39,16 +42,28 @@ const SettingsTab = ({ currentUser }) => {
     }
   };
 
+  const handleEdit = () => {
+    setPendingSettings({ ...settings });
+    setEditMode(true);
+    setMessage(null);
+    if (countdownRef.current) clearInterval(countdownRef.current);
+    setCountdown(null);
+  };
+
+  const handleCancel = () => {
+    setPendingSettings({ ...settings });
+    setEditMode(false);
+    setMessage(null);
+  };
+
   const handleChange = (key, value) => {
-    setSettings((prev) => ({ ...prev, [key]: value }));
+    if (!editMode) return;
+    setPendingSettings((prev) => ({ ...prev, [key]: value }));
   };
 
   const startCountdown = () => {
-    // Clear any existing countdown
     if (countdownRef.current) clearInterval(countdownRef.current);
-
     setCountdown(APPLY_DELAY_SECONDS);
-
     countdownRef.current = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
@@ -69,20 +84,25 @@ const SettingsTab = ({ currentUser }) => {
   const handleSave = async () => {
     setSaving(true);
     setMessage(null);
-    if (countdownRef.current) clearInterval(countdownRef.current);
-    setCountdown(null);
-
     try {
-      const response = await settingsAPI.update(settings);
-
-      if (response.data || response.message) {
-        setMessage({ type: "success", text: "Settings saved successfully!" });
+      const response = await settingsAPI.update(pendingSettings);
+      if (
+        response.data?.message ||
+        response.data?.data ||
+        response.status === 200
+      ) {
+        setSettings({ ...pendingSettings });
+        setEditMode(false);
+        setMessage({
+          type: "success",
+          text: "✅ Settings saved successfully!",
+        });
         startCountdown();
       }
     } catch (error) {
       setMessage({
         type: "error",
-        text: "Failed to save settings. Please try again.",
+        text: "❌ Failed to save settings. Please try again.",
       });
       console.error("Error saving settings:", error);
       setTimeout(() => setMessage(null), 4000);
@@ -105,7 +125,6 @@ const SettingsTab = ({ currentUser }) => {
         Settings & Configuration
       </h2>
 
-      {/* Status Messages */}
       {message && (
         <div
           className={`p-4 rounded-lg border ${
@@ -120,7 +139,6 @@ const SettingsTab = ({ currentUser }) => {
         </div>
       )}
 
-      {/* Countdown Banner */}
       {countdown !== null && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
           <div className="flex items-center justify-between">
@@ -140,7 +158,6 @@ const SettingsTab = ({ currentUser }) => {
               <div className="text-xs text-amber-500">seconds</div>
             </div>
           </div>
-          {/* Progress bar */}
           <div className="mt-3 h-1.5 bg-amber-200 rounded-full overflow-hidden">
             <div
               className="h-full bg-amber-500 rounded-full transition-all duration-1000"
@@ -154,9 +171,12 @@ const SettingsTab = ({ currentUser }) => {
 
       <div className="bg-white rounded-lg shadow p-6">
         <SettingsForm
-          settings={settings}
+          settings={pendingSettings || settings}
           onChange={handleChange}
           onSave={handleSave}
+          onEdit={handleEdit}
+          onCancel={handleCancel}
+          editMode={editMode}
           loading={saving}
         />
       </div>
