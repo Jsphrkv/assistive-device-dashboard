@@ -5,6 +5,7 @@ import { mlAPI } from "../../services/api";
 const cache = {
   data: null,
   timestamp: null,
+  total: 0,
   stats: null,
   statsTimestamp: null,
 };
@@ -26,6 +27,7 @@ export const useMLHistory = (options = {}) => {
   } = options;
 
   const [history, setHistory] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -45,6 +47,7 @@ export const useMLHistory = (options = {}) => {
       ) {
         console.log("✅ Using cached ML history");
         setHistory(cache.data);
+        setTotalCount(cache.total || cache.data.length);
         return cache.data;
       }
 
@@ -66,10 +69,12 @@ export const useMLHistory = (options = {}) => {
 
         // Update cache
         cache.data = data;
+        cache.total = response.data.total || data.length;
         cache.timestamp = now;
 
         if (isMounted.current) {
           setHistory(data);
+          setTotalCount(response.data.total || data.length);
         }
 
         return data;
@@ -158,6 +163,7 @@ export const useMLHistory = (options = {}) => {
   // Clear history and cache
   const clearHistory = useCallback(() => {
     setHistory([]);
+    cache.total = 0;
     cache.data = null;
     cache.timestamp = null;
   }, []);
@@ -201,6 +207,7 @@ export const useMLHistory = (options = {}) => {
 
   return {
     history,
+    totalCount,
     stats,
     loading,
     error,

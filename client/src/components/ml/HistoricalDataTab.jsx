@@ -69,11 +69,12 @@ const HistoricalDataTab = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [showAnomaliesOnly, setShowAnomaliesOnly] = useState(false);
 
-  const { history, stats, loading, error, refresh, fetchStats } = useMLHistory({
-    limit: 10000, // ✅ INCREASED
-    autoFetch: true,
-    cacheDuration: 30000,
-  });
+  const { history, totalCount, stats, loading, error, refresh, fetchStats } =
+    useMLHistory({
+      limit: 10000,
+      autoFetch: true,
+      cacheDuration: 30000,
+    });
 
   useEffect(() => {
     fetchStats(7);
@@ -479,9 +480,15 @@ const HistoricalDataTab = () => {
           </h2>
           <p className="text-sm text-gray-600 mt-1">
             Track ML predictions over time
-            {history.length > 0 && (
+            {totalCount > 0 && ( // ✅ CHANGED: was history.length > 0
               <span className="ml-2 text-blue-600 font-semibold">
-                • {history.length} total entries
+                • {totalCount.toLocaleString()} total entries{" "}
+                {/* ✅ CHANGED: was history.length */}
+                {history.length < totalCount && ( // ✅ ADD: show "showing X" hint
+                  <span className="text-gray-400 font-normal ml-1">
+                    (showing {history.length.toLocaleString()})
+                  </span>
+                )}
               </span>
             )}
           </p>

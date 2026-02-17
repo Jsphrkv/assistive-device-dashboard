@@ -192,13 +192,34 @@ def get_ml_history():
         
         # ✅ Sort combined data by timestamp
         combined_data.sort(key=lambda x: x['timestamp'], reverse=True)
+
+        # ✅ ADD: Get real total counts from DB (before pagination)
+        real_total = 0
+        try:
+            if source in ['all', 'predictions']:
+                ml_count_query = supabase.table('ml_predictions').select('*', count='exact')
+                if device_ids:
+                    ml_count_query = ml_count_query.in_('device_id', device_ids)
+                ml_count_result = ml_count_query.execute()
+                real_total += ml_count_result.count or 0
+            
+            if source in ['all', 'detections']:
+                det_count_query = supabase.table('detection_logs').select('*', count='exact')
+                if device_ids:
+                    det_count_query = det_count_query.in_('device_id', device_ids)
+                det_count_result = det_count_query.execute()
+                real_total += det_count_result.count or 0
+        except Exception as e:
+            print(f"⚠️ Total count error: {e}")
+            real_total = len(combined_data)  # Fallback to fetched count
         
         # ✅ Apply pagination to combined results
         paginated_data = combined_data[offset:offset + limit]
         
         return jsonify({
             'data': paginated_data,
-            'total': len(combined_data),
+            'total': real_total,           # ✅ CHANGED: Real DB total
+            'fetched': len(combined_data), # ✅ NEW: How many were fetched
             'limit': limit,
             'offset': offset
         }), 200
