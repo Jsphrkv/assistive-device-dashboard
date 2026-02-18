@@ -32,19 +32,17 @@ import {
 } from "recharts";
 import { useMLHistory } from "../../hooks/ml/useMLHistory";
 
-// ✅ UPDATED - Type icons mapping with all types
 const TYPE_ICONS = {
   anomaly: AlertTriangle,
   maintenance: Package,
   detection: Camera,
-  object_detection: Camera, // Backend sends this
+  object_detection: Camera,
   danger_prediction: Shield,
-  danger: Shield, // Alias
+  danger: Shield,
   environment_classification: MapPin,
-  environment: MapPin, // Alias
+  environment: MapPin,
 };
 
-// ✅ UPDATED - Type colors with all types
 const TYPE_COLORS = {
   anomaly: "bg-red-50 text-red-700 border-red-200",
   maintenance: "bg-orange-50 text-orange-700 border-orange-200",
@@ -67,87 +65,78 @@ const HistoricalDataTab = () => {
   const [filterType, setFilterType] = useState("all");
   const [filterSource, setFilterSource] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [dailySummary, setDailySummary] = useState([]);
+  const [dailyLoading, setDailyLoading] = useState(false);
   const [showAnomaliesOnly, setShowAnomaliesOnly] = useState(false);
 
-  const {
-    history,
-    totalCount,
-    stats,
-    totalAnomalyCount,
-    loading,
-    error,
-    refresh,
-    fetchStats,
-  } = useMLHistory({
-    limit: 10000,
-    autoFetch: true,
-    cacheDuration: 30000,
-  });
+  const { history, totalCount, stats, loading, error, refresh, fetchStats } =
+    useMLHistory({
+      limit: 10000,
+      autoFetch: true,
+      cacheDuration: 30000,
+    });
 
-  // ✅ Initial stats fetch
-  useEffect(() => {
-    fetchStats(7);
-  }, [fetchStats]);
-
-  // ✅ FIX: Re-fetch stats from DB whenever chart date range changes
-  // This ensures summary cards reflect the correct date range from the DB,
-  // not just the locally loaded 1,000 records.
+  // ✅ FIX 1: Re-fetch stats from DB whenever the Charts date range changes.
+  //    force=true bypasses cache so each days value gets a fresh accurate count.
   useEffect(() => {
     const days = dateRange === "7days" ? 7 : dateRange === "30days" ? 30 : 90;
-    fetchStats(days, true); // always force so different day values never share stale cache
-  }, [dateRange, fetchStats]);
 
-  // ✅ UPDATED with date filtering
+    const fetchDailySummary = async () => {
+      setDailyLoading(true);
+      try {
+        const response = await mlAPI.getDailySummary(days); // add this to mlAPI
+        setDailySummary(response.data.data || []);
+      } catch (err) {
+        console.error("Failed to fetch daily summary:", err);
+      } finally {
+        setDailyLoading(false);
+      }
+    };
+
+    fetchDailySummary();
+    fetchStats(days, true); // keep stats cards in sync
+  }, [dateRange]);
+
   const filteredLogs = useMemo(() => {
     let filtered = [...history];
 
-    // DATE RANGE FILTER
     if (logsDateRange !== "all") {
       const days =
         logsDateRange === "7days" ? 7 : logsDateRange === "30days" ? 30 : 90;
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - days);
-
-      filtered = filtered.filter((item) => {
-        const itemDate = new Date(item.timestamp);
-        return itemDate >= cutoffDate;
-      });
+      filtered = filtered.filter(
+        (item) => new Date(item.timestamp) >= cutoffDate,
+      );
     }
 
-    // Anomalies filter
     if (showAnomaliesOnly) {
       filtered = filtered.filter((item) => item.is_anomaly);
     }
 
-    // Type filter
     if (filterType !== "all") {
       filtered = filtered.filter((item) => {
         const type = item.prediction_type;
         if (
           filterType === "detection" &&
           (type === "detection" || type === "object_detection")
-        ) {
+        )
           return true;
-        }
-        if (filterType === "danger" && type === "danger_prediction") {
+        if (filterType === "danger" && type === "danger_prediction")
           return true;
-        }
         if (
           filterType === "environment" &&
           type === "environment_classification"
-        ) {
+        )
           return true;
-        }
         return type === filterType;
       });
     }
 
-    // Source filter
     if (filterSource !== "all") {
       filtered = filtered.filter((item) => item.source === filterSource);
     }
 
-    // Search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter((item) => {
@@ -172,21 +161,17 @@ const HistoricalDataTab = () => {
     showAnomaliesOnly,
   ]);
 
-  // ✅ Paginate filtered logs
   const paginatedLogs = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    return filteredLogs.slice(startIndex, endIndex);
+    return filteredLogs.slice(startIndex, startIndex + itemsPerPage);
   }, [filteredLogs, currentPage, itemsPerPage]);
 
   const totalPages = Math.ceil(filteredLogs.length / itemsPerPage);
 
-  // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [filterType, filterSource, searchQuery, showAnomaliesOnly]);
 
-  // ========== CHARTS VIEW DATA ==========
   const historicalData = useMemo(() => {
     if (!history || history.length === 0) return [];
 
@@ -199,7 +184,7 @@ const HistoricalDataTab = () => {
       return date;
     });
 
-    const groupedData = dateArray.map((date) => {
+    return dateArray.map((date) => {
       const nextDay = new Date(date);
       nextDay.setDate(nextDay.getDate() + 1);
 
@@ -220,7 +205,6 @@ const HistoricalDataTab = () => {
       const dangers = dayLogs.filter(
         (item) => item.prediction_type === "danger_prediction",
       ).length;
-
       const confidences = dayLogs.map((item) => item.confidence_score || 0.85);
       const avgConfidence =
         confidences.length > 0
@@ -241,56 +225,32 @@ const HistoricalDataTab = () => {
         total_logs: dayLogs.length,
       };
     });
-
-    return groupedData;
   }, [history, dateRange]);
 
-  // ✅ Keep summaryStats as local fallback only (used as fallback if stats not loaded yet)
+  // Used only as fallback if stats not yet loaded
   const summaryStats = useMemo(() => {
-    const totalAnomalies = historicalData.reduce(
-      (sum, d) => sum + d.anomalies,
-      0,
-    );
-    const totalMaintenance = historicalData.reduce(
-      (sum, d) => sum + d.maintenance_alerts,
-      0,
-    );
-    const totalDetections = historicalData.reduce(
-      (sum, d) => sum + d.detections,
-      0,
-    );
-    const totalDangers = historicalData.reduce(
-      (sum, d) => sum + d.danger_predictions,
-      0,
-    );
-    const avgConfidence =
-      historicalData.length > 0
-        ? historicalData.reduce((sum, d) => sum + d.avg_confidence, 0) /
-          historicalData.length
-        : 0;
-
     return {
-      totalAnomalies,
-      totalMaintenance,
-      totalDetections,
-      totalDangers,
-      avgConfidence,
+      totalAnomalies: historicalData.reduce((sum, d) => sum + d.anomalies, 0),
+      totalMaintenance: historicalData.reduce(
+        (sum, d) => sum + d.maintenance_alerts,
+        0,
+      ),
+      totalDetections: historicalData.reduce((sum, d) => sum + d.detections, 0),
+      totalDangers: historicalData.reduce(
+        (sum, d) => sum + d.danger_predictions,
+        0,
+      ),
+      avgConfidence:
+        historicalData.length > 0
+          ? historicalData.reduce((sum, d) => sum + d.avg_confidence, 0) /
+            historicalData.length
+          : 0,
     };
   }, [historicalData]);
 
-  // ✅ Helper: date range label for subtitle
-  const dateRangeLabel =
-    dateRange === "7days"
-      ? "Last 7 days"
-      : dateRange === "30days"
-        ? "Last 30 days"
-        : "Last 90 days";
-
-  // ✅ Export function
   const exportData = () => {
     if (viewMode === "charts") {
       if (historicalData.length === 0) return;
-
       const csv = [
         [
           "Date",
@@ -313,7 +273,6 @@ const HistoricalDataTab = () => {
       ]
         .map((row) => row.join(","))
         .join("\n");
-
       const blob = new Blob([csv], { type: "text/csv" });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -322,7 +281,6 @@ const HistoricalDataTab = () => {
       a.click();
     } else {
       if (filteredLogs.length === 0) return;
-
       const csv = [
         [
           "Timestamp",
@@ -345,7 +303,6 @@ const HistoricalDataTab = () => {
       ]
         .map((row) => row.join(","))
         .join("\n");
-
       const blob = new Blob([csv], { type: "text/csv" });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -355,7 +312,6 @@ const HistoricalDataTab = () => {
     }
   };
 
-  // ✅ UPDATED - Render result details with all types
   const renderResult = (item) => {
     const result = item.result || {};
     const type = item.prediction_type || "unknown";
@@ -379,7 +335,6 @@ const HistoricalDataTab = () => {
             )}
           </div>
         );
-
       case "maintenance":
         return (
           <div className="text-sm">
@@ -400,7 +355,6 @@ const HistoricalDataTab = () => {
             )}
           </div>
         );
-
       case "detection":
       case "object_detection":
         return (
@@ -420,7 +374,6 @@ const HistoricalDataTab = () => {
             )}
           </div>
         );
-
       case "danger_prediction":
         return (
           <div className="text-sm">
@@ -440,7 +393,6 @@ const HistoricalDataTab = () => {
             )}
           </div>
         );
-
       case "environment_classification":
         return (
           <div className="text-sm">
@@ -460,13 +412,11 @@ const HistoricalDataTab = () => {
             )}
           </div>
         );
-
       default:
         return <p className="text-sm text-gray-600">No details available</p>;
     }
   };
 
-  // ✅ Error state
   if (error) {
     return (
       <div className="flex flex-col justify-center items-center h-64">
@@ -475,7 +425,7 @@ const HistoricalDataTab = () => {
         <button
           onClick={() => {
             refresh();
-            fetchStats(7);
+            fetchStats(7, true);
           }}
           className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
         >
@@ -485,7 +435,6 @@ const HistoricalDataTab = () => {
     );
   }
 
-  // ✅ Loading state
   if (loading && history.length === 0) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -494,9 +443,17 @@ const HistoricalDataTab = () => {
     );
   }
 
+  // ✅ FIX 2: Derive the days label for the subtitle
+  const daysLabel =
+    dateRange === "7days"
+      ? "Last 7 days"
+      : dateRange === "30days"
+        ? "Last 30 days"
+        : "Last 90 days";
+
   return (
     <div className="space-y-6">
-      {/* Header with Controls */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">
@@ -518,7 +475,6 @@ const HistoricalDataTab = () => {
         </div>
 
         <div className="flex items-center space-x-3">
-          {/* View Mode Toggle */}
           <div className="flex items-center bg-gray-100 rounded-lg p-1">
             <button
               onClick={() => setViewMode("charts")}
@@ -544,7 +500,6 @@ const HistoricalDataTab = () => {
             </button>
           </div>
 
-          {/* Date Range Filter (for charts view only) */}
           {viewMode === "charts" && (
             <div className="flex items-center space-x-2">
               <Calendar className="w-5 h-5 text-gray-600" />
@@ -560,12 +515,11 @@ const HistoricalDataTab = () => {
             </div>
           )}
 
-          {/* Refresh Button */}
           <button
             onClick={() => {
-              refresh();
               const days =
                 dateRange === "7days" ? 7 : dateRange === "30days" ? 30 : 90;
+              refresh();
               fetchStats(days, true);
             }}
             disabled={loading}
@@ -575,7 +529,6 @@ const HistoricalDataTab = () => {
             <span className="text-sm">Refresh</span>
           </button>
 
-          {/* Export Button */}
           <button
             onClick={exportData}
             disabled={
@@ -591,7 +544,6 @@ const HistoricalDataTab = () => {
         </div>
       </div>
 
-      {/* Date Range Filter for Logs View */}
       {viewMode === "logs" && (
         <div className="flex items-center space-x-2">
           <Calendar className="w-5 h-5 text-gray-600" />
@@ -608,7 +560,6 @@ const HistoricalDataTab = () => {
         </div>
       )}
 
-      {/* Empty State */}
       {history.length === 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
           <div className="flex items-start gap-3">
@@ -629,7 +580,6 @@ const HistoricalDataTab = () => {
       {/* ========== CHARTS VIEW ========== */}
       {history.length > 0 && viewMode === "charts" && (
         <>
-          {/* ML Predictions Over Time */}
           <div className="bg-white rounded-lg shadow p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
               ML Predictions Timeline
@@ -686,15 +636,15 @@ const HistoricalDataTab = () => {
             )}
           </div>
 
-          {/* ✅ FIX: Summary Statistics - now uses DB stats via fetchStats(days)
-              Falls back to local summaryStats only if stats hasn't loaded yet */}
+          {/* ✅ FIX 3: Summary Cards — use stats.anomalyCount from DB (matches Dashboard's 309).
+                       Falls back to local summaryStats only if stats haven't loaded yet. */}
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div className="bg-white rounded-lg shadow p-4">
               <p className="text-sm text-gray-600 mb-1">Total Anomalies</p>
               <p className="text-2xl font-bold text-red-600">
                 {stats?.anomalyCount ?? summaryStats.totalAnomalies}
               </p>
-              <p className="text-xs text-gray-500 mt-1">{dateRangeLabel}</p>
+              <p className="text-xs text-gray-500 mt-1">{daysLabel}</p>
             </div>
 
             <div className="bg-white rounded-lg shadow p-4">
@@ -709,8 +659,8 @@ const HistoricalDataTab = () => {
               <p className="text-sm text-gray-600 mb-1">Detections</p>
               <p className="text-2xl font-bold text-purple-600">
                 {stats
-                  ? (stats.byType?.object_detection || 0) +
-                    (stats.byType?.detection || 0)
+                  ? (stats.byType?.object_detection ?? 0) +
+                    (stats.byType?.detection ?? 0)
                   : summaryStats.totalDetections}
               </p>
               <p className="text-xs text-gray-500 mt-1">Object detections</p>
@@ -735,7 +685,7 @@ const HistoricalDataTab = () => {
             </div>
           </div>
 
-          {/* Aggregated Summary Table */}
+          {/* Daily Summary Table */}
           <div className="bg-white rounded-lg shadow overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">
@@ -833,46 +783,54 @@ const HistoricalDataTab = () => {
       {/* ========== LOGS VIEW ========== */}
       {history.length > 0 && viewMode === "logs" && (
         <>
-          {/* Statistics Cards */}
-          {stats && (
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-              <div className="bg-white rounded-lg shadow p-4">
-                <p className="text-xs text-gray-600 mb-1">Total Entries</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {totalCount.toLocaleString()}
-                </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  Showing {history.length.toLocaleString()}
-                </p>
-              </div>
-              <div className="bg-red-50 rounded-lg shadow p-4">
-                <p className="text-xs text-red-600 mb-1">Anomalies</p>
-                <p className="text-2xl font-bold text-red-600">
-                  {totalAnomalyCount}
-                </p>
-                <p className="text-xs text-red-500 mt-1">All time</p>
-              </div>
-              <div className="bg-orange-50 rounded-lg shadow p-4">
-                <p className="text-xs text-orange-600 mb-1">Maintenance</p>
-                <p className="text-2xl font-bold text-orange-600">
-                  {stats.byType?.maintenance || 0}
-                </p>
-              </div>
-              <div className="bg-purple-50 rounded-lg shadow p-4">
-                <p className="text-xs text-purple-600 mb-1">Detections</p>
-                <p className="text-2xl font-bold text-purple-600">
-                  {(stats.byType?.object_detection || 0) +
-                    (stats.byType?.detection || 0)}
-                </p>
-              </div>
-              <div className="bg-green-50 rounded-lg shadow p-4">
-                <p className="text-xs text-green-600 mb-1">Avg Confidence</p>
-                <p className="text-2xl font-bold text-green-600">
-                  {stats.avgConfidence}%
-                </p>
-              </div>
+          {/* ✅ FIX 4: Logs stats cards — Anomalies uses stats.anomalyCount from DB */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="bg-white rounded-lg shadow p-4">
+              <p className="text-xs text-gray-600 mb-1">Total Entries</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {totalCount.toLocaleString()}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                Showing {history.length.toLocaleString()}
+              </p>
             </div>
-          )}
+            <div className="bg-red-50 rounded-lg shadow p-4">
+              <p className="text-xs text-red-600 mb-1">Anomalies</p>
+              {/* ✅ Use DB count so it matches Dashboard (309), not local loaded count */}
+              <p className="text-2xl font-bold text-red-600">
+                {stats?.anomalyCount ??
+                  filteredLogs.filter((log) => log.is_anomaly).length}
+              </p>
+              <p className="text-xs text-red-500 mt-1">
+                {stats
+                  ? `${stats.anomalyRate}% rate`
+                  : filteredLogs.length > 0
+                    ? `${((filteredLogs.filter((log) => log.is_anomaly).length / filteredLogs.length) * 100).toFixed(1)}% rate`
+                    : "0% rate"}
+              </p>
+            </div>
+            <div className="bg-orange-50 rounded-lg shadow p-4">
+              <p className="text-xs text-orange-600 mb-1">Maintenance</p>
+              <p className="text-2xl font-bold text-orange-600">
+                {stats?.byType?.maintenance ?? 0}
+              </p>
+            </div>
+            <div className="bg-purple-50 rounded-lg shadow p-4">
+              <p className="text-xs text-purple-600 mb-1">Detections</p>
+              <p className="text-2xl font-bold text-purple-600">
+                {stats
+                  ? (stats.byType?.object_detection ?? 0) +
+                    (stats.byType?.detection ?? 0)
+                  : 0}
+              </p>
+            </div>
+            <div className="bg-green-50 rounded-lg shadow p-4">
+              <p className="text-xs text-green-600 mb-1">Avg Confidence</p>
+              <p className="text-2xl font-bold text-green-600">
+                {stats?.avgConfidence ?? 0}%
+              </p>
+            </div>
+          </div>
 
           {/* Filters */}
           <div className="bg-white rounded-lg shadow p-4">
@@ -880,7 +838,6 @@ const HistoricalDataTab = () => {
               <Filter className="w-5 h-5 text-gray-600 mr-2" />
               <h3 className="text-sm font-semibold text-gray-900">Filters</h3>
             </div>
-
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -892,7 +849,6 @@ const HistoricalDataTab = () => {
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-
               <select
                 value={filterType}
                 onChange={(e) => setFilterType(e.target.value)}
@@ -905,7 +861,6 @@ const HistoricalDataTab = () => {
                 <option value="danger">Danger Prediction</option>
                 <option value="environment">Environment</option>
               </select>
-
               <select
                 value={filterSource}
                 onChange={(e) => setFilterSource(e.target.value)}
@@ -915,7 +870,6 @@ const HistoricalDataTab = () => {
                 <option value="ml_prediction">ML Predictions</option>
                 <option value="detection_log">Detection Logs</option>
               </select>
-
               <button
                 onClick={() => setShowAnomaliesOnly(!showAnomaliesOnly)}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -976,7 +930,6 @@ const HistoricalDataTab = () => {
                       paginatedLogs.map((log) => {
                         const type = log.prediction_type || "unknown";
                         const TypeIcon = TYPE_ICONS[type] || Brain;
-
                         return (
                           <tr key={log.id} className="hover:bg-gray-50">
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -1043,7 +996,6 @@ const HistoricalDataTab = () => {
             </div>
           </div>
 
-          {/* Pagination */}
           {filteredLogs.length > 0 && (
             <div className="flex items-center justify-between">
               <p className="text-sm text-gray-600">
@@ -1051,7 +1003,6 @@ const HistoricalDataTab = () => {
                 {Math.min(currentPage * itemsPerPage, filteredLogs.length)} of{" "}
                 {filteredLogs.length} logs
               </p>
-
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setCurrentPage(currentPage - 1)}
@@ -1060,11 +1011,9 @@ const HistoricalDataTab = () => {
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
-
                 <span className="text-sm text-gray-700">
                   Page {currentPage} of {totalPages}
                 </span>
-
                 <button
                   onClick={() => setCurrentPage(currentPage + 1)}
                   disabled={currentPage === totalPages}

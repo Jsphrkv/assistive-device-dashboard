@@ -495,3 +495,173 @@ def get_ml_stats():
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'Failed to get ML stats'}), 500
+    
+@ml_history_bp.route('/daily-summary', methods=['GET'])
+@token_required
+def get_daily_summary():
+    """
+    Return per-day aggregated counts for the timeline chart and daily summary table.
+    Queries the DB directly so numbers always match the stats cards — no truncation.
+    
+    Query params:
+        days (int): 7 | 30 | 90  (default 7)
+    
+    Response shape:
+        {
+          "data": [
+            {
+              "date": "Feb 13",
+              "date_iso": "2025-02-13",
+              "anomalies": 12,
+              "maintenance_alerts": 3,
+              "detections": 190,
+              "danger_predictions": 46,
+              "avg_confidence": 84.2,
+              "total_logs": 251
+            },
+            ...
+          ]
+        }
+    """
+    try:
+        user_id = request.current_user['user_id']
+        user_role = request.current_user['role']
+        days = request.args.get('days', 7, type=int)
+
+        # Clamp to supported ranges
+        if days not in (7, 30, 90):
+            days = 7
+
+        supabase = get_supabase()
+
+        # ── Scope to user's devices ──────────────────────────────────────────
+        if user_role == 'admin':
+            device_ids = None
+        else:
+            user_devices = supabase.table('user_devices') \
+                .select('id') \
+                .eq('user_id', user_id) \
+                .execute()
+            device_ids = [d['id'] for d in user_devices.data]
+
+            if not device_ids:
+                return jsonify({'data': []}), 200
+
+        # ── Build the date range (UTC) ───────────────────────────────────────
+        end_dt = datetime.utcnow()
+        start_dt = end_dt - timedelta(days=days)
+
+        # ── Fetch raw rows (only columns we need) ───────────────────────────
+        # ml_predictions — fetch type, anomaly flag, confidence cols, timestamp
+        ml_query = supabase.table('ml_predictions') \
+            .select(
+                'prediction_type, is_anomaly, created_at, '
+                'anomaly_score, maintenance_confidence, '
+                'detection_confidence, danger_score'
+            ) \
+            .gte('created_at', start_dt.isoformat()) \
+            .lte('created_at', end_dt.isoformat())
+
+        if device_ids:
+            ml_query = ml_query.in_('device_id', device_ids)
+
+        ml_rows = ml_query.execute().data or []
+
+        # detection_logs — fetch danger level and timestamp
+        det_query = supabase.table('detection_logs') \
+            .select('danger_level, detected_at') \
+            .gte('detected_at', start_dt.isoformat()) \
+            .lte('detected_at', end_dt.isoformat())
+
+        if device_ids:
+            det_query = det_query.in_('device_id', device_ids)
+
+        det_rows = det_query.execute().data or []
+
+        # ── Build a day-keyed bucket dict ────────────────────────────────────
+        # Keys are date strings "YYYY-MM-DD" so we can look up by day easily
+        buckets = {}
+        for i in range(days):
+            day_dt = start_dt + timedelta(days=i)
+            key = day_dt.strftime('%Y-%m-%d')
+            buckets[key] = {
+                'date_iso': key,
+                'date': day_dt.strftime('%b %-d'),   # e.g. "Feb 13"
+                'anomalies': 0,
+                'maintenance_alerts': 0,
+                'detections': 0,
+                'danger_predictions': 0,
+                'conf_scores': [],   # temp list, removed before response
+                'total_logs': 0,
+            }
+
+        # ── Aggregate ml_predictions rows ────────────────────────────────────
+        for row in ml_rows:
+            # Parse only the date part so timezone drift doesn't shift the day
+            raw_ts = row.get('created_at', '')
+            day_key = raw_ts[:10]   # "YYYY-MM-DD"
+            if day_key not in buckets:
+                continue
+
+            b = buckets[day_key]
+            b['total_logs'] += 1
+            pred_type = row.get('prediction_type', '')
+
+            if row.get('is_anomaly'):
+                b['anomalies'] += 1
+
+            if pred_type == 'maintenance':
+                b['maintenance_alerts'] += 1
+                if row.get('maintenance_confidence'):
+                    b['conf_scores'].append(row['maintenance_confidence'])
+
+            elif pred_type == 'object_detection':
+                b['detections'] += 1
+                if row.get('detection_confidence'):
+                    b['conf_scores'].append(row['detection_confidence'])
+
+            elif pred_type == 'danger_prediction':
+                b['danger_predictions'] += 1
+                if row.get('danger_score') is not None:
+                    b['conf_scores'].append(row['danger_score'] / 100)
+
+            elif pred_type == 'anomaly':
+                if row.get('anomaly_score'):
+                    b['conf_scores'].append(row['anomaly_score'])
+
+            elif pred_type == 'environment_classification':
+                b['conf_scores'].append(0.85)
+
+        # ── Aggregate detection_logs rows ─────────────────────────────────────
+        for row in det_rows:
+            raw_ts = row.get('detected_at', '')
+            day_key = raw_ts[:10]
+            if day_key not in buckets:
+                continue
+
+            b = buckets[day_key]
+            b['total_logs'] += 1
+            b['detections'] += 1
+            b['conf_scores'].append(0.85)
+
+            # detection_logs anomalies = High / Critical danger
+            if row.get('danger_level') in ('High', 'Critical'):
+                b['anomalies'] += 1
+
+        # ── Compute avg_confidence and clean up temp field ───────────────────
+        result = []
+        for key in sorted(buckets.keys()):
+            b = buckets[key]
+            scores = b.pop('conf_scores')   # remove before serialising
+            b['avg_confidence'] = round(
+                (sum(scores) / len(scores)) * 100, 2
+            ) if scores else 0.0
+            result.append(b)
+
+        return jsonify({'data': result}), 200
+
+    except Exception as e:
+        print(f"Get daily summary error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Failed to get daily summary'}), 500

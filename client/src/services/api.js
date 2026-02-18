@@ -209,6 +209,10 @@ export const mlAPI = {
   getAnomalies: (limit = 20) => api.get(`/ml-history/anomalies?limit=${limit}`),
 
   getStats: (days = 7) => api.get(`/ml-history/stats?days=${days}`),
+  getDailySummary: (days = 7) =>
+    axios.get(`/api/ml-history/daily-summary?days=${days}`, {
+      headers: authHeader(),
+    }),
 };
 
 export default api;
