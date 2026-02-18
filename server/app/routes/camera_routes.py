@@ -44,9 +44,9 @@ def upload_snapshot():
         
         supabase = get_supabase()
         
-        # Get device_id from token
+        # ✅ FIXED: Get device using 'id' column (not 'device_id')
         device_response = supabase.table('user_devices')\
-            .select('device_id, user_id')\
+            .select('id, user_id')\
             .eq('device_token', device_token)\
             .limit(1)\
             .execute()
@@ -54,7 +54,8 @@ def upload_snapshot():
         if not device_response.data:
             return jsonify({'error': 'Invalid device token'}), 401
         
-        device_id = device_response.data[0]['device_id']
+        # ✅ FIXED: Extract 'id' field (not 'device_id')
+        device_id = device_response.data[0]['id']
         
         # Upload to Supabase Storage
         file_path = f"{device_id}/latest.jpg"
@@ -86,13 +87,13 @@ def upload_snapshot():
         # Build public URL
         public_url = f"{SUPABASE_URL}/storage/v1/object/public/{SNAPSHOT_BUCKET}/{file_path}"
         
-        # Update DB with snapshot URL
+        # ✅ FIXED: Update using 'id' field (user_devices has 'id' as primary key)
         supabase.table('user_devices')\
             .update({
                 'camera_snapshot_url': public_url,
                 'snapshot_updated_at': datetime.now().isoformat()
             })\
-            .eq('device_token', device_token)\
+            .eq('id', device_id)\
             .execute()
         
         return jsonify({
