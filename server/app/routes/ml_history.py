@@ -14,20 +14,20 @@ def get_ml_history():
         user_role = request.current_user['role']
         
         # Get query parameters
-        limit = request.args.get('limit', 1000, type=int)  # ✅ Increased default
-        max_limit = 1000  # ✅ Safety cap
+        limit = request.args.get('limit', 1000, type=int)
+        max_limit = 1000  # Safety cap
         if limit > max_limit:
             limit = max_limit
         offset = request.args.get('offset', 0, type=int)
-        prediction_type = request.args.get('type')  # anomaly, maintenance, detection, danger, environment
-        source = request.args.get('source', 'all')  # 'predictions', 'detections', 'all'
+        prediction_type = request.args.get('type')
+        source = request.args.get('source', 'all')
         anomalies_only = request.args.get('anomalies_only', 'false').lower() == 'true'
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
         
         supabase = get_supabase()
         
-        # ✅ Get user's device IDs (account scoping)
+        # Get user's device IDs (account scoping)
         if user_role == 'admin':
             device_ids = None
         else:
@@ -48,7 +48,7 @@ def get_ml_history():
         
         combined_data = []
         
-        # ✅ Fetch from ml_predictions table (FIXED TYPE MAPPING)
+        # Fetch from ml_predictions table
         if source in ['all', 'predictions']:
             ml_query = supabase.table('ml_predictions')\
                 .select('*, user_devices(device_name)')
@@ -56,18 +56,16 @@ def get_ml_history():
             if device_ids:
                 ml_query = ml_query.in_('device_id', device_ids)
             
-            # ✅ Map frontend type names to database names
+            # Map frontend type names to database names
             if prediction_type:
                 type_mapping = {
-                    'detection': 'object_detection',  # ✅ FIXED
+                    'detection': 'object_detection',
                     'danger': 'danger_prediction',
                     'environment': 'environment_classification',
                     'anomaly': 'anomaly',
                     'maintenance': 'maintenance'
                 }
                 db_type = type_mapping.get(prediction_type, prediction_type)
-                
-                # ✅ FIXED - Always query ml_predictions if type matches
                 ml_query = ml_query.eq('prediction_type', db_type)
             
             if anomalies_only:
@@ -81,11 +79,9 @@ def get_ml_history():
             
             ml_response = ml_query.order('created_at', desc=True).limit(limit).execute()
             
-            # Transform ML predictions (UPDATED FOR NEW SCHEMA)
             for item in ml_response.data:
                 result = {}
                 confidence = 0
-                
                 pred_type = item.get('prediction_type', 'unknown')
                 
                 if pred_type == 'anomaly':
@@ -112,9 +108,9 @@ def get_ml_history():
                     distance = item.get('distance_cm', 0)
                     result = {
                         'object': obj,
-                        'obstacle_type': obj,  # ✅ Add alias for frontend compatibility
+                        'obstacle_type': obj,
                         'distance': distance,
-                        'distance_cm': distance,  # ✅ Add alias
+                        'distance_cm': distance,
                         'danger_level': item.get('danger_level'),
                         'confidence': item.get('detection_confidence')
                     }
@@ -127,7 +123,7 @@ def get_ml_history():
                         'time_to_collision': item.get('time_to_collision'),
                         'message': f"{item.get('recommended_action', 'UNKNOWN')} - Danger score: {item.get('danger_score', 0):.1f}"
                     }
-                    confidence = item.get('danger_score', 0) / 100  # Normalize to 0-1
+                    confidence = item.get('danger_score', 0) / 100
                     
                 elif pred_type == 'environment_classification':
                     result = {
@@ -136,7 +132,7 @@ def get_ml_history():
                         'complexity_level': item.get('complexity_level'),
                         'message': f"{item.get('environment_type', 'unknown')} - {item.get('lighting_condition', 'unknown')} lighting"
                     }
-                    confidence = 0.85  # Default confidence for environment
+                    confidence = 0.85
                 
                 combined_data.append({
                     'id': item['id'],
@@ -150,7 +146,7 @@ def get_ml_history():
                     'source': 'ml_prediction'
                 })
         
-        # ✅ Fetch from detection_logs table (only if not filtering for ML-specific types)
+        # Fetch from detection_logs table
         if source in ['all', 'detections'] and prediction_type in [None, 'detection']:
             det_query = supabase.table('detection_logs')\
                 .select('*, user_devices!detection_logs_device_id_fkey(device_name)')
@@ -158,7 +154,6 @@ def get_ml_history():
             if device_ids:
                 det_query = det_query.in_('device_id', device_ids)
             
-            # Treat High/Critical as anomalies
             if anomalies_only:
                 det_query = det_query.in_('danger_level', ['High', 'Critical'])
             
@@ -170,7 +165,6 @@ def get_ml_history():
             
             det_response = det_query.order('detected_at', desc=True).limit(limit).execute()
             
-            # Transform detections
             for item in det_response.data:
                 combined_data.append({
                     'id': item['id'],
@@ -190,40 +184,43 @@ def get_ml_history():
                     'source': 'detection_log'
                 })
         
-        # ✅ Sort combined data by timestamp
+        # Sort combined data by timestamp
         combined_data.sort(key=lambda x: x['timestamp'], reverse=True)
 
-        # ✅ ADD: Get real total counts from DB (before pagination)
+        # ✅ FIX: Get real total counts using count='exact' with head=True
+        # This avoids loading any data rows — only retrieves the count metadata
         real_total = 0
         try:
             if source in ['all', 'predictions']:
-                ml_count_query = supabase.table('ml_predictions').select('*', count='exact')
+                ml_count_query = supabase.table('ml_predictions')\
+                    .select('*', count='exact', head=True)
                 if device_ids:
                     ml_count_query = ml_count_query.in_('device_id', device_ids)
-                if anomalies_only:  # ✅ ADD THIS
+                if anomalies_only:
                     ml_count_query = ml_count_query.eq('is_anomaly', True)
                 ml_count_result = ml_count_query.execute()
                 real_total += ml_count_result.count or 0
 
             if source in ['all', 'detections'] and prediction_type in [None, 'detection']:
-                det_count_query = supabase.table('detection_logs').select('*', count='exact')
+                det_count_query = supabase.table('detection_logs')\
+                    .select('*', count='exact', head=True)
                 if device_ids:
                     det_count_query = det_count_query.in_('device_id', device_ids)
-                if anomalies_only:  # ✅ ADD THIS
+                if anomalies_only:
                     det_count_query = det_count_query.in_('danger_level', ['High', 'Critical'])
                 det_count_result = det_count_query.execute()
                 real_total += det_count_result.count or 0
         except Exception as e:
             print(f"⚠️ Total count error: {e}")
-            real_total = len(combined_data) # Fallback to fetched count
+            real_total = len(combined_data)
         
-        # ✅ Apply pagination to combined results
+        # Apply pagination to combined results
         paginated_data = combined_data[offset:offset + limit]
         
         return jsonify({
             'data': paginated_data,
-            'total': real_total,           # ✅ CHANGED: Real DB total
-            'fetched': len(combined_data), # ✅ NEW: How many were fetched
+            'total': real_total,
+            'fetched': len(combined_data),
             'limit': limit,
             'offset': offset
         }), 200
@@ -246,7 +243,6 @@ def get_anomalies():
         
         supabase = get_supabase()
         
-        # Get user's devices
         if user_role != 'admin':
             user_devices = supabase.table('user_devices')\
                 .select('id')\
@@ -262,25 +258,19 @@ def get_anomalies():
         
         combined_anomalies = []
         
-        # ✅ Get ML prediction anomalies (UPDATED FOR NEW SCHEMA)
+        # Get ML prediction anomalies
+        ml_query = supabase.table('ml_predictions')\
+            .select('*, user_devices(device_name)')\
+            .eq('is_anomaly', True)\
+            .order('created_at', desc=True)\
+            .limit(limit)
+        
         if device_ids:
-            ml_response = supabase.table('ml_predictions')\
-                .select('*, user_devices(device_name)')\
-                .in_('device_id', device_ids)\
-                .eq('is_anomaly', True)\
-                .order('created_at', desc=True)\
-                .limit(limit)\
-                .execute()
-        else:
-            ml_response = supabase.table('ml_predictions')\
-                .select('*, user_devices(device_name)')\
-                .eq('is_anomaly', True)\
-                .order('created_at', desc=True)\
-                .limit(limit)\
-                .execute()
+            ml_query = ml_query.in_('device_id', device_ids)
+        
+        ml_response = ml_query.execute()
         
         for item in ml_response.data:
-            # Determine score and message based on type
             pred_type = item.get('prediction_type', 'unknown')
             score = 0
             message = 'Anomaly detected'
@@ -292,7 +282,7 @@ def get_anomalies():
                 message = f"Device anomaly detected (health: {item.get('device_health_score', 0):.1f}%)"
                 
             elif pred_type == 'danger_prediction':
-                score = item.get('danger_score', 0) / 100  # Normalize
+                score = item.get('danger_score', 0) / 100
                 action = item.get('recommended_action', 'UNKNOWN')
                 severity = 'high' if score > 0.7 else 'medium'
                 message = f"Danger detected - {action} recommended"
@@ -317,22 +307,17 @@ def get_anomalies():
                 'source': 'ml_prediction'
             })
         
-        # ✅ Get detection log anomalies (High/Critical danger)
+        # Get detection log anomalies (High/Critical danger)
+        det_query = supabase.table('detection_logs')\
+            .select('*, user_devices(device_name)')\
+            .in_('danger_level', ['High', 'Critical'])\
+            .order('detected_at', desc=True)\
+            .limit(limit)
+        
         if device_ids:
-            det_response = supabase.table('detection_logs')\
-                .select('*, user_devices(device_name)')\
-                .in_('device_id', device_ids)\
-                .in_('danger_level', ['High', 'Critical'])\
-                .order('detected_at', desc=True)\
-                .limit(limit)\
-                .execute()
-        else:
-            det_response = supabase.table('detection_logs')\
-                .select('*, user_devices(device_name, users(username))')\
-                .in_('danger_level', ['High', 'Critical'])\
-                .order('detected_at', desc=True)\
-                .limit(limit)\
-                .execute()
+            det_query = det_query.in_('device_id', device_ids)
+        
+        det_response = det_query.execute()
         
         for item in det_response.data:
             combined_anomalies.append({
@@ -347,7 +332,6 @@ def get_anomalies():
                 'source': 'detection_log'
             })
         
-        # Sort by timestamp
         combined_anomalies.sort(key=lambda x: x['timestamp'], reverse=True)
         
         return jsonify({'data': combined_anomalies[:limit]}), 200
@@ -362,7 +346,7 @@ def get_anomalies():
 @ml_history_bp.route('/stats', methods=['GET'])
 @token_required
 def get_ml_stats():
-    """Get combined statistics from both tables (UPDATED FOR NEW SCHEMA)"""
+    """Get combined statistics from both tables"""
     try:
         user_id = request.current_user['user_id']
         user_role = request.current_user['role']
@@ -391,108 +375,112 @@ def get_ml_stats():
         else:
             device_ids = None
         
-        # Date range
+        # Date range — use UTC consistently
         end_date = datetime.utcnow()
         start_date = end_date - timedelta(days=days)
-        
-        # ✅ ML predictions stats
-        if device_ids:
-            ml_total = supabase.table('ml_predictions')\
-                .select('*', count='exact')\
-                .in_('device_id', device_ids)\
-                .gte('created_at', start_date.isoformat())\
-                .execute()
-            
-            ml_anomalies = supabase.table('ml_predictions')\
-                .select('*', count='exact')\
-                .in_('device_id', device_ids)\
-                .gte('created_at', start_date.isoformat())\
-                .eq('is_anomaly', True)\
-                .execute()
-        else:
-            ml_total = supabase.table('ml_predictions')\
-                .select('*', count='exact')\
-                .gte('created_at', start_date.isoformat())\
-                .execute()
-            
-            ml_anomalies = supabase.table('ml_predictions')\
-                .select('*', count='exact')\
-                .gte('created_at', start_date.isoformat())\
-                .eq('is_anomaly', True)\
-                .execute()
-        
-        # ✅ Detection logs stats
-        if device_ids:
-            det_total = supabase.table('detection_logs')\
-                .select('*', count='exact')\
-                .in_('device_id', device_ids)\
-                .gte('detected_at', start_date.isoformat())\
-                .execute()
-            
-            det_anomalies = supabase.table('detection_logs')\
-                .select('*', count='exact')\
-                .in_('device_id', device_ids)\
-                .gte('detected_at', start_date.isoformat())\
-                .in_('danger_level', ['High', 'Critical'])\
-                .execute()
-        else:
-            det_total = supabase.table('detection_logs')\
-                .select('*', count='exact')\
-                .gte('detected_at', start_date.isoformat())\
-                .execute()
-            
-            det_anomalies = supabase.table('detection_logs')\
-                .select('*', count='exact')\
-                .gte('detected_at', start_date.isoformat())\
-                .in_('danger_level', ['High', 'Critical'])\
-                .execute()
-        
-        # Combined totals
-        total_predictions = ml_total.count + det_total.count
-        total_anomalies = ml_anomalies.count + det_anomalies.count
-        anomaly_rate = (total_anomalies / total_predictions * 100) if total_predictions > 0 else 0
-        
-        # ✅ Count by type (UPDATED FOR NEW SCHEMA)
+        start_iso = start_date.isoformat()
+
+        print(f"📊 Stats requested for {days} days | {start_iso} → {end_date.isoformat()}")
+
+        # ─── Helper: build a base count query ───────────────────────────────
+        def ml_base(extra_filters=None):
+            q = supabase.table('ml_predictions')\
+                .select('*', count='exact', head=True)\
+                .gte('created_at', start_iso)
+            if device_ids:
+                q = q.in_('device_id', device_ids)
+            if extra_filters:
+                for col, val in extra_filters.items():
+                    if isinstance(val, list):
+                        q = q.in_(col, val)
+                    else:
+                        q = q.eq(col, val)
+            return q
+
+        def det_base(extra_filters=None):
+            q = supabase.table('detection_logs')\
+                .select('*', count='exact', head=True)\
+                .gte('detected_at', start_iso)
+            if device_ids:
+                q = q.in_('device_id', device_ids)
+            if extra_filters:
+                for col, val in extra_filters.items():
+                    if isinstance(val, list):
+                        q = q.in_(col, val)
+                    else:
+                        q = q.eq(col, val)
+            return q
+
+        # ─── Total counts ────────────────────────────────────────────────────
+        ml_total_count   = ml_base().execute().count or 0
+        det_total_count  = det_base().execute().count or 0
+
+        # ─── Anomaly counts ──────────────────────────────────────────────────
+        ml_anomaly_count  = ml_base({'is_anomaly': True}).execute().count or 0
+        det_anomaly_count = det_base({'danger_level': ['High', 'Critical']}).execute().count or 0
+
+        total_predictions = ml_total_count + det_total_count
+        total_anomalies   = ml_anomaly_count + det_anomaly_count
+        anomaly_rate      = (total_anomalies / total_predictions * 100) if total_predictions > 0 else 0
+
+        print(f"   ML total: {ml_total_count} | ML anomalies: {ml_anomaly_count}")
+        print(f"   Det total: {det_total_count} | Det anomalies: {det_anomaly_count}")
+        print(f"   Combined anomalyCount: {total_anomalies}")
+
+        # ─── Per-type counts (each a separate cheap COUNT query) ─────────────
+        # ✅ FIX: Never iterate ml_total.data — use dedicated count queries
+        #    so the result is always the true DB total, not a capped row slice.
+        type_anomaly      = ml_base({'prediction_type': 'anomaly'}).execute().count or 0
+        type_maintenance  = ml_base({'prediction_type': 'maintenance'}).execute().count or 0
+        type_obj_detect   = ml_base({'prediction_type': 'object_detection'}).execute().count or 0
+        type_danger       = ml_base({'prediction_type': 'danger_prediction'}).execute().count or 0
+        type_environment  = ml_base({'prediction_type': 'environment_classification'}).execute().count or 0
+
         by_type = {
-            'anomaly': 0,
-            'maintenance': 0,
-            'object_detection': 0,
-            'danger_prediction': 0,
-            'environment_classification': 0,
-            'detection': det_total.count  # Detection logs count
+            'anomaly': type_anomaly,
+            'maintenance': type_maintenance,
+            'object_detection': type_obj_detect,
+            'danger_prediction': type_danger,
+            'environment_classification': type_environment,
+            'detection': det_total_count,  # all detection_logs rows in range
         }
-        
-        for pred in ml_total.data:
-            pred_type = pred.get('prediction_type', 'unknown')
-            if pred_type in by_type:
-                by_type[pred_type] += 1
-        
-        # By source
+
         by_source = {
-            'ml_predictions': ml_total.count,
-            'detection_logs': det_total.count
+            'ml_predictions': ml_total_count,
+            'detection_logs': det_total_count
         }
-        
-        # ✅ Average confidence (UPDATED FOR NEW SCHEMA)
-        confidence_scores = []
-        for pred in ml_total.data:
-            pred_type = pred.get('prediction_type')
-            
-            if pred_type == 'anomaly' and pred.get('anomaly_score'):
-                confidence_scores.append(pred['anomaly_score'])
-            elif pred_type == 'maintenance' and pred.get('maintenance_confidence'):
-                confidence_scores.append(pred['maintenance_confidence'])
-            elif pred_type == 'object_detection' and pred.get('detection_confidence'):
-                confidence_scores.append(pred['detection_confidence'])
-            elif pred_type == 'danger_prediction' and pred.get('danger_score'):
-                confidence_scores.append(pred['danger_score'] / 100)  # Normalize
-        
-        # Add detection logs default confidence
-        if det_total.count > 0:
-            confidence_scores.extend([0.85] * det_total.count)
-        
-        avg_confidence = (sum(confidence_scores) / len(confidence_scores)) if confidence_scores else 0.75
-        
+
+        # ─── Average confidence ───────────────────────────────────────────────
+        # Fetch only the confidence columns we need (no head=True — we need data)
+        conf_scores = []
+        try:
+            conf_query = supabase.table('ml_predictions')\
+                .select('prediction_type, anomaly_score, maintenance_confidence, detection_confidence, danger_score')\
+                .gte('created_at', start_iso)
+            if device_ids:
+                conf_query = conf_query.in_('device_id', device_ids)
+
+            conf_response = conf_query.execute()
+
+            for pred in conf_response.data:
+                pt = pred.get('prediction_type')
+                if pt == 'anomaly' and pred.get('anomaly_score'):
+                    conf_scores.append(pred['anomaly_score'])
+                elif pt == 'maintenance' and pred.get('maintenance_confidence'):
+                    conf_scores.append(pred['maintenance_confidence'])
+                elif pt == 'object_detection' and pred.get('detection_confidence'):
+                    conf_scores.append(pred['detection_confidence'])
+                elif pt == 'danger_prediction' and pred.get('danger_score'):
+                    conf_scores.append(pred['danger_score'] / 100)
+        except Exception as ce:
+            print(f"⚠️ Confidence fetch error (non-critical): {ce}")
+
+        # Detection logs use default 0.85 confidence
+        if det_total_count > 0:
+            conf_scores.extend([0.85] * det_total_count)
+
+        avg_confidence = (sum(conf_scores) / len(conf_scores)) if conf_scores else 0.75
+
         return jsonify({
             'totalPredictions': total_predictions,
             'anomalyCount': total_anomalies,

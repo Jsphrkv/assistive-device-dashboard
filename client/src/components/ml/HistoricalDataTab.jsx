@@ -59,7 +59,7 @@ const TYPE_COLORS = {
 const HistoricalDataTab = () => {
   const [dateRange, setDateRange] = useState("7days");
   const [viewMode, setViewMode] = useState("charts");
-  const [logsDateRange, setLogsDateRange] = useState("all"); // ✅ NEW
+  const [logsDateRange, setLogsDateRange] = useState("all");
 
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(20);
@@ -84,15 +84,24 @@ const HistoricalDataTab = () => {
     cacheDuration: 30000,
   });
 
+  // ✅ Initial stats fetch
   useEffect(() => {
     fetchStats(7);
   }, [fetchStats]);
+
+  // ✅ FIX: Re-fetch stats from DB whenever chart date range changes
+  // This ensures summary cards reflect the correct date range from the DB,
+  // not just the locally loaded 1,000 records.
+  useEffect(() => {
+    const days = dateRange === "7days" ? 7 : dateRange === "30days" ? 30 : 90;
+    fetchStats(days, true); // always force so different day values never share stale cache
+  }, [dateRange, fetchStats]);
 
   // ✅ UPDATED with date filtering
   const filteredLogs = useMemo(() => {
     let filtered = [...history];
 
-    // ✅ DATE RANGE FILTER
+    // DATE RANGE FILTER
     if (logsDateRange !== "all") {
       const days =
         logsDateRange === "7days" ? 7 : logsDateRange === "30days" ? 30 : 90;
@@ -177,7 +186,7 @@ const HistoricalDataTab = () => {
     setCurrentPage(1);
   }, [filterType, filterSource, searchQuery, showAnomaliesOnly]);
 
-  // ========== CHARTS VIEW DATA (keep existing logic) ==========
+  // ========== CHARTS VIEW DATA ==========
   const historicalData = useMemo(() => {
     if (!history || history.length === 0) return [];
 
@@ -236,6 +245,7 @@ const HistoricalDataTab = () => {
     return groupedData;
   }, [history, dateRange]);
 
+  // ✅ Keep summaryStats as local fallback only (used as fallback if stats not loaded yet)
   const summaryStats = useMemo(() => {
     const totalAnomalies = historicalData.reduce(
       (sum, d) => sum + d.anomalies,
@@ -268,10 +278,17 @@ const HistoricalDataTab = () => {
     };
   }, [historicalData]);
 
+  // ✅ Helper: date range label for subtitle
+  const dateRangeLabel =
+    dateRange === "7days"
+      ? "Last 7 days"
+      : dateRange === "30days"
+        ? "Last 30 days"
+        : "Last 90 days";
+
   // ✅ Export function
   const exportData = () => {
     if (viewMode === "charts") {
-      // Export aggregated chart data
       if (historicalData.length === 0) return;
 
       const csv = [
@@ -304,7 +321,6 @@ const HistoricalDataTab = () => {
       a.download = `ml-history-${new Date().toISOString().split("T")[0]}.csv`;
       a.click();
     } else {
-      // Export individual filtered logs
       if (filteredLogs.length === 0) return;
 
       const csv = [
@@ -488,11 +504,10 @@ const HistoricalDataTab = () => {
           </h2>
           <p className="text-sm text-gray-600 mt-1">
             Track ML predictions over time
-            {totalCount > 0 && ( // ✅ CHANGED: was history.length > 0
+            {totalCount > 0 && (
               <span className="ml-2 text-blue-600 font-semibold">
-                • {totalCount.toLocaleString()} total entries{" "}
-                {/* ✅ CHANGED: was history.length */}
-                {history.length < totalCount && ( // ✅ ADD: show "showing X" hint
+                • {totalCount.toLocaleString()} total entries
+                {history.length < totalCount && (
                   <span className="text-gray-400 font-normal ml-1">
                     (showing {history.length.toLocaleString()})
                   </span>
@@ -549,7 +564,9 @@ const HistoricalDataTab = () => {
           <button
             onClick={() => {
               refresh();
-              fetchStats(7);
+              const days =
+                dateRange === "7days" ? 7 : dateRange === "30days" ? 30 : 90;
+              fetchStats(days, true);
             }}
             disabled={loading}
             className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
@@ -573,6 +590,7 @@ const HistoricalDataTab = () => {
           </button>
         </div>
       </div>
+
       {/* Date Range Filter for Logs View */}
       {viewMode === "logs" && (
         <div className="flex items-center space-x-2">
@@ -668,26 +686,21 @@ const HistoricalDataTab = () => {
             )}
           </div>
 
-          {/* Summary Statistics */}
+          {/* ✅ FIX: Summary Statistics - now uses DB stats via fetchStats(days)
+              Falls back to local summaryStats only if stats hasn't loaded yet */}
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div className="bg-white rounded-lg shadow p-4">
               <p className="text-sm text-gray-600 mb-1">Total Anomalies</p>
               <p className="text-2xl font-bold text-red-600">
-                {summaryStats.totalAnomalies}
+                {stats?.anomalyCount ?? summaryStats.totalAnomalies}
               </p>
-              <p className="text-xs text-gray-500 mt-1">
-                {dateRange === "7days"
-                  ? "Last 7 days"
-                  : dateRange === "30days"
-                    ? "Last 30 days"
-                    : "Last 90 days"}
-              </p>
+              <p className="text-xs text-gray-500 mt-1">{dateRangeLabel}</p>
             </div>
 
             <div className="bg-white rounded-lg shadow p-4">
               <p className="text-sm text-gray-600 mb-1">Maintenance Alerts</p>
               <p className="text-2xl font-bold text-orange-600">
-                {summaryStats.totalMaintenance}
+                {stats?.byType?.maintenance ?? summaryStats.totalMaintenance}
               </p>
               <p className="text-xs text-gray-500 mt-1">Total predictions</p>
             </div>
@@ -695,7 +708,10 @@ const HistoricalDataTab = () => {
             <div className="bg-white rounded-lg shadow p-4">
               <p className="text-sm text-gray-600 mb-1">Detections</p>
               <p className="text-2xl font-bold text-purple-600">
-                {summaryStats.totalDetections}
+                {stats
+                  ? (stats.byType?.object_detection || 0) +
+                    (stats.byType?.detection || 0)
+                  : summaryStats.totalDetections}
               </p>
               <p className="text-xs text-gray-500 mt-1">Object detections</p>
             </div>
@@ -703,7 +719,7 @@ const HistoricalDataTab = () => {
             <div className="bg-white rounded-lg shadow p-4">
               <p className="text-sm text-gray-600 mb-1">Danger Predictions</p>
               <p className="text-2xl font-bold text-red-600">
-                {summaryStats.totalDangers}
+                {stats?.byType?.danger_prediction ?? summaryStats.totalDangers}
               </p>
               <p className="text-xs text-gray-500 mt-1">Risk assessments</p>
             </div>
@@ -711,7 +727,9 @@ const HistoricalDataTab = () => {
             <div className="bg-white rounded-lg shadow p-4">
               <p className="text-sm text-gray-600 mb-1">Avg Confidence</p>
               <p className="text-2xl font-bold text-green-600">
-                {summaryStats.avgConfidence.toFixed(1)}%
+                {stats
+                  ? `${stats.avgConfidence}%`
+                  : `${summaryStats.avgConfidence.toFixed(1)}%`}
               </p>
               <p className="text-xs text-gray-500 mt-1">Model accuracy</p>
             </div>
@@ -821,18 +839,16 @@ const HistoricalDataTab = () => {
               <div className="bg-white rounded-lg shadow p-4">
                 <p className="text-xs text-gray-600 mb-1">Total Entries</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {totalCount.toLocaleString()} {/* ✅ NEW - shows 6,014 */}
+                  {totalCount.toLocaleString()}
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
-                  Showing {history.length.toLocaleString()}{" "}
-                  {/* ✅ NEW - shows 1,000 */}
+                  Showing {history.length.toLocaleString()}
                 </p>
               </div>
               <div className="bg-red-50 rounded-lg shadow p-4">
                 <p className="text-xs text-red-600 mb-1">Anomalies</p>
                 <p className="text-2xl font-bold text-red-600">
-                  {totalAnomalyCount}{" "}
-                  {/* ← all-time, unaffected by log filters */}
+                  {totalAnomalyCount}
                 </p>
                 <p className="text-xs text-red-500 mt-1">All time</p>
               </div>
@@ -968,7 +984,9 @@ const HistoricalDataTab = () => {
                                 <Clock className="w-4 h-4 text-gray-400" />
                                 {new Date(log.timestamp).toLocaleString()}
                                 {log.is_anomaly && (
-                                  <span className="...">ANOMALY</span>
+                                  <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs rounded-full font-semibold">
+                                    ANOMALY
+                                  </span>
                                 )}
                               </div>
                             </td>

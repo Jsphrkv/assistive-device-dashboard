@@ -6,7 +6,7 @@ const cache = {
   data: null,
   timestamp: null,
   total: 0,
-  stats: null,
+  statsByDays: {},
   statsTimestamp: null,
 };
 
@@ -112,26 +112,25 @@ export const useMLHistory = (options = {}) => {
   const fetchStats = useCallback(
     async (days = 7, force = false) => {
       const now = Date.now();
+      const cacheKey = String(days);
 
-      // Return cached stats if fresh
+      // ✅ Now checks cache for the specific days value
       if (
         !force &&
-        cache.stats &&
-        cache.statsTimestamp &&
-        now - cache.statsTimestamp < cacheDuration
+        cache.statsByDays[cacheKey] &&
+        cache.statsTimestamp[cacheKey] &&
+        now - cache.statsTimestamp[cacheKey] < cacheDuration
       ) {
-        console.log("✅ Using cached ML stats");
-        setStats(cache.stats);
-        return cache.stats;
+        setStats(cache.statsByDays[cacheKey]);
+        return cache.statsByDays[cacheKey];
       }
 
       try {
         const response = await mlAPI.getStats(days);
         const statsData = response.data;
 
-        // Update cache
-        cache.stats = statsData;
-        cache.statsTimestamp = now;
+        cache.statsByDays[cacheKey] = statsData; // ✅ keyed by days
+        cache.statsTimestamp[cacheKey] = now;
 
         if (isMounted.current) {
           setStats(statsData);
