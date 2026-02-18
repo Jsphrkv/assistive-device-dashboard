@@ -210,7 +210,7 @@ export const mlAPI = {
 
   getStats: (days = 7) => api.get(`/ml-history/stats?days=${days}`),
   getDailySummary: (days = 7) =>
-    api.get(`/api/ml-history/daily-summary?days=${days}`),
+    api.get(`/ml-history/daily-summary?days=${days}`),
 };
 
 export default api;
