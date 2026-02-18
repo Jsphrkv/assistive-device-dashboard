@@ -1,56 +1,3 @@
-# # # Web Framework
-# # Flask==3.1.0
-# # Flask-CORS==5.0.0
-
-# # # Database
-# # supabase==2.3.4
-
-# # # Authentication
-# # PyJWT==2.8.0
-# # bcrypt==4.1.2
-
-# # # Environment
-# # python-dotenv==1.0.1
-
-# # # Validation
-# # marshmallow==3.20.2
-
-# # # Production Server
-# # gunicorn==21.2.0
-
-# # # Utilities
-# # python-dateutil==2.8.2
-# # pytz==2024.1
-
-# # # HTTP requests (if needed for API calls)
-# # requests==2.31.0
-
-# # # ML Libraries
-# # scikit-learn==1.3.2
-# # joblib==1.3.2
-# # numpy==1.24.3
-# # pandas==2.0.3
-# # scipy==1.11.3
-
-# # Flask-Mail==0.9.1
-# # itsdangerous==2.1.2
-
-# # # For Raspberry Pi (install separately on Pi)
-# # # opencv-python==4.9.0.80
-# # # numpy==1.26.3
-# # # picamera2==0.3.16
-# # # gpiozero==2.0.1
-# # # RPi.GPIO==0.7.1
-
-# # # Optional: For ML models
-# # # tensorflow-lite==2.14.0
-# # # or
-# # # pytorch-mobile==1.13.0
-
-# ===========================before render============================
-
-
-
 # =========================
 # Web Framework
 # =========================
@@ -63,10 +10,10 @@ werkzeug==3.0.1
 # =========================
 # Database
 # =========================
-supabase==2.16.0            # latest minor updates compatible with Python 3.11
+supabase==2.16.0
 
 # =========================
-# Authentication
+# Authentication / Security
 # =========================
 bcrypt==4.1.2
 PyJWT==2.8.0
@@ -74,53 +21,26 @@ itsdangerous==2.1.2
 python-dotenv==1.0.0
 
 # =========================
-# Environment
-# =========================
-# python-dotenv>=1.0.1
-
-# =========================
 # Validation
 # =========================
-marshmallow>=3.20.2
-
-# =========================
-# Production Server
-# =========================
-gunicorn==24.1.1
+marshmallow==4.2.2
+pydantic==2.6.0
+email-validator==2.3.0
 
 # =========================
 # Utilities
 # =========================
-python-dateutil>=2.8.2
-pytz>=2024.1
-requests>=2.31.0
+python-dateutil==2.9.0.post0
+pytz==2025.2
+requests==2.32.5
 
 # =========================
-# Machine Learning Libraries
+# Machine Learning
 # =========================
 numpy==1.26.4
+pandas==2.2.3
 scikit-learn==1.5.2
 xgboost==2.1.3
-pandas==2.2.3
 joblib==1.4.2
 imbalanced-learn==0.12.4
 scipy==1.14.1
-
-
-# =========================
-# Flask Extensions
-# =========================
-pydantic==2.6.0  
-email-validator==2.3.0  
-sendgrid>=6.0.0 # compatible with Flask 3.1
-
-# =========================
-# Raspberry Pi / Optional ML (do not install on Render)
-# =========================
-# opencv-python==4.9.0
-# numpy==1.26.3
-# picamera2==0.3.16
-# gpiozero==2.0.1
-# RPi.GPIO==0.7.1
-# tensorflow-lite==2.14.0
-# pytorch-mobile==1.13.0

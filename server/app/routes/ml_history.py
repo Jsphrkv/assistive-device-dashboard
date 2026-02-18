@@ -200,18 +200,22 @@ def get_ml_history():
                 ml_count_query = supabase.table('ml_predictions').select('*', count='exact')
                 if device_ids:
                     ml_count_query = ml_count_query.in_('device_id', device_ids)
+                if anomalies_only:  # ✅ ADD THIS
+                    ml_count_query = ml_count_query.eq('is_anomaly', True)
                 ml_count_result = ml_count_query.execute()
                 real_total += ml_count_result.count or 0
-            
-            if source in ['all', 'detections']:
+
+            if source in ['all', 'detections'] and prediction_type in [None, 'detection']:
                 det_count_query = supabase.table('detection_logs').select('*', count='exact')
                 if device_ids:
                     det_count_query = det_count_query.in_('device_id', device_ids)
+                if anomalies_only:  # ✅ ADD THIS
+                    det_count_query = det_count_query.in_('danger_level', ['High', 'Critical'])
                 det_count_result = det_count_query.execute()
                 real_total += det_count_result.count or 0
         except Exception as e:
             print(f"⚠️ Total count error: {e}")
-            real_total = len(combined_data)  # Fallback to fetched count
+            real_total = len(combined_data) # Fallback to fetched count
         
         # ✅ Apply pagination to combined results
         paginated_data = combined_data[offset:offset + limit]

@@ -69,12 +69,20 @@ const HistoricalDataTab = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [showAnomaliesOnly, setShowAnomaliesOnly] = useState(false);
 
-  const { history, totalCount, stats, loading, error, refresh, fetchStats } =
-    useMLHistory({
-      limit: 10000,
-      autoFetch: true,
-      cacheDuration: 30000,
-    });
+  const {
+    history,
+    totalCount,
+    stats,
+    totalAnomalyCount,
+    loading,
+    error,
+    refresh,
+    fetchStats,
+  } = useMLHistory({
+    limit: 10000,
+    autoFetch: true,
+    cacheDuration: 30000,
+  });
 
   useEffect(() => {
     fetchStats(7);
@@ -823,19 +831,10 @@ const HistoricalDataTab = () => {
               <div className="bg-red-50 rounded-lg shadow p-4">
                 <p className="text-xs text-red-600 mb-1">Anomalies</p>
                 <p className="text-2xl font-bold text-red-600">
-                  {filteredLogs.filter((log) => log.is_anomaly).length}{" "}
-                  {/* ✅ CHANGED */}
+                  {totalAnomalyCount}{" "}
+                  {/* ← all-time, unaffected by log filters */}
                 </p>
-                <p className="text-xs text-red-500 mt-1">
-                  {filteredLogs.length > 0
-                    ? (
-                        (filteredLogs.filter((log) => log.is_anomaly).length /
-                          filteredLogs.length) *
-                        100
-                      ).toFixed(1)
-                    : 0}
-                  % rate
-                </p>
+                <p className="text-xs text-red-500 mt-1">All time</p>
               </div>
               <div className="bg-orange-50 rounded-lg shadow p-4">
                 <p className="text-xs text-orange-600 mb-1">Maintenance</p>
@@ -969,9 +968,7 @@ const HistoricalDataTab = () => {
                                 <Clock className="w-4 h-4 text-gray-400" />
                                 {new Date(log.timestamp).toLocaleString()}
                                 {log.is_anomaly && (
-                                  <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs rounded-full font-semibold">
-                                    ANOMALY
-                                  </span>
+                                  <span className="...">ANOMALY</span>
                                 )}
                               </div>
                             </td>

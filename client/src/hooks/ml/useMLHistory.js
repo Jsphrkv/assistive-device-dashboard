@@ -32,6 +32,7 @@ export const useMLHistory = (options = {}) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const isMounted = useRef(true);
+  const [totalAnomalyCount, setTotalAnomalyCount] = useState(0);
 
   // Fetch history with caching
   const fetchHistory = useCallback(
@@ -145,18 +146,33 @@ export const useMLHistory = (options = {}) => {
     [cacheDuration],
   );
 
+  const fetchTotalAnomalyCount = useCallback(async () => {
+    try {
+      const response = await mlAPI.getHistory({
+        anomalies_only: true,
+        limit: 1, // Minimal data transfer — we only need response.data.total
+        offset: 0,
+      });
+      const count = response.data.total || 0;
+      if (isMounted.current) setTotalAnomalyCount(count);
+      return count;
+    } catch (err) {
+      console.error("Failed to fetch total anomaly count:", err);
+      return 0;
+    }
+  }, []);
+
   // Auto-fetch on mount
   useEffect(() => {
     isMounted.current = true;
-
     if (autoFetch) {
       fetchHistory();
+      fetchTotalAnomalyCount(); // ✅ independent, lightweight call
     }
-
     return () => {
       isMounted.current = false;
     };
-  }, [autoFetch, fetchHistory]);
+  }, [autoFetch, fetchHistory, fetchTotalAnomalyCount]);
 
   // ✅ REMOVED: addToHistory - ML history is read-only analytics
 
@@ -219,5 +235,7 @@ export const useMLHistory = (options = {}) => {
     getBySource,
     getByDateRange,
     refresh,
+    totalAnomalyCount,
+    fetchTotalAnomalyCount, // ✅ NEW: Expose total anomaly count
   };
 };
