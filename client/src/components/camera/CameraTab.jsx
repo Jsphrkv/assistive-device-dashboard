@@ -65,7 +65,7 @@ const CameraTab = () => {
 
   return (
     <div className="space-y-4 fade-in">
-      <h2 className="text-2xl font-bold text-gray-900">Live Camera Preview</h2>
+      <h2 className="text-2xl font-bold text-gray-900">Camera Preview</h2>
 
       {/* Status Bar */}
       <div className="flex items-center justify-between bg-white rounded-lg shadow px-4 py-3">

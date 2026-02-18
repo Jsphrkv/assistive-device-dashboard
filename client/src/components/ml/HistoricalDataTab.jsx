@@ -813,7 +813,11 @@ const HistoricalDataTab = () => {
               <div className="bg-white rounded-lg shadow p-4">
                 <p className="text-xs text-gray-600 mb-1">Total Entries</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {filteredLogs.length} {/* ✅ CHANGED from stats count */}
+                  {totalCount.toLocaleString()} {/* ✅ NEW - shows 6,014 */}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Showing {history.length.toLocaleString()}{" "}
+                  {/* ✅ NEW - shows 1,000 */}
                 </p>
               </div>
               <div className="bg-red-50 rounded-lg shadow p-4">
