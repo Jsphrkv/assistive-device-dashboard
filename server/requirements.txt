@@ -8,6 +8,7 @@ flask-mail==0.9.1
 werkzeug==3.0.1
 gunicorn
 supabase
+sendgrid
 
 # =========================
 # Database
