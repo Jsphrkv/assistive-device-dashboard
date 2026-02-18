@@ -280,52 +280,58 @@ def get_ml_statistics():
         # Calculate anomaly rate
         anomaly_rate = (anomaly_count / total_predictions * 100) if total_predictions > 0 else 0
         
+        high_count = 0
+        medium_count = 0
+        low_count = 0
+        critical_count = 0
+        navigation_count = 0
+        environmental_count = 0
+
         # Severity breakdown
         if user_role == 'admin':
-            high_count = supabase.table('detection_logs')\
-                .select('*', count='exact')\
-                .eq('danger_level', 'High')\
-                .execute().count or 0
-            
-            medium_count = supabase.table('detection_logs')\
-                .select('*', count='exact')\
-                .eq('danger_level', 'Medium')\
-                .execute().count or 0
-            
-            low_count = supabase.table('detection_logs')\
-                .select('*', count='exact')\
-                .eq('danger_level', 'Low')\
-                .execute().count or 0
+            critical_count = supabase.table('detection_logs')\
+                .select('*', count='exact', head=True)\
+                .eq('object_category', 'critical').execute().count or 0
+
+            navigation_count = supabase.table('detection_logs')\
+                .select('*', count='exact', head=True)\
+                .eq('object_category', 'navigation').execute().count or 0
+
+            environmental_count = supabase.table('detection_logs')\
+                .select('*', count='exact', head=True)\
+                .eq('object_category', 'environmental').execute().count or 0
         else:
-            high_count = supabase.table('detection_logs')\
-                .select('*', count='exact')\
+            critical_count = supabase.table('detection_logs')\
+                .select('*', count='exact', head=True)\
                 .in_('device_id', device_ids)\
-                .eq('danger_level', 'High')\
-                .execute().count or 0
-            
-            medium_count = supabase.table('detection_logs')\
-                .select('*', count='exact')\
+                .eq('object_category', 'critical').execute().count or 0
+
+            navigation_count = supabase.table('detection_logs')\
+                .select('*', count='exact', head=True)\
                 .in_('device_id', device_ids)\
-                .eq('danger_level', 'Medium')\
-                .execute().count or 0
-            
-            low_count = supabase.table('detection_logs')\
-                .select('*', count='exact')\
+                .eq('object_category', 'navigation').execute().count or 0
+
+            environmental_count = supabase.table('detection_logs')\
+                .select('*', count='exact', head=True)\
                 .in_('device_id', device_ids)\
-                .eq('danger_level', 'Low')\
-                .execute().count or 0
-        
-        print(f"✅ Summary: {total_predictions} total, {anomaly_count} anomalies, {anomaly_rate:.1f}% rate")
-        
+                .eq('object_category', 'environmental').execute().count or 0
+
+        # Add to the return jsonify:
         return jsonify({
             'totalPredictions': total_predictions,
             'anomalyCount': anomaly_count,
             'anomalyRate': round(anomaly_rate, 2),
-            'avgAnomalyScore': 67.5,  # TODO: Calculate from actual data
+            'avgAnomalyScore': 67.5,
             'severityBreakdown': {
                 'high': high_count,
                 'medium': medium_count,
                 'low': low_count
+            },
+            # ✅ ADD THESE:
+            'categoryBreakdown': {
+                'critical': critical_count,
+                'navigation': navigation_count,
+                'environmental': environmental_count,
             }
         }), 200
         

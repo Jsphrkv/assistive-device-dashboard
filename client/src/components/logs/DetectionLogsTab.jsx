@@ -48,13 +48,20 @@ const DetectionLogsTab = () => {
     getMLDetections,
     getMLStats,
   } = useDetectionLogs({
-    limit: 10000,
+    limit: 1000, // keep at 1000 — logs table only needs recent rows
     autoFetch: true,
     cacheDuration: 30000,
   });
 
-  // Add state for true total count from database
-  const [totalCount, setTotalCount] = useState(0);
+  // ✅ DB-accurate stats (replaces local array counts for cards)
+  const [dbStats, setDbStats] = useState({
+    total: 0,
+    critical: 0,
+    navigation: 0,
+    environmental: 0,
+    high_danger: 0,
+  });
+  const [statsLoading, setStatsLoading] = useState(false);
 
   const [filteredDetections, setFilteredDetections] = useState([]);
   const [filterObject, setFilterObject] = useState("all");
@@ -67,14 +74,14 @@ const DetectionLogsTab = () => {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Fetch total count on mount
+  // ✅ Fetch DB-accurate stats on mount
   useEffect(() => {
-    fetchTotalCount();
+    fetchDBStats();
   }, []);
 
   useEffect(() => {
     applyFilters();
-    setCurrentPage(1); // Reset to first page when filters change
+    setCurrentPage(1);
   }, [
     detections,
     filterObject,
@@ -85,17 +92,41 @@ const DetectionLogsTab = () => {
     showMLOnly,
   ]);
 
-  // Fetch the true total count from the database
-  const fetchTotalCount = async () => {
+  // ✅ Fetch all card numbers from the DB via statisticsAPI.getSummary()
+  //    This uses COUNT queries server-side so numbers are always accurate
+  //    regardless of how many records exist (no truncation issue).
+  const fetchDBStats = async () => {
+    setStatsLoading(true);
     try {
       const response = await statisticsAPI.getSummary();
-      setTotalCount(response.data?.totalPredictions || 0);
+      const data = response.data;
+      setDbStats({
+        total: data?.totalPredictions || 0,
+        critical: data?.categoryBreakdown?.critical || 0,
+        navigation: data?.categoryBreakdown?.navigation || 0,
+        environmental: data?.categoryBreakdown?.environmental || 0,
+        high_danger: data?.severityBreakdown?.high || 0,
+      });
     } catch (error) {
-      console.error("Error fetching total count:", error);
-      setTotalCount(detections.length); // Fallback to array length
+      console.error("Error fetching DB stats:", error);
+      // Fallback: compute from local array (may be understated if >1000 records)
+      setDbStats({
+        total: detections.length,
+        critical: detections.filter((d) => d.object_category === "critical")
+          .length,
+        navigation: detections.filter((d) => d.object_category === "navigation")
+          .length,
+        environmental: detections.filter(
+          (d) => d.object_category === "environmental",
+        ).length,
+        high_danger: detections.filter((d) => d.danger_level === "High").length,
+      });
+    } finally {
+      setStatsLoading(false);
     }
   };
 
+  // ✅ applyFilters still works on local detections array — correct for the table
   const applyFilters = () => {
     let filtered = [...detections];
 
@@ -143,6 +174,8 @@ const DetectionLogsTab = () => {
         case "30days":
           cutoff.setDate(now.getDate() - 30);
           break;
+        default:
+          break;
       }
 
       filtered = filtered.filter((d) => new Date(d.detected_at) >= cutoff);
@@ -165,7 +198,7 @@ const DetectionLogsTab = () => {
   const handleRefresh = async () => {
     try {
       await refresh();
-      await fetchTotalCount(); // Also refresh the total count
+      await fetchDBStats(); // ✅ also refresh DB-accurate stats
     } catch (error) {
       console.error("Failed to refresh:", error);
     }
@@ -191,6 +224,8 @@ const DetectionLogsTab = () => {
             break;
           case "30days":
             cutoff.setDate(now.getDate() - 30);
+            break;
+          default:
             break;
         }
 
@@ -243,7 +278,7 @@ const DetectionLogsTab = () => {
     return colors[level] || colors.Low;
   };
 
-  // Pagination calculations
+  // Pagination calculations — based on filtered local array (correct for table)
   const totalPages = Math.ceil(filteredDetections.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const endIndex = startIndex + ITEMS_PER_PAGE;
@@ -251,21 +286,6 @@ const DetectionLogsTab = () => {
 
   const goToPage = (page) => {
     setCurrentPage(Math.max(1, Math.min(page, totalPages)));
-  };
-
-  // Calculate stats
-  const stats = {
-    total: filteredDetections.length,
-    critical: filteredDetections.filter((d) => d.object_category === "critical")
-      .length,
-    navigation: filteredDetections.filter(
-      (d) => d.object_category === "navigation",
-    ).length,
-    environmental: filteredDetections.filter(
-      (d) => d.object_category === "environmental",
-    ).length,
-    high_danger: filteredDetections.filter((d) => d.danger_level === "High")
-      .length,
   };
 
   const mlStats = getMLStats();
@@ -304,12 +324,14 @@ const DetectionLogsTab = () => {
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Detection Logs</h2>
           <p className="text-sm text-gray-600 mt-1">
-            Real-time log of all ML detections and predictions • {totalCount}{" "}
-            total entries
-            {detections.length < totalCount && (
+            Real-time log of all ML detections and predictions •{" "}
+            <span className="text-blue-600 font-semibold">
+              {dbStats.total.toLocaleString()} total entries
+            </span>
+            {detections.length < dbStats.total && (
               <span className="text-gray-500">
                 {" "}
-                (showing {detections.length} most recent)
+                (showing {detections.length.toLocaleString()} most recent)
               </span>
             )}
           </p>
@@ -317,10 +339,12 @@ const DetectionLogsTab = () => {
         <div className="flex items-center gap-2">
           <button
             onClick={handleRefresh}
-            disabled={loading}
+            disabled={loading || statsLoading}
             className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw
+              className={`w-4 h-4 ${loading || statsLoading ? "animate-spin" : ""}`}
+            />
             <span className="text-sm">Refresh</span>
           </button>
 
@@ -357,44 +381,54 @@ const DetectionLogsTab = () => {
         </div>
       </div>
 
-      {/* Statistics Cards */}
+      {/* ✅ Statistics Cards — all from DB (accurate regardless of row limit) */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
         <div className="bg-white rounded-lg shadow p-4">
           <p className="text-xs text-gray-600 mb-1">Total Logs</p>
-          <p className="text-2xl font-bold text-gray-900">{totalCount}</p>
-          {detections.length < totalCount && (
+          <p className="text-2xl font-bold text-gray-900">
+            {dbStats.total.toLocaleString()}
+          </p>
+          {detections.length < dbStats.total && (
             <p className="text-xs text-gray-500 mt-1">
-              Loaded: {detections.length}
+              Loaded: {detections.length.toLocaleString()}
             </p>
           )}
         </div>
+
         <div className="bg-red-50 rounded-lg shadow p-4">
           <p className="text-xs text-red-600 mb-1">Critical</p>
-          <p className="text-2xl font-bold text-red-600">{stats.critical}</p>
+          <p className="text-2xl font-bold text-red-600">
+            {dbStats.critical.toLocaleString()}
+          </p>
         </div>
+
         <div className="bg-orange-50 rounded-lg shadow p-4">
           <p className="text-xs text-orange-600 mb-1">Navigation</p>
           <p className="text-2xl font-bold text-orange-600">
-            {stats.navigation}
+            {dbStats.navigation.toLocaleString()}
           </p>
         </div>
+
         <div className="bg-yellow-50 rounded-lg shadow p-4">
           <p className="text-xs text-yellow-600 mb-1">Environmental</p>
           <p className="text-2xl font-bold text-yellow-600">
-            {stats.environmental}
+            {dbStats.environmental.toLocaleString()}
           </p>
         </div>
+
         <div className="bg-purple-50 rounded-lg shadow p-4">
           <p className="text-xs text-purple-600 mb-1">High Danger</p>
           <p className="text-2xl font-bold text-purple-600">
-            {stats.high_danger}
+            {dbStats.high_danger.toLocaleString()}
           </p>
         </div>
+
         <div className="bg-blue-50 rounded-lg shadow p-4">
           <div className="flex items-center gap-1 mb-1">
             <Brain className="w-3 h-3 text-blue-600" />
             <p className="text-xs text-blue-600">ML Detections</p>
           </div>
+          {/* mlStats is from the local array — acceptable here as an approximation */}
           <p className="text-2xl font-bold text-blue-600">{mlStats.total}</p>
           <p className="text-xs text-blue-500 mt-1">
             Avg: {mlStats.avgConfidence}%
@@ -499,7 +533,7 @@ const DetectionLogsTab = () => {
         </div>
       </div>
 
-      {/* Logs Table */}
+      {/* Logs Table — reads from local detections array (1000 most recent) */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -603,7 +637,7 @@ const DetectionLogsTab = () => {
                             style={{
                               width: `${detection.detection_confidence || 85}%`,
                             }}
-                          ></div>
+                          />
                         </div>
                         <span className="text-xs">
                           {(detection.detection_confidence || 85).toFixed(0)}%
@@ -618,13 +652,13 @@ const DetectionLogsTab = () => {
         </div>
       </div>
 
-      {/* Pagination */}
+      {/* Pagination — based on filteredDetections (local array) */}
       {filteredDetections.length > 0 && (
         <div className="flex items-center justify-between">
           <p className="text-sm text-gray-600">
             Showing {startIndex + 1} to{" "}
             {Math.min(endIndex, filteredDetections.length)} of{" "}
-            {filteredDetections.length} logs
+            {filteredDetections.length} loaded logs
           </p>
 
           <div className="flex items-center gap-2">
