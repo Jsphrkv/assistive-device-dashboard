@@ -434,14 +434,15 @@ const DetectionLogsTab = () => {
         <div className="bg-blue-50 rounded-lg shadow p-4">
           <div className="flex items-center gap-1 mb-1">
             <Brain className="w-3 h-3 text-blue-600" />
-            <p className="text-xs text-blue-600">ML Detections</p>
+            <p className="text-xs text-blue-600">Total Records</p>
           </div>
           {/* mlStats is from the local array — acceptable here as an approximation */}
           <p className="text-2xl font-bold text-blue-600">
             {dbStats.ml_detections}
           </p>
           <p className="text-xs text-blue-500 mt-1">
-            Avg: {dbStats.ml_confidence}%
+            ML + Sensor combined
+            {/* {dbStats.ml_confidence}% */}
           </p>
         </div>
       </div>

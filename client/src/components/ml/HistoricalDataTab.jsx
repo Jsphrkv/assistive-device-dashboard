@@ -628,9 +628,7 @@ const HistoricalDataTab = () => {
               <p className="text-2xl font-bold text-red-600">
                 {stats?.byType?.danger_prediction ?? 0}
               </p>
-              <p className="text-xs text-gray-500 mt-1">
-                Total ML Risk assessments
-              </p>
+              <p className="text-xs text-gray-500 mt-1">Risk assessments</p>
             </div>
 
             <div className="bg-white rounded-lg shadow p-4">
@@ -638,9 +636,7 @@ const HistoricalDataTab = () => {
               <p className="text-2xl font-bold text-green-600">
                 {stats ? `${stats.avgConfidence}%` : "0%"}
               </p>
-              <p className="text-xs text-gray-500 mt-1">
-                ML + Sensor Model accuracy
-              </p>
+              <p className="text-xs text-gray-500 mt-1">Combined Accuracy</p>
             </div>
           </div>
 
