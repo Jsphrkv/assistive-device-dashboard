@@ -222,73 +222,62 @@ def get_ml_statistics():
     try:
         user_id = request.current_user['user_id']
         user_role = request.current_user.get('role', 'user')
-        
+
         supabase = get_supabase()
-        
+
         print(f"📊 Fetching summary stats for user {user_id}")
-        
+
         # Get user's device IDs first
         user_devices = supabase.table('user_devices')\
             .select('id')\
             .eq('user_id', user_id)\
             .execute()
-        
+
         device_ids = [device['id'] for device in user_devices.data]
-        
+
         if not device_ids and user_role != 'admin':
-            # No devices = no data
             return jsonify({
                 'totalPredictions': 0,
                 'anomalyCount': 0,
                 'anomalyRate': 0,
                 'avgAnomalyScore': 0,
-                'severityBreakdown': {
-                    'high': 0,
-                    'medium': 0,
-                    'low': 0
-                }
+                'severityBreakdown': {'high': 0, 'medium': 0, 'low': 0},
+                'categoryBreakdown': {'critical': 0, 'navigation': 0, 'environmental': 0}
             }), 200
-        
-        # Get total detections count
-        if user_role == 'admin':
-            total_response = supabase.table('detection_logs')\
-                .select('*', count='exact')\
-                .execute()
-        else:
-            total_response = supabase.table('detection_logs')\
-                .select('*', count='exact')\
-                .in_('device_id', device_ids)\
-                .execute()
-        
-        total_predictions = total_response.count or 0
-        
-        # Count anomalies (High/Critical danger levels)
-        if user_role == 'admin':
-            anomaly_response = supabase.table('detection_logs')\
-                .select('*', count='exact')\
-                .in_('danger_level', ['High', 'Critical'])\
-                .execute()
-        else:
-            anomaly_response = supabase.table('detection_logs')\
-                .select('*', count='exact')\
-                .in_('device_id', device_ids)\
-                .in_('danger_level', ['High', 'Critical'])\
-                .execute()
-        
-        anomaly_count = anomaly_response.count or 0
-        
-        # Calculate anomaly rate
-        anomaly_rate = (anomaly_count / total_predictions * 100) if total_predictions > 0 else 0
-        
-        high_count = 0
-        medium_count = 0
-        low_count = 0
-        critical_count = 0
-        navigation_count = 0
+
+        # ── Initialize all counts to 0 ───────────────────────────────────────
+        total_predictions = 0
+        anomaly_count     = 0
+        high_count        = 0
+        medium_count      = 0
+        low_count         = 0
+        critical_count    = 0
+        navigation_count  = 0
         environmental_count = 0
 
-        # Severity breakdown
+        # ── Single if/else block — all queries together, no duplication ───────
         if user_role == 'admin':
+            total_predictions = supabase.table('detection_logs')\
+                .select('*', count='exact', head=True)\
+                .execute().count or 0
+
+            anomaly_count = supabase.table('detection_logs')\
+                .select('*', count='exact', head=True)\
+                .in_('danger_level', ['High', 'Critical'])\
+                .execute().count or 0
+
+            high_count = supabase.table('detection_logs')\
+                .select('*', count='exact', head=True)\
+                .eq('danger_level', 'High').execute().count or 0
+
+            medium_count = supabase.table('detection_logs')\
+                .select('*', count='exact', head=True)\
+                .eq('danger_level', 'Medium').execute().count or 0
+
+            low_count = supabase.table('detection_logs')\
+                .select('*', count='exact', head=True)\
+                .eq('danger_level', 'Low').execute().count or 0
+
             critical_count = supabase.table('detection_logs')\
                 .select('*', count='exact', head=True)\
                 .eq('object_category', 'critical').execute().count or 0
@@ -300,7 +289,34 @@ def get_ml_statistics():
             environmental_count = supabase.table('detection_logs')\
                 .select('*', count='exact', head=True)\
                 .eq('object_category', 'environmental').execute().count or 0
+
         else:
+            total_predictions = supabase.table('detection_logs')\
+                .select('*', count='exact', head=True)\
+                .in_('device_id', device_ids)\
+                .execute().count or 0
+
+            anomaly_count = supabase.table('detection_logs')\
+                .select('*', count='exact', head=True)\
+                .in_('device_id', device_ids)\
+                .in_('danger_level', ['High', 'Critical'])\
+                .execute().count or 0
+
+            high_count = supabase.table('detection_logs')\
+                .select('*', count='exact', head=True)\
+                .in_('device_id', device_ids)\
+                .eq('danger_level', 'High').execute().count or 0
+
+            medium_count = supabase.table('detection_logs')\
+                .select('*', count='exact', head=True)\
+                .in_('device_id', device_ids)\
+                .eq('danger_level', 'Medium').execute().count or 0
+
+            low_count = supabase.table('detection_logs')\
+                .select('*', count='exact', head=True)\
+                .in_('device_id', device_ids)\
+                .eq('danger_level', 'Low').execute().count or 0
+
             critical_count = supabase.table('detection_logs')\
                 .select('*', count='exact', head=True)\
                 .in_('device_id', device_ids)\
@@ -316,25 +332,28 @@ def get_ml_statistics():
                 .in_('device_id', device_ids)\
                 .eq('object_category', 'environmental').execute().count or 0
 
-        # Add to the return jsonify:
+        # ── Compute derived values ────────────────────────────────────────────
+        anomaly_rate = (anomaly_count / total_predictions * 100) if total_predictions > 0 else 0
+
+        print(f"✅ Summary: {total_predictions} total, {anomaly_count} anomalies, {anomaly_rate:.1f}% rate")
+
         return jsonify({
-            'totalPredictions': total_predictions,
-            'anomalyCount': anomaly_count,
-            'anomalyRate': round(anomaly_rate, 2),
-            'avgAnomalyScore': 67.5,
+            'totalPredictions':  total_predictions,
+            'anomalyCount':      anomaly_count,
+            'anomalyRate':       round(anomaly_rate, 2),
+            'avgAnomalyScore':   67.5,
             'severityBreakdown': {
-                'high': high_count,
+                'high':   high_count,
                 'medium': medium_count,
-                'low': low_count
+                'low':    low_count,
             },
-            # ✅ ADD THESE:
             'categoryBreakdown': {
-                'critical': critical_count,
-                'navigation': navigation_count,
+                'critical':      critical_count,
+                'navigation':    navigation_count,
                 'environmental': environmental_count,
             }
         }), 200
-        
+
     except Exception as e:
         print(f"❌ Get ML statistics error: {e}")
         import traceback

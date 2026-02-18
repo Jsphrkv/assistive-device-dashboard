@@ -13,7 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { detectionsAPI, statisticsAPI } from "../../services/api";
+import { detectionsAPI, statisticsAPI, mlAPI } from "../../services/api";
 import { useDetectionLogs } from "../../hooks/useDetectionLogs";
 
 // Object icons mapping
@@ -98,18 +98,24 @@ const DetectionLogsTab = () => {
   const fetchDBStats = async () => {
     setStatsLoading(true);
     try {
-      const response = await statisticsAPI.getSummary();
-      const data = response.data;
+      const [summaryRes, mlRes] = await Promise.all([
+        statisticsAPI.getSummary(),
+        mlAPI.getStats(7),
+      ]);
+      const data = summaryRes.data;
+      const mlData = mlRes.data;
+
       setDbStats({
         total: data?.totalPredictions || 0,
         critical: data?.categoryBreakdown?.critical || 0,
         navigation: data?.categoryBreakdown?.navigation || 0,
         environmental: data?.categoryBreakdown?.environmental || 0,
         high_danger: data?.severityBreakdown?.high || 0,
+        ml_detections: mlData?.totalPredictions || 0,
+        ml_confidence: mlData?.avgConfidence || 0,
       });
     } catch (error) {
       console.error("Error fetching DB stats:", error);
-      // Fallback: compute from local array (may be understated if >1000 records)
       setDbStats({
         total: detections.length,
         critical: detections.filter((d) => d.object_category === "critical")
@@ -120,6 +126,8 @@ const DetectionLogsTab = () => {
           (d) => d.object_category === "environmental",
         ).length,
         high_danger: detections.filter((d) => d.danger_level === "High").length,
+        ml_detections: 0,
+        ml_confidence: 0,
       });
     } finally {
       setStatsLoading(false);
@@ -429,9 +437,11 @@ const DetectionLogsTab = () => {
             <p className="text-xs text-blue-600">ML Detections</p>
           </div>
           {/* mlStats is from the local array — acceptable here as an approximation */}
-          <p className="text-2xl font-bold text-blue-600">{mlStats.total}</p>
+          <p className="text-2xl font-bold text-blue-600">
+            {dbStats.ml_detections}
+          </p>
           <p className="text-xs text-blue-500 mt-1">
-            Avg: {mlStats.avgConfidence}%
+            Avg: {dbStats.ml_confidence}%
           </p>
         </div>
       </div>

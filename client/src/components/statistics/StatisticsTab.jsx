@@ -186,27 +186,33 @@ const StatisticsTab = ({ deviceId }) => {
             <p className="text-3xl font-bold text-gray-900">
               {mlSummary.totalPredictions || 0}
             </p>
+            <p className="text-xs text-gray-500 mt-1">Sensor records only</p>
           </div>
 
           <div className="bg-red-50 rounded-lg shadow p-6">
-            <p className="text-sm text-red-600 mb-1">High Priority</p>
+            <p className="text-sm text-red-600 mb-1">High Danger</p>
             <p className="text-3xl font-bold text-red-600">
               {mlSummary.severityBreakdown?.high || 0}
             </p>
+            <p className="text-xs text-red-500 mt-1">danger_level = High</p>
           </div>
 
           <div className="bg-yellow-50 rounded-lg shadow p-6">
-            <p className="text-sm text-yellow-600 mb-1">Medium Priority</p>
+            <p className="text-sm text-yellow-600 mb-1">Medium Danger</p>
             <p className="text-3xl font-bold text-yellow-600">
               {mlSummary.severityBreakdown?.medium || 0}
+            </p>
+            <p className="text-xs text-yellow-500 mt-1">
+              danger_level = Medium
             </p>
           </div>
 
           <div className="bg-blue-50 rounded-lg shadow p-6">
-            <p className="text-sm text-blue-600 mb-1">Anomaly Rate</p>
+            <p className="text-sm text-blue-600 mb-1">Low Danger</p>
             <p className="text-3xl font-bold text-blue-600">
-              {mlSummary.anomalyRate || 0}%
+              {mlSummary.severityBreakdown?.low || 0}
             </p>
+            <p className="text-xs text-blue-500 mt-1">danger_level = Low</p>
           </div>
         </div>
       )}

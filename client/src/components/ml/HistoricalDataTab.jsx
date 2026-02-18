@@ -599,7 +599,9 @@ const HistoricalDataTab = () => {
               <p className="text-2xl font-bold text-red-600">
                 {stats?.anomalyCount ?? 0}
               </p>
-              <p className="text-xs text-gray-500 mt-1">{daysLabel}</p>
+              <p className="text-xs text-gray-500 mt-1">
+                {daysLabel} • ML + Sensor
+              </p>
             </div>
 
             <div className="bg-white rounded-lg shadow p-4">
@@ -607,7 +609,7 @@ const HistoricalDataTab = () => {
               <p className="text-2xl font-bold text-orange-600">
                 {stats?.byType?.maintenance ?? 0}
               </p>
-              <p className="text-xs text-gray-500 mt-1">Total predictions</p>
+              <p className="text-xs text-gray-500 mt-1">Total ML Predictions</p>
             </div>
 
             <div className="bg-white rounded-lg shadow p-4">
@@ -618,7 +620,7 @@ const HistoricalDataTab = () => {
                     (stats.byType?.detection ?? 0)
                   : 0}
               </p>
-              <p className="text-xs text-gray-500 mt-1">Object detections</p>
+              <p className="text-xs text-gray-500 mt-1">ML + Sensor logs</p>
             </div>
 
             <div className="bg-white rounded-lg shadow p-4">
@@ -626,7 +628,9 @@ const HistoricalDataTab = () => {
               <p className="text-2xl font-bold text-red-600">
                 {stats?.byType?.danger_prediction ?? 0}
               </p>
-              <p className="text-xs text-gray-500 mt-1">Risk assessments</p>
+              <p className="text-xs text-gray-500 mt-1">
+                Total ML Risk assessments
+              </p>
             </div>
 
             <div className="bg-white rounded-lg shadow p-4">
@@ -634,7 +638,9 @@ const HistoricalDataTab = () => {
               <p className="text-2xl font-bold text-green-600">
                 {stats ? `${stats.avgConfidence}%` : "0%"}
               </p>
-              <p className="text-xs text-gray-500 mt-1">Model accuracy</p>
+              <p className="text-xs text-gray-500 mt-1">
+                ML + Sensor Model accuracy
+              </p>
             </div>
           </div>
 
@@ -746,7 +752,7 @@ const HistoricalDataTab = () => {
                 {totalCount.toLocaleString()}
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                Showing {history.length.toLocaleString()}
+                ML + Sensor records ({history.length.toLocaleString()})
               </p>
             </div>
             <div className="bg-red-50 rounded-lg shadow p-4">
@@ -755,13 +761,18 @@ const HistoricalDataTab = () => {
                 {stats?.anomalyCount ?? 0}
               </p>
               <p className="text-xs text-red-500 mt-1">
-                {stats ? `${stats.anomalyRate}% rate` : "0% rate"}
+                {stats
+                  ? `${stats.anomalyRate}% rate • ML + Sensor`
+                  : "ML + Sensor"}
               </p>
             </div>
             <div className="bg-orange-50 rounded-lg shadow p-4">
               <p className="text-xs text-orange-600 mb-1">Maintenance</p>
               <p className="text-2xl font-bold text-orange-600">
                 {stats?.byType?.maintenance ?? 0}
+              </p>
+              <p className="text-xs text-orange-500 mt-1">
+                ML predictions only
               </p>
             </div>
             <div className="bg-purple-50 rounded-lg shadow p-4">
@@ -772,11 +783,15 @@ const HistoricalDataTab = () => {
                     (stats.byType?.detection ?? 0)
                   : 0}
               </p>
+              <p className="text-xs text-purple-500 mt-1">ML + Sensor logs</p>
             </div>
             <div className="bg-green-50 rounded-lg shadow p-4">
               <p className="text-xs text-green-600 mb-1">Avg Confidence</p>
               <p className="text-2xl font-bold text-green-600">
                 {stats?.avgConfidence ?? 0}%
+              </p>
+              <p className="text-xs text-green-500 mt-1">
+                ML + Sensor combined
               </p>
             </div>
           </div>
