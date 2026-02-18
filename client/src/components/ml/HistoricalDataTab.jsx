@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Calendar,
   Download,
@@ -10,7 +10,6 @@ import {
   Clock,
   Brain,
   AlertTriangle,
-  Activity,
   Package,
   Camera,
   Eye,
@@ -31,6 +30,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { useMLHistory } from "../../hooks/ml/useMLHistory";
+import { mlAPI } from "../../services/api"; // ✅ ADD: needed for getDailySummary
 
 const TYPE_ICONS = {
   anomaly: AlertTriangle,
@@ -65,9 +65,11 @@ const HistoricalDataTab = () => {
   const [filterType, setFilterType] = useState("all");
   const [filterSource, setFilterSource] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [showAnomaliesOnly, setShowAnomaliesOnly] = useState(false);
+
+  // ✅ REPLACED: dailySummary from DB instead of computing from truncated history
   const [dailySummary, setDailySummary] = useState([]);
   const [dailyLoading, setDailyLoading] = useState(false);
-  const [showAnomaliesOnly, setShowAnomaliesOnly] = useState(false);
 
   const { history, totalCount, stats, loading, error, refresh, fetchStats } =
     useMLHistory({
@@ -76,33 +78,40 @@ const HistoricalDataTab = () => {
       cacheDuration: 30000,
     });
 
-  // ✅ FIX 1: Re-fetch stats from DB whenever the Charts date range changes.
-  //    force=true bypasses cache so each days value gets a fresh accurate count.
+  // ✅ Helper to derive days int from dateRange string
+  const getDays = useCallback(
+    (range = dateRange) =>
+      range === "7days" ? 7 : range === "30days" ? 30 : 90,
+    [dateRange],
+  );
+
+  // ✅ Fetch daily summary from the new backend endpoint (accurate, not truncated)
+  const fetchDailySummary = useCallback(async (days, force = false) => {
+    setDailyLoading(true);
+    try {
+      const response = await mlAPI.getDailySummary(days);
+      setDailySummary(response.data.data || []);
+    } catch (err) {
+      console.error("Failed to fetch daily summary:", err);
+      setDailySummary([]);
+    } finally {
+      setDailyLoading(false);
+    }
+  }, []);
+
+  // ✅ Re-fetch both daily summary AND stats whenever Charts date range changes
   useEffect(() => {
-    const days = dateRange === "7days" ? 7 : dateRange === "30days" ? 30 : 90;
+    const days = getDays(dateRange);
+    fetchDailySummary(days);
+    fetchStats(days, true); // force=true bypasses cache for accurate per-range counts
+  }, [dateRange]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const fetchDailySummary = async () => {
-      setDailyLoading(true);
-      try {
-        const response = await mlAPI.getDailySummary(days); // add this to mlAPI
-        setDailySummary(response.data.data || []);
-      } catch (err) {
-        console.error("Failed to fetch daily summary:", err);
-      } finally {
-        setDailyLoading(false);
-      }
-    };
-
-    fetchDailySummary();
-    fetchStats(days, true); // keep stats cards in sync
-  }, [dateRange]);
-
+  // ── Logs filtering (still uses local history — this is fine for the logs table) ──
   const filteredLogs = useMemo(() => {
     let filtered = [...history];
 
     if (logsDateRange !== "all") {
-      const days =
-        logsDateRange === "7days" ? 7 : logsDateRange === "30days" ? 30 : 90;
+      const days = getDays(logsDateRange);
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - days);
       filtered = filtered.filter(
@@ -159,6 +168,7 @@ const HistoricalDataTab = () => {
     filterSource,
     searchQuery,
     showAnomaliesOnly,
+    getDays,
   ]);
 
   const paginatedLogs = useMemo(() => {
@@ -172,85 +182,10 @@ const HistoricalDataTab = () => {
     setCurrentPage(1);
   }, [filterType, filterSource, searchQuery, showAnomaliesOnly]);
 
-  const historicalData = useMemo(() => {
-    if (!history || history.length === 0) return [];
-
-    const days = dateRange === "7days" ? 7 : dateRange === "30days" ? 30 : 90;
-
-    const dateArray = Array.from({ length: days }, (_, i) => {
-      const date = new Date();
-      date.setDate(date.getDate() - (days - i - 1));
-      date.setHours(0, 0, 0, 0);
-      return date;
-    });
-
-    return dateArray.map((date) => {
-      const nextDay = new Date(date);
-      nextDay.setDate(nextDay.getDate() + 1);
-
-      const dayLogs = history.filter((item) => {
-        const itemDate = new Date(item.timestamp);
-        return itemDate >= date && itemDate < nextDay;
-      });
-
-      const anomalies = dayLogs.filter((item) => item.is_anomaly).length;
-      const maintenance = dayLogs.filter(
-        (item) => item.prediction_type === "maintenance",
-      ).length;
-      const detections = dayLogs.filter(
-        (item) =>
-          item.prediction_type === "detection" ||
-          item.prediction_type === "object_detection",
-      ).length;
-      const dangers = dayLogs.filter(
-        (item) => item.prediction_type === "danger_prediction",
-      ).length;
-      const confidences = dayLogs.map((item) => item.confidence_score || 0.85);
-      const avgConfidence =
-        confidences.length > 0
-          ? (confidences.reduce((sum, c) => sum + c, 0) / confidences.length) *
-            100
-          : 0;
-
-      return {
-        date: date.toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-        }),
-        anomalies,
-        maintenance_alerts: maintenance,
-        detections,
-        danger_predictions: dangers,
-        avg_confidence: avgConfidence,
-        total_logs: dayLogs.length,
-      };
-    });
-  }, [history, dateRange]);
-
-  // Used only as fallback if stats not yet loaded
-  const summaryStats = useMemo(() => {
-    return {
-      totalAnomalies: historicalData.reduce((sum, d) => sum + d.anomalies, 0),
-      totalMaintenance: historicalData.reduce(
-        (sum, d) => sum + d.maintenance_alerts,
-        0,
-      ),
-      totalDetections: historicalData.reduce((sum, d) => sum + d.detections, 0),
-      totalDangers: historicalData.reduce(
-        (sum, d) => sum + d.danger_predictions,
-        0,
-      ),
-      avgConfidence:
-        historicalData.length > 0
-          ? historicalData.reduce((sum, d) => sum + d.avg_confidence, 0) /
-            historicalData.length
-          : 0,
-    };
-  }, [historicalData]);
-
+  // ✅ Export uses dailySummary (accurate DB data) for charts mode
   const exportData = () => {
     if (viewMode === "charts") {
-      if (historicalData.length === 0) return;
+      if (dailySummary.length === 0) return;
       const csv = [
         [
           "Date",
@@ -261,7 +196,7 @@ const HistoricalDataTab = () => {
           "Avg Confidence",
           "Total Logs",
         ],
-        ...historicalData.map((row) => [
+        ...dailySummary.map((row) => [
           row.date,
           row.anomalies,
           row.maintenance_alerts,
@@ -417,6 +352,7 @@ const HistoricalDataTab = () => {
     }
   };
 
+  // ── Error state ───────────────────────────────────────────────────────────
   if (error) {
     return (
       <div className="flex flex-col justify-center items-center h-64">
@@ -424,8 +360,10 @@ const HistoricalDataTab = () => {
         <p className="text-red-600 font-medium">{error}</p>
         <button
           onClick={() => {
+            const days = getDays();
             refresh();
-            fetchStats(7, true);
+            fetchStats(days, true);
+            fetchDailySummary(days);
           }}
           className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
         >
@@ -435,7 +373,8 @@ const HistoricalDataTab = () => {
     );
   }
 
-  if (loading && history.length === 0) {
+  // ── Initial loading state ─────────────────────────────────────────────────
+  if ((loading || dailyLoading) && history.length === 0) {
     return (
       <div className="flex justify-center items-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -443,7 +382,6 @@ const HistoricalDataTab = () => {
     );
   }
 
-  // ✅ FIX 2: Derive the days label for the subtitle
   const daysLabel =
     dateRange === "7days"
       ? "Last 7 days"
@@ -453,7 +391,7 @@ const HistoricalDataTab = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">
@@ -475,6 +413,7 @@ const HistoricalDataTab = () => {
         </div>
 
         <div className="flex items-center space-x-3">
+          {/* Charts / Logs toggle */}
           <div className="flex items-center bg-gray-100 rounded-lg p-1">
             <button
               onClick={() => setViewMode("charts")}
@@ -500,6 +439,7 @@ const HistoricalDataTab = () => {
             </button>
           </div>
 
+          {/* Date range picker (charts mode only) */}
           {viewMode === "charts" && (
             <div className="flex items-center space-x-2">
               <Calendar className="w-5 h-5 text-gray-600" />
@@ -515,25 +455,29 @@ const HistoricalDataTab = () => {
             </div>
           )}
 
+          {/* ✅ Refresh — re-fetches both dailySummary and stats */}
           <button
             onClick={() => {
-              const days =
-                dateRange === "7days" ? 7 : dateRange === "30days" ? 30 : 90;
+              const days = getDays();
               refresh();
               fetchStats(days, true);
+              fetchDailySummary(days);
             }}
-            disabled={loading}
+            disabled={loading || dailyLoading}
             className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw
+              className={`w-4 h-4 ${loading || dailyLoading ? "animate-spin" : ""}`}
+            />
             <span className="text-sm">Refresh</span>
           </button>
 
+          {/* ✅ Export disabled guard uses dailySummary for charts mode */}
           <button
             onClick={exportData}
             disabled={
               viewMode === "charts"
-                ? historicalData.length === 0
+                ? dailySummary.length === 0
                 : filteredLogs.length === 0
             }
             className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -544,6 +488,7 @@ const HistoricalDataTab = () => {
         </div>
       </div>
 
+      {/* Date range picker for Logs mode */}
       {viewMode === "logs" && (
         <div className="flex items-center space-x-2">
           <Calendar className="w-5 h-5 text-gray-600" />
@@ -560,6 +505,7 @@ const HistoricalDataTab = () => {
         </div>
       )}
 
+      {/* Empty state */}
       {history.length === 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
           <div className="flex items-start gap-3">
@@ -577,16 +523,26 @@ const HistoricalDataTab = () => {
         </div>
       )}
 
-      {/* ========== CHARTS VIEW ========== */}
+      {/* ══════════════════════════════════════════════════════════════════════
+          CHARTS VIEW
+          All data comes from dailySummary (server-aggregated) so it always
+          matches the summary cards which pull from stats (also server-side).
+      ══════════════════════════════════════════════════════════════════════ */}
       {history.length > 0 && viewMode === "charts" && (
         <>
+          {/* Timeline chart */}
           <div className="bg-white rounded-lg shadow p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
               ML Predictions Timeline
             </h3>
-            {historicalData.some((d) => d.total_logs > 0) ? (
+            {dailyLoading ? (
+              <div className="h-96 flex items-center justify-center">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
+              </div>
+            ) : dailySummary.some((d) => d.total_logs > 0) ? (
               <ResponsiveContainer width="100%" height={400}>
-                <LineChart data={historicalData}>
+                {/* ✅ data={dailySummary} — was historicalData (truncated) */}
+                <LineChart data={dailySummary}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="date" />
                   <YAxis />
@@ -636,13 +592,12 @@ const HistoricalDataTab = () => {
             )}
           </div>
 
-          {/* ✅ FIX 3: Summary Cards — use stats.anomalyCount from DB (matches Dashboard's 309).
-                       Falls back to local summaryStats only if stats haven't loaded yet. */}
+          {/* ✅ Summary cards — all values from stats (DB-accurate, never truncated) */}
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div className="bg-white rounded-lg shadow p-4">
               <p className="text-sm text-gray-600 mb-1">Total Anomalies</p>
               <p className="text-2xl font-bold text-red-600">
-                {stats?.anomalyCount ?? summaryStats.totalAnomalies}
+                {stats?.anomalyCount ?? 0}
               </p>
               <p className="text-xs text-gray-500 mt-1">{daysLabel}</p>
             </div>
@@ -650,7 +605,7 @@ const HistoricalDataTab = () => {
             <div className="bg-white rounded-lg shadow p-4">
               <p className="text-sm text-gray-600 mb-1">Maintenance Alerts</p>
               <p className="text-2xl font-bold text-orange-600">
-                {stats?.byType?.maintenance ?? summaryStats.totalMaintenance}
+                {stats?.byType?.maintenance ?? 0}
               </p>
               <p className="text-xs text-gray-500 mt-1">Total predictions</p>
             </div>
@@ -661,7 +616,7 @@ const HistoricalDataTab = () => {
                 {stats
                   ? (stats.byType?.object_detection ?? 0) +
                     (stats.byType?.detection ?? 0)
-                  : summaryStats.totalDetections}
+                  : 0}
               </p>
               <p className="text-xs text-gray-500 mt-1">Object detections</p>
             </div>
@@ -669,7 +624,7 @@ const HistoricalDataTab = () => {
             <div className="bg-white rounded-lg shadow p-4">
               <p className="text-sm text-gray-600 mb-1">Danger Predictions</p>
               <p className="text-2xl font-bold text-red-600">
-                {stats?.byType?.danger_prediction ?? summaryStats.totalDangers}
+                {stats?.byType?.danger_prediction ?? 0}
               </p>
               <p className="text-xs text-gray-500 mt-1">Risk assessments</p>
             </div>
@@ -677,15 +632,13 @@ const HistoricalDataTab = () => {
             <div className="bg-white rounded-lg shadow p-4">
               <p className="text-sm text-gray-600 mb-1">Avg Confidence</p>
               <p className="text-2xl font-bold text-green-600">
-                {stats
-                  ? `${stats.avgConfidence}%`
-                  : `${summaryStats.avgConfidence.toFixed(1)}%`}
+                {stats ? `${stats.avgConfidence}%` : "0%"}
               </p>
               <p className="text-xs text-gray-500 mt-1">Model accuracy</p>
             </div>
           </div>
 
-          {/* Daily Summary Table */}
+          {/* ✅ Daily Summary table — uses dailySummary (was historicalData) */}
           <div className="bg-white rounded-lg shadow overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">
@@ -693,7 +646,7 @@ const HistoricalDataTab = () => {
               </h3>
             </div>
             <div className="overflow-x-auto">
-              {historicalData.some((d) => d.total_logs > 0) ? (
+              {dailySummary.some((d) => d.total_logs > 0) ? (
                 <table className="w-full">
                   <thead className="bg-gray-50">
                     <tr>
@@ -721,7 +674,7 @@ const HistoricalDataTab = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {historicalData
+                    {dailySummary
                       .filter((row) => row.total_logs > 0)
                       .slice(0, 10)
                       .map((row, index) => (
@@ -755,7 +708,7 @@ const HistoricalDataTab = () => {
                                 <div
                                   className="bg-green-600 h-2 rounded-full"
                                   style={{ width: `${row.avg_confidence}%` }}
-                                ></div>
+                                />
                               </div>
                               <span className="text-xs">
                                 {row.avg_confidence.toFixed(1)}%
@@ -780,10 +733,12 @@ const HistoricalDataTab = () => {
         </>
       )}
 
-      {/* ========== LOGS VIEW ========== */}
+      {/* ══════════════════════════════════════════════════════════════════════
+          LOGS VIEW
+      ══════════════════════════════════════════════════════════════════════ */}
       {history.length > 0 && viewMode === "logs" && (
         <>
-          {/* ✅ FIX 4: Logs stats cards — Anomalies uses stats.anomalyCount from DB */}
+          {/* ✅ Logs stats cards — all from stats (DB-accurate) */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div className="bg-white rounded-lg shadow p-4">
               <p className="text-xs text-gray-600 mb-1">Total Entries</p>
@@ -796,17 +751,11 @@ const HistoricalDataTab = () => {
             </div>
             <div className="bg-red-50 rounded-lg shadow p-4">
               <p className="text-xs text-red-600 mb-1">Anomalies</p>
-              {/* ✅ Use DB count so it matches Dashboard (309), not local loaded count */}
               <p className="text-2xl font-bold text-red-600">
-                {stats?.anomalyCount ??
-                  filteredLogs.filter((log) => log.is_anomaly).length}
+                {stats?.anomalyCount ?? 0}
               </p>
               <p className="text-xs text-red-500 mt-1">
-                {stats
-                  ? `${stats.anomalyRate}% rate`
-                  : filteredLogs.length > 0
-                    ? `${((filteredLogs.filter((log) => log.is_anomaly).length / filteredLogs.length) * 100).toFixed(1)}% rate`
-                    : "0% rate"}
+                {stats ? `${stats.anomalyRate}% rate` : "0% rate"}
               </p>
             </div>
             <div className="bg-orange-50 rounded-lg shadow p-4">
@@ -951,7 +900,7 @@ const HistoricalDataTab = () => {
                                   <TypeIcon className="w-4 h-4" />
                                 </div>
                                 <span className="text-sm font-medium text-gray-900 capitalize">
-                                  {type.replace("_", " ")}
+                                  {type.replace(/_/g, " ")}
                                 </span>
                               </div>
                             </td>
@@ -976,7 +925,7 @@ const HistoricalDataTab = () => {
                                     style={{
                                       width: `${(log.confidence_score || 0.85) * 100}%`,
                                     }}
-                                  ></div>
+                                  />
                                 </div>
                                 <span className="text-xs">
                                   {(
@@ -996,6 +945,7 @@ const HistoricalDataTab = () => {
             </div>
           </div>
 
+          {/* Pagination */}
           {filteredLogs.length > 0 && (
             <div className="flex items-center justify-between">
               <p className="text-sm text-gray-600">
