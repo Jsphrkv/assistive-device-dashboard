@@ -1,0 +1,10 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+ml_models/saved_models/*.pkl
+ml_models/saved_models/*.joblib
+ml_models/saved_models/*.onnx
+venv/
+.venv/
