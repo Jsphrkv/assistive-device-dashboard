@@ -176,7 +176,7 @@ def get_hourly_patterns():
                 'count': row.get('detection_count', 0)
             })
         
-        # ✅ IMPROVED: Sort by hour (handles both 1-hour and 3-hour formats)
+        # IMPROVED: Sort by hour (handles both 1-hour and 3-hour formats)
         def parse_hour(hour_str):
             """
             Convert hour string to 24-hour format for sorting
@@ -245,7 +245,7 @@ def get_ml_statistics():
                 'categoryBreakdown': {'critical': 0, 'navigation': 0, 'environmental': 0}
             }), 200
 
-        # ── Initialize all counts to 0 ───────────────────────────────────────
+        # Initialize all counts to 0
         total_predictions = 0
         anomaly_count     = 0
         high_count        = 0
@@ -255,7 +255,7 @@ def get_ml_statistics():
         navigation_count  = 0
         environmental_count = 0
 
-        # ── Single if/else block — all queries together, no duplication ───────
+        # Single if/else block — all queries together, no duplication
         if user_role == 'admin':
             total_predictions = supabase.table('detection_logs')\
                 .select('*', count='exact', head=True)\
@@ -332,7 +332,7 @@ def get_ml_statistics():
                 .in_('device_id', device_ids)\
                 .eq('object_category', 'environmental').execute().count or 0
 
-        # ── Compute derived values ────────────────────────────────────────────
+        # Compute derived values
         anomaly_rate = (anomaly_count / total_predictions * 100) if total_predictions > 0 else 0
 
         print(f"✅ Summary: {total_predictions} total, {anomaly_count} anomalies, {anomaly_rate:.1f}% rate")

@@ -64,7 +64,7 @@ def update_settings():
         
         supabase = get_supabase()
         
-        # ✅ All users can update all settings
+        # All users can update all settings
         update_data = {'updated_by': user_id}
         
         if 'sensitivity' in data:
@@ -159,7 +159,7 @@ def get_global_settings():
         return jsonify({'error': 'Failed to get global settings'}), 500
 
 
-# ✅ NEW: Device token endpoint for Pi to fetch settings
+# NEW: Device token endpoint for Pi to fetch settings
 @settings_bp.route('/device', methods=['GET'])
 def get_device_settings():
     """Get settings for Pi device (uses device token auth)"""

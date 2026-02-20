@@ -10,6 +10,7 @@ from app.middleware.auth import token_required
 import bcrypt
 import traceback
 from datetime import datetime, timedelta
+from app.utils.timezone_helper import now_ph, now_ph_iso, PH_TIMEZONE
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 
@@ -40,7 +41,7 @@ def test_db():
 def get_current_user():
     """Get current user info"""
     if request.method == 'OPTIONS':
-        return '', 200  # Handle preflight
+        return '', 200
     try:
         user_id = request.current_user['user_id']
         
@@ -74,12 +75,12 @@ def logout():
                     token,
                     current_app.config['JWT_SECRET_KEY'],
                     algorithms=[current_app.config['JWT_ALGORITHM']],
-                    options={'verify_exp': False}  # allow expired tokens
+                    options={'verify_exp': False}
                 )
                 user_id = payload.get('user_id')
                 username = payload.get('username')
             except jwt.InvalidTokenError:
-                pass  # Token invalid → still allow logout
+                pass
 
         # Optional: log logout activity
         if user_id and username:
@@ -130,7 +131,7 @@ def register():
         # Generate verification token
         verification_token = generate_email_token(email, salt='email-verification')
         
-        # Create user
+        # ✅ FIXED: Create user with Philippine time
         user_data = {
             'email': email,
             'username': username,
@@ -138,7 +139,7 @@ def register():
             'role': 'user',
             'email_verified': False,
             'verification_token': verification_token,
-            'created_at': datetime.utcnow().isoformat()
+            'created_at': now_ph_iso()  # ✅ FIXED
         }
         
         response = supabase.table('users').insert(user_data).execute()
@@ -146,7 +147,7 @@ def register():
         if not response.data:
             return jsonify({'error': 'Registration failed'}), 500
         
-        # ✅ Send verification email with proper context
+        # Send verification email with proper context
         from flask import current_app
         import threading
         
@@ -244,7 +245,7 @@ def resend_verification():
             .eq('email', email)\
             .execute()
         
-        # ✅ Send email with proper context
+        # Send email with proper context
         from flask import current_app
         import threading
         
@@ -295,7 +296,7 @@ def login():
         
         user = response.data[0]
         
-        # Check if email is verified ✅
+        # Check if email is verified
         if not user.get('email_verified', False):
             return jsonify({
                 'error': 'Email not verified',
@@ -320,7 +321,7 @@ def login():
         supabase.table('activity_logs').insert({
             'user_id': user['id'],
             'action': 'login',
-            'description': f"User {user['username']} loggedad in"
+            'description': f"User {user['username']} logged in"
         }).execute()
         
         return jsonify({
@@ -374,7 +375,7 @@ def forgot_password():
         print(f"Token generated: {reset_token[:50]}...")
         print(f"="*60)
         
-        # ✅ Send email SYNCHRONOUSLY (not in background thread)
+        # Send email SYNCHRONOUSLY
         try:
             print("📧 Attempting to send password reset email...")
             send_password_reset_email(email, user_data['username'], reset_token)
@@ -386,7 +387,6 @@ def forgot_password():
             import traceback
             traceback.print_exc()
             print(f"="*60)
-            # Still return success to user (security - don't reveal if email exists)
         
         return jsonify({
             'message': 'If the email exists, a password reset link has been sent'
@@ -394,14 +394,6 @@ def forgot_password():
         
     except Exception as e:
         print(f"❌ Forgot password error: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({
-            'error': 'Unable to process request. Please try again later.'
-        }), 500
-        
-    except Exception as e:
-        print(f"Forgot password error: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({
@@ -473,7 +465,6 @@ def reset_password():
         return jsonify({'error': 'Failed to reset password'}), 500
 
 
-# Optional: Add a verify-reset-token endpoint if you want to check token validity before showing the form
 @auth_bp.route('/verify-reset-token/<token>', methods=['GET'])
 def verify_reset_token_endpoint(token):
     """Verify if a reset token is valid (optional endpoint)"""

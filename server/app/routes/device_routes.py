@@ -1,6 +1,7 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, current_app, request, jsonify
 from app.services.supabase_client import get_supabase
-from datetime import datetime, timezone
+from datetime import datetime
+from app.utils.timezone_helper import now_ph, now_ph_iso, PH_TIMEZONE
 
 device_bp = Blueprint('device', __name__, url_prefix='/api/device')
 
@@ -133,12 +134,13 @@ def receive_telemetry():
 
         print(f"\n✅ Telemetry processed successfully for device {device_id}\n")
 
+        # ✅ FIXED: Use Philippine time
         return jsonify({
             'success':     True,
             'message':     'Telemetry received and processed',
             'device_id':   device_id,
             'predictions': results,
-            'timestamp':   datetime.now(timezone.utc).isoformat()
+            'timestamp':   now_ph_iso()
         }), 200
 
     except Exception as e:
@@ -155,8 +157,9 @@ def receive_telemetry():
 @device_bp.route('/ping', methods=['GET'])
 def ping():
     """Simple endpoint to check if device API is working"""
+    # ✅ FIXED: Use Philippine time
     return jsonify({
         'success':   True,
         'message':   'Device API is working',
-        'timestamp': datetime.now(timezone.utc).isoformat()
+        'timestamp': now_ph_iso()
     }), 200

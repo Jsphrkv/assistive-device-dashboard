@@ -4,7 +4,8 @@ from app.middleware.auth import token_required, device_token_required, admin_req
 from app.utils.jwt_handler import generate_device_token
 import secrets
 import string
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
+from app.utils.timezone_helper import now_ph, now_ph_iso, PH_TIMEZONE, utc_to_ph
 
 devices_bp = Blueprint('devices', __name__, url_prefix='/api/devices')
 
@@ -39,15 +40,15 @@ def register_device():
                 'error': 'You can only register one device per account. Please delete your existing device first.'
             }), 400
         
-        # Create device with pairing code
+        # ✅ FIXED: Create device with pairing code using Philippine time
         new_device = {
             'user_id': user_id,
             'device_name': device_name,
             'device_model': device_model,
             'device_token': device_token,
-            'pairing_code': pairing_code,  # ← ADD THIS
-            'pairing_expires_at': (datetime.utcnow() + timedelta(hours=1)).isoformat(),  # ← ADD THIS
-            'status': 'pending'  # Will become 'active' after pairing
+            'pairing_code': pairing_code,
+            'pairing_expires_at': (now_ph() + timedelta(hours=1)).isoformat(),  # ✅ FIXED
+            'status': 'pending'
         }
         
         response = supabase.table('user_devices').insert(new_device).execute()
@@ -71,7 +72,7 @@ def register_device():
                 'id': device['id'],
                 'name': device['device_name'],
                 'model': device['device_model'],
-                'pairing_code': pairing_code,  # ← CHANGED: Return code instead of token
+                'pairing_code': pairing_code,
                 'expires_in': '1 hour',
                 'status': device['status']
             }
@@ -120,30 +121,25 @@ def complete_pairing():
         if device['pairing_code'].upper() != pairing_code.upper():
             return jsonify({'error': 'Invalid pairing code'}), 400
         
-        # Check if code expired (1 hour)
+        # ✅ FIXED: Check if code expired using Philippine time
         try:
             created_at_str = device['created_at']
-            # Handle different datetime formats
             if created_at_str.endswith('Z'):
                 created_at_str = created_at_str.replace('Z', '+00:00')
             created_at = datetime.fromisoformat(created_at_str)
+            created_at_ph = utc_to_ph(created_at)
             
-            # Make sure created_at is timezone-aware
-            if created_at.tzinfo is None:
-                created_at = created_at.replace(tzinfo=timezone.utc)
-            
-            time_diff = datetime.now(timezone.utc) - created_at
+            time_diff = now_ph() - created_at_ph
             
             if time_diff > timedelta(hours=1):
                 return jsonify({'error': 'Pairing code expired. Please register a new device.'}), 400
         except Exception as date_error:
             print(f"Date parsing error: {date_error}")
-            # Don't fail on date parsing - just warn
             print("Warning: Could not verify code expiration")
         
-        # Update device timestamp (don't change status - Pi will do that when it connects)
+        # ✅ FIXED: Update device timestamp using Philippine time
         supabase.table('user_devices').update({
-            'updated_at': datetime.now(timezone.utc).isoformat()
+            'updated_at': now_ph_iso()
         }).eq('id', device_id).execute()
         
         print(f"✅ Pairing code verified for device {device_id}")
@@ -184,17 +180,18 @@ def check_pair_status_by_code(pairing_code):
         
         device = response.data[0]
         
-        # Check if expired
+        # ✅ FIXED: Check if expired using Philippine time
         try:
-            expires_at = datetime.fromisoformat(device['pairing_expires_at'].replace('Z', '+00:00'))
-            if datetime.utcnow() > expires_at.replace(tzinfo=None):
+            expires_at_str = device['pairing_expires_at'].replace('Z', '+00:00')
+            expires_at = utc_to_ph(datetime.fromisoformat(expires_at_str))
+            if now_ph() > expires_at:
                 return jsonify({
                     'exists': True,
                     'expired': True,
                     'message': 'Pairing code expired'
                 }), 200
         except:
-            pass  # If expiration check fails, continue
+            pass
         
         # Return device info
         return jsonify({
@@ -268,7 +265,6 @@ def get_pending_for_serial(serial_number):
         supabase = get_supabase()
         
         # Find the MOST RECENT pending device (not yet paired to this serial)
-        # We look for devices where status='pending' and serial_number is NULL
         response = supabase.table('user_devices')\
             .select('id, device_name, pairing_code, pairing_expires_at')\
             .eq('status', 'pending')\
@@ -285,10 +281,11 @@ def get_pending_for_serial(serial_number):
         
         device = response.data[0]
         
-        # Check if expired
+        # ✅ FIXED: Check if expired using Philippine time
         try:
-            expires_at = datetime.fromisoformat(device['pairing_expires_at'].replace('Z', '+00:00'))
-            if datetime.utcnow() > expires_at.replace(tzinfo=None):
+            expires_at_str = device['pairing_expires_at'].replace('Z', '+00:00')
+            expires_at = utc_to_ph(datetime.fromisoformat(expires_at_str))
+            if now_ph() > expires_at:
                 return jsonify({
                     'has_pending': False,
                     'message': 'Pairing code expired'
@@ -430,7 +427,7 @@ def regenerate_device_token(device_id):
         response = supabase.table('user_devices')\
             .update({
                 'device_token': new_token,
-                'status': 'pending',  # Reset to pending
+                'status': 'pending',
                 'updated_at': 'now()'
             })\
             .eq('id', device_id)\
@@ -469,14 +466,14 @@ def get_device_status():
         
         device = device_response.data[0]
         
-        # ✅ CRITICAL: Calculate online status based on last_seen timestamp
+        # ✅ FIXED: Calculate online status using Philippine time
         last_seen = device.get('last_seen') or device.get('updated_at')
         device_online = False
         
         if last_seen:
-            last_seen_time = datetime.fromisoformat(last_seen.replace('Z', '+00:00'))
-            now = datetime.now(timezone.utc)
-            time_diff = now - last_seen_time
+            last_seen_str = last_seen.replace('Z', '+00:00')
+            last_seen_time = utc_to_ph(datetime.fromisoformat(last_seen_str))
+            time_diff = now_ph() - last_seen_time
             
             # Consider online if seen in last 2 minutes
             device_online = time_diff.total_seconds() < 120
@@ -500,13 +497,12 @@ def get_device_status():
             last_obstacle = recent_detection.data[0].get('obstacle_type')
             last_detection_time = recent_detection.data[0].get('detected_at')
         
-        # ✅ Return real-time calculated status
         return jsonify({
             'hasDevice': True,
             'deviceId': device['id'],
             'deviceName': device.get('device_name', 'Unknown'),
-            'deviceOnline': device_online,  # ✅ Real-time calculation
-            'lastSeen': last_seen,  # ✅ CRITICAL: Must return this
+            'deviceOnline': device_online,
+            'lastSeen': last_seen,
             'batteryLevel': device.get('battery_level', 100),
             'cameraStatus': 'Active' if device_online else 'Inactive',
             'lastObstacle': last_obstacle,
@@ -535,20 +531,20 @@ def update_device_status():
         
         supabase = get_supabase()
         
-        # ✅ CRITICAL: Always update last_seen timestamp
+        # ✅ FIXED: Always update last_seen with Philippine time
         update_data = {
             'device_id': device_id,
-            'last_seen': datetime.now(timezone.utc).isoformat(),  # ✅ NEW
+            'last_seen': now_ph_iso(),  # ✅ FIXED
             'updated_at': 'now()'
         }
         
-        # ✅ Handle all possible field variations (camelCase and snake_case)
+        # Handle all possible field variations
         if 'deviceOnline' in data:
             update_data['device_online'] = data['deviceOnline']
         if 'cameraStatus' in data:
             update_data['camera_status'] = data['cameraStatus']
         
-        # ✅ IMPROVED: Handle both battery_level and batteryLevel
+        # Handle battery level
         if 'batteryLevel' in data:
             update_data['battery_level'] = data['batteryLevel']
             print(f"   Battery: {data['batteryLevel']}%")
@@ -561,12 +557,11 @@ def update_device_status():
         if 'lastDetectionTime' in data:
             update_data['last_detection_time'] = data['lastDetectionTime']
         
-        # ✅ IMPROVED: Also update the user_devices table for last_seen
-        # This ensures the GET /status endpoint can calculate online status
+        # ✅ FIXED: Update user_devices table with Philippine time
         try:
             supabase.table('user_devices')\
                 .update({
-                    'last_seen': datetime.now(timezone.utc).isoformat(),
+                    'last_seen': now_ph_iso(),  # ✅ FIXED
                     'battery_level': update_data.get('battery_level', 100)
                 })\
                 .eq('id', device_id)\
@@ -634,7 +629,7 @@ def get_system_info():
             return jsonify({
                 'error': 'No active device found',
                 'hasDevice': False
-            }), 200  # Changed from 404 to 200 with error flag
+            }), 200
         
         device_id = device.data[0]['id']
         
@@ -650,7 +645,7 @@ def get_system_info():
                 'error': 'No system info available yet',
                 'hasDevice': True,
                 'deviceId': device_id
-            }), 200  # Changed from 404 to 200 with error flag
+            }), 200
         
         info = response.data[0]
         
@@ -713,17 +708,17 @@ def update_system_info():
         
         supabase = get_supabase()
         
-        # ✅ Convert data types to match database schema
+        # Convert data types to match database schema
         system_data = {
             'device_id': device_id,
             'raspberry_pi_model': data.get('raspberryPiModel'),
             'software_version': data.get('softwareVersion'),
             'cpu_model': data.get('cpuModel'),
-            'ram_size': str(data.get('ramSize')) if data.get('ramSize') else None,  # ✅ Convert to string
-            'storage_size': str(data.get('storageSize')) if data.get('storageSize') else None,  # ✅ Convert to string
+            'ram_size': str(data.get('ramSize')) if data.get('ramSize') else None,
+            'storage_size': str(data.get('storageSize')) if data.get('storageSize') else None,
             'os_version': data.get('osVersion'),
             'cpu_temperature': data.get('cpuTemperature'),
-            'last_reboot_time': data.get('lastRebootTime'),  # ✅ Keep as string (will be converted by Supabase)
+            'last_reboot_time': data.get('lastRebootTime'),
             'updated_at': 'now()'
         }
         
@@ -768,7 +763,8 @@ def update_system_info():
 def check_rate_limit(ip_address, serial_number=None):
     """Check if IP or serial has exceeded pairing attempts (5 per minute)"""
     supabase = get_supabase()
-    one_minute_ago = (datetime.utcnow() - timedelta(minutes=1)).isoformat()
+    # ✅ FIXED: Use Philippine time
+    one_minute_ago = (now_ph() - timedelta(minutes=1)).isoformat()
     
     # Check IP-based rate limit
     ip_attempts = supabase.table('pairing_attempts')\
@@ -797,14 +793,15 @@ def log_pairing_attempt(ip_address, serial_number=None, success=False):
     """Log pairing attempt for rate limiting"""
     try:
         supabase = get_supabase()
+        # ✅ FIXED: Use Philippine time
         supabase.table('pairing_attempts').insert({
             'ip_address': ip_address,
             'serial_number': serial_number,
-            'attempted_at': datetime.utcnow().isoformat(),
+            'attempted_at': now_ph_iso(),
             'success': success
         }).execute()
     except:
-        pass  # Don't fail if logging fails
+        pass
 
 @devices_bp.route('/pair', methods=['POST'])
 def pair_device():
@@ -823,7 +820,7 @@ def pair_device():
         # Get client IP
         ip_address = request.remote_addr
         
-        # IMPROVEMENT 5: Rate limiting
+        # Rate limiting
         allowed, error_msg = check_rate_limit(ip_address, serial_number)
         if not allowed:
             log_pairing_attempt(ip_address, serial_number, False)
@@ -831,7 +828,7 @@ def pair_device():
         
         supabase = get_supabase()
         
-        # IMPROVEMENT 3: Check if serial already paired
+        # Check if serial already paired
         existing_device = supabase.table('user_devices')\
             .select('*')\
             .eq('serial_number', serial_number)\
@@ -855,15 +852,16 @@ def pair_device():
         
         device = response.data[0]
         
-        # Check if pairing code expired
-        expires_at = datetime.fromisoformat(device['pairing_expires_at'].replace('Z', '+00:00'))
-        if datetime.utcnow() > expires_at.replace(tzinfo=None):
+        # ✅ FIXED: Check if pairing code expired using Philippine time
+        expires_at_str = device['pairing_expires_at'].replace('Z', '+00:00')
+        expires_at = utc_to_ph(datetime.fromisoformat(expires_at_str))
+        if now_ph() > expires_at:
             log_pairing_attempt(ip_address, serial_number, False)
             return jsonify({'error': 'Pairing code expired'}), 400
         
-        # IMPROVEMENT 1: Generate temporary session token (15 min expiry)
+        # ✅ FIXED: Generate temporary session token with Philippine time
         session_token = secrets.token_urlsafe(32)
-        session_expires = datetime.utcnow() + timedelta(minutes=15)
+        session_expires = now_ph() + timedelta(minutes=15)
         
         # Update device with session token and serial
         supabase.table('user_devices').update({
@@ -871,16 +869,15 @@ def pair_device():
             'session_expires_at': session_expires.isoformat(),
             'serial_number': serial_number,
             'pairing_attempts': device.get('pairing_attempts', 0) + 1,
-            'last_pairing_attempt': datetime.utcnow().isoformat()
+            'last_pairing_attempt': now_ph_iso()  # ✅ FIXED
         }).eq('id', device['id']).execute()
         
         log_pairing_attempt(ip_address, serial_number, True)
         
-        # IMPROVEMENT 1: Return ONLY session token (not device token)
         return jsonify({
             'success': True,
             'session_token': session_token,
-            'expires_in': 900,  # 15 minutes in seconds
+            'expires_in': 900,
             'device_name': device['device_name']
         }), 200
         
@@ -919,25 +916,24 @@ def activate_device():
         
         device = response.data[0]
         
-        # Check if session expired
-        session_expires = datetime.fromisoformat(device['session_expires_at'].replace('Z', '+00:00'))
-        if datetime.utcnow() > session_expires.replace(tzinfo=None):
+        # ✅ FIXED: Check if session expired using Philippine time
+        session_expires_str = device['session_expires_at'].replace('Z', '+00:00')
+        session_expires = utc_to_ph(datetime.fromisoformat(session_expires_str))
+        if now_ph() > session_expires:
             return jsonify({'error': 'Session expired. Start pairing again.'}), 400
         
-        # IMPROVEMENT 4: Clear pairing code and session token
-        # IMPROVEMENT 8: Activate device (separate from system-info)
+        # ✅ FIXED: Activate device using Philippine time
         supabase.table('user_devices').update({
             'status': 'active',
-            'paired_at': datetime.utcnow().isoformat(),
-            'last_seen': datetime.utcnow().isoformat(),
-            'pairing_code': None,  # Clear pairing code
-            'pairing_session_token': None,  # Clear session token
+            'paired_at': now_ph_iso(),
+            'last_seen': now_ph_iso(),
+            'pairing_code': None,
+            'pairing_session_token': None,
             'session_expires_at': None
         }).eq('id', device['id']).execute()
         
         print(f"✅ Device activated: {device['device_name']} (Serial: {serial_number})")
         
-        # Return permanent device token
         return jsonify({
             'success': True,
             'device_id': device['id'],
@@ -953,7 +949,7 @@ def activate_device():
 
 @devices_bp.route('/pair-status/<serial_number>', methods=['GET'])
 def check_pair_status(serial_number):
-    """IMPROVEMENT 2: Polling endpoint - check if device has been paired"""
+    """Polling endpoint - check if device has been paired"""
     try:
         supabase = get_supabase()
         
@@ -989,4 +985,3 @@ def check_pair_status(serial_number):
     except Exception as e:
         print(f"Pair status error: {e}")
         return jsonify({'error': 'Failed to check status'}), 500
-    

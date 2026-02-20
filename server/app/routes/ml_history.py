@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from app.services.supabase_client import get_supabase
 from app.middleware.auth import token_required
 from datetime import datetime, timedelta
+from app.utils.timezone_helper import now_ph, now_ph_iso, PH_TIMEZONE, utc_to_ph
 
 ml_history_bp = Blueprint('ml_history', __name__, url_prefix='/api/ml-history')
 
@@ -363,8 +364,8 @@ def get_ml_stats():
         else:
             device_ids = None
         
-        # Date range — use UTC consistently
-        end_date = datetime.utcnow()
+        # ✅ FIXED: Use Philippine time for date range
+        end_date = now_ph()
         start_date = end_date - timedelta(days=days)
         start_iso = start_date.isoformat()
 
@@ -508,8 +509,8 @@ def get_daily_summary():
             if not device_ids:
                 return jsonify({'data': []}), 200
 
-        # ── UTC date range ───────────────────────────────────────────────────
-        end_dt = datetime.utcnow()
+        # ✅ FIXED: Philippine time date range
+        end_dt = now_ph()
         start_dt = end_dt - timedelta(days=days)
 
         # ── Helper: COUNT query builders (no rows, just metadata) ────────────

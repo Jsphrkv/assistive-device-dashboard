@@ -8,6 +8,7 @@ from app.constants.detection_categories import (
     DETECTION_CATEGORIES
 )
 from datetime import datetime
+from app.utils.timezone_helper import now_ph, now_ph_iso, PH_TIMEZONE, utc_to_ph
 import base64
 import uuid
 import csv
@@ -21,12 +22,9 @@ detections_bp = Blueprint('detections', __name__, url_prefix='/api/detections')
 @token_required
 @check_permission('detections', 'read')
 def get_detections():
-    """
-    Get detection logs with pagination
-    ✅ FIXED: Now filters by user_id
-    """
+    """Get detection logs with pagination"""
     try:
-        user_id = request.current_user['user_id']  # ✅ Get user_id from token
+        user_id = request.current_user['user_id']
         
         # Get pagination parameters
         limit = request.args.get('limit', 50, type=int)
@@ -34,7 +32,7 @@ def get_detections():
         
         supabase = get_supabase()
         
-        # ✅ Get user's device
+        # Get user's device
         device = supabase.table('user_devices')\
             .select('id')\
             .eq('user_id', user_id)\
@@ -51,7 +49,7 @@ def get_detections():
         
         device_id = device.data[0]['id']
         
-        # ✅ Filter by device_id (which is user-specific)
+        # Filter by device_id (which is user-specific)
         count_response = supabase.table('detection_logs')\
             .select('*', count='exact')\
             .eq('device_id', device_id)\
@@ -81,17 +79,14 @@ def get_detections():
 @token_required
 @check_permission('detections', 'read')
 def get_recent_detections():
-    """
-    Get recent detections (configurable limit, default 10)
-    ✅ FIXED: Now filters by user_id
-    """
+    """Get recent detections (configurable limit, default 10)"""
     try:
-        user_id = request.current_user['user_id']  # ✅ Get user_id
+        user_id = request.current_user['user_id']
         limit = request.args.get('limit', 10, type=int)
         
         supabase = get_supabase()
         
-        # ✅ Get user's device
+        # Get user's device
         device = supabase.table('user_devices')\
             .select('id')\
             .eq('user_id', user_id)\
@@ -103,7 +98,7 @@ def get_recent_detections():
         
         device_id = device.data[0]['id']
         
-        # ✅ Filter by device_id
+        # Filter by device_id
         response = supabase.table('detection_logs')\
             .select('*')\
             .eq('device_id', device_id)\
@@ -123,12 +118,9 @@ def get_recent_detections():
 @token_required
 @check_permission('detections', 'read')
 def get_detections_by_date():
-    """
-    Get detections by date range
-    ✅ FIXED: Now filters by user_id
-    """
+    """Get detections by date range"""
     try:
-        user_id = request.current_user['user_id']  # ✅ Get user_id
+        user_id = request.current_user['user_id']
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
         
@@ -137,7 +129,7 @@ def get_detections_by_date():
         
         supabase = get_supabase()
         
-        # ✅ Get user's device
+        # Get user's device
         device = supabase.table('user_devices')\
             .select('id')\
             .eq('user_id', user_id)\
@@ -149,7 +141,7 @@ def get_detections_by_date():
         
         device_id = device.data[0]['id']
         
-        # ✅ Filter by device_id and date range
+        # Filter by device_id and date range
         response = supabase.table('detection_logs')\
             .select('*')\
             .eq('device_id', device_id)\
@@ -168,16 +160,13 @@ def get_detections_by_date():
 @token_required
 @check_permission('detections', 'read')
 def get_count_by_type():
-    """
-    Get detection count grouped by obstacle type
-    ✅ FIXED: Now uses user-scoped obstacle_stats
-    """
+    """Get detection count grouped by obstacle type"""
     try:
-        user_id = request.current_user['user_id']  # ✅ Get user_id
+        user_id = request.current_user['user_id']
         
         supabase = get_supabase()
         
-        # ✅ Filter by user_id
+        # Filter by user_id
         response = supabase.table('obstacle_stats')\
             .select('*')\
             .eq('user_id', user_id)\
@@ -194,17 +183,14 @@ def get_count_by_type():
 @token_required
 @check_permission('detections', 'read')
 def get_sensor_logs():
-    """
-    Get sensor detection logs for LogsTable.jsx
-    ✅ FIXED: Now filters by user_id
-    """
+    """Get sensor detection logs for LogsTable.jsx"""
     try:
-        user_id = request.current_user['user_id']  # ✅ Get user_id
+        user_id = request.current_user['user_id']
         limit = request.args.get('limit', 100, type=int)
         
         supabase = get_supabase()
         
-        # ✅ Get user's device
+        # Get user's device
         device = supabase.table('user_devices')\
             .select('id')\
             .eq('user_id', user_id)\
@@ -216,7 +202,7 @@ def get_sensor_logs():
         
         device_id = device.data[0]['id']
         
-        # ✅ Filter by device_id
+        # Filter by device_id
         response = supabase.table('detection_logs')\
             .select('*')\
             .eq('device_id', device_id)\
@@ -258,7 +244,7 @@ def export_detections():
     """Export detection logs in various formats (CSV, JSON, PDF)"""
     try:
         user_id = request.current_user['user_id']
-        format_type = request.args.get('format', 'csv')  # csv, json, pdf
+        format_type = request.args.get('format', 'csv')
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
         object_filter = request.args.get('object')
@@ -323,7 +309,7 @@ def log_detection():
         
         supabase = get_supabase()
         
-        # ✅ Get user_id from device
+        # Get user_id from device
         print(f"🔍 Looking up user for device: {device_id}")
         device_query = supabase.table('user_devices')\
             .select('user_id')\
@@ -338,7 +324,7 @@ def log_detection():
         user_id = device_query.data['user_id']
         print(f"✅ Detection from device {device_id} (user: {user_id})")
         
-        # Extract detection data - ✅ SUPPORT BOTH FIELD NAME FORMATS
+        # Extract detection data - SUPPORT BOTH FIELD NAME FORMATS
         object_detected = data.get('object_detected') or data.get('objectDetected') or 'unknown'
         distance_cm = data.get('distance_cm') or data.get('distanceCm')
         detection_source = data.get('detection_source') or data.get('detectionSource', 'ultrasonic')
@@ -391,20 +377,20 @@ def log_detection():
         except (TypeError, ValueError):
             parsed_confidence = 85.0
 
-        # Get timestamp
-        detected_at = datetime.utcnow().isoformat()
+        # ✅ FIXED: Get timestamp in Philippine time
+        detected_at = now_ph_iso()
 
-        # ✅ BUILD THE PAYLOAD - FIXED OBSTACLE_TYPE MAPPING
+        # BUILD THE PAYLOAD - FIXED OBSTACLE_TYPE MAPPING
         detection_log = {
             # Required UUID fields
             'user_id': str(user_id),
             'device_id': str(device_id),
             
-            # ✅ FIXED: Check object_detected FIRST, then fallback to obstacle_type
+            # FIXED: Check object_detected FIRST, then fallback to obstacle_type
             'obstacle_type': str(
                 data.get('obstacle_type') or 
                 data.get('obstacleType') or 
-                object_detected or  # ← THIS IS THE KEY FIX
+                object_detected or
                 obj_info.get('description') or 
                 'unknown'
             )[:255],
@@ -441,7 +427,7 @@ def log_detection():
         
         print(f"📝 Inserting detection: {object_detected} at {parsed_distance}cm")
         
-        # ✅ INSERT DETECTION
+        # INSERT DETECTION
         try:
             response = supabase.table('detection_logs')\
                 .insert(detection_log)\
@@ -464,12 +450,12 @@ def log_detection():
                 'details': str(db_error)
             }), 500
         
-        # ✅ UPDATE LAST_SEEN (THIS IS THE CRITICAL FIX FOR DASHBOARD ONLINE STATUS!)
+        # ✅ FIXED: UPDATE LAST_SEEN with Philippine time
         try:
             print(f"⏰ Updating last_seen for device {device_id}")
             supabase.table('user_devices')\
                 .update({
-                    'last_seen': datetime.utcnow().isoformat(),
+                    'last_seen': now_ph_iso(),  # ✅ FIXED
                 })\
                 .eq('id', device_id)\
                 .execute()
@@ -477,7 +463,7 @@ def log_detection():
         except Exception as e:
             print(f"   ⚠️ last_seen update failed (non-critical): {e}")
         
-        # ✅ Update statistics (optional)
+        # Update statistics (optional)
         try:
             _update_user_statistics_safe(
                 user_id=user_id,
@@ -487,7 +473,7 @@ def log_detection():
         except Exception as stats_error:
             print(f"⚠️ Statistics update failed (non-critical): {stats_error}")
         
-        # ✅ Update device status (optional)
+        # Update device status (optional)
         try:
             _update_device_status_safe(
                 device_id=device_id,
@@ -517,26 +503,23 @@ def log_detection():
 def _update_user_statistics_safe(user_id, object_detected, detected_at):
     """
     Update user-scoped statistics tables
-    ✅ USES 1-HOUR INTERVALS (instead of 3-hour)
-    
-    Updates:
-    - daily_statistics
-    - obstacle_statistics
-    - hourly_patterns (with 1-hour granularity: 1AM, 2AM, 3AM, etc.)
+    ✅ USES 1-HOUR INTERVALS and Philippine time
     """
     try:
         from datetime import datetime
+        from app.utils.timezone_helper import utc_to_ph, PH_TIMEZONE
         
         supabase = get_supabase()
         
-        # Parse timestamp
+        # ✅ FIXED: Parse timestamp and convert to Philippine time
         dt = datetime.fromisoformat(detected_at.replace('Z', '+00:00'))
-        stat_date = dt.date().isoformat()
-        hour = dt.hour
+        dt_ph = utc_to_ph(dt)
         
-        # ✅ CHANGED: 1-HOUR INTERVAL (12-hour format with AM/PM)
-        # Results: 12AM, 1AM, 2AM, ..., 11AM, 12PM, 1PM, ..., 11PM
-        hour_12 = hour % 12 or 12  # Convert 0 to 12, keep 1-11 as is
+        stat_date = dt_ph.date().isoformat()
+        hour = dt_ph.hour
+        
+        # 1-HOUR INTERVAL (12-hour format with AM/PM)
+        hour_12 = hour % 12 or 12
         am_pm = 'AM' if hour < 12 else 'PM'
         hour_range = f"{hour_12}{am_pm}"
         
@@ -594,7 +577,7 @@ def _update_user_statistics_safe(user_id, object_detected, detected_at):
         except Exception as e:
             print(f"   ⚠️ Obstacle stats update failed: {e}")
         
-        # 3. Update hourly_patterns (✅ NOW WITH 1-HOUR INTERVALS)
+        # 3. Update hourly_patterns (NOW WITH 1-HOUR INTERVALS)
         try:
             existing = supabase.table('hourly_patterns')\
                 .select('id, detection_count')\
@@ -666,7 +649,8 @@ def _upload_image_to_supabase(device_id, image_base64):
     """Upload detection image to Supabase Storage"""
     try:
         image_data = base64.b64decode(image_base64)
-        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        # ✅ FIXED: Use Philippine time for timestamp
+        timestamp = now_ph().strftime('%Y%m%d_%H%M%S')
         filename = f"{device_id}/{timestamp}_{uuid.uuid4().hex[:8]}.jpg"
         
         supabase = get_supabase()
@@ -707,11 +691,12 @@ def _generate_csv(detections):
             d.get('ambient_light', '')
         ])
     
+    # ✅ FIXED: Use Philippine time for filename
     return Response(
         output.getvalue(),
         mimetype='text/csv',
         headers={
-            'Content-Disposition': f'attachment; filename=detections_{datetime.now().strftime("%Y%m%d")}.csv'
+            'Content-Disposition': f'attachment; filename=detections_{now_ph().strftime("%Y%m%d")}.csv'
         }
     )
 
@@ -773,10 +758,11 @@ def _generate_pdf(detections):
     doc.build(elements)
     buffer.seek(0)
     
+    # ✅ FIXED: Use Philippine time for filename
     return Response(
         buffer.getvalue(),
         mimetype='application/pdf',
         headers={
-            'Content-Disposition': f'attachment; filename=detections_{datetime.now().strftime("%Y%m%d")}.pdf'
+            'Content-Disposition': f'attachment; filename=detections_{now_ph().strftime("%Y%m%d")}.pdf'
         }
     )

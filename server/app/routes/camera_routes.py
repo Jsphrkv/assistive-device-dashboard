@@ -1,7 +1,5 @@
 """
 Camera Routes - Snapshot upload and retrieval
-Add this as a new file: app/routes/camera_routes.py
-Then register it in your app/__init__.py
 """
 
 from flask import Blueprint, request, jsonify
@@ -10,6 +8,7 @@ import os
 from datetime import datetime
 from app.services.supabase_client import get_supabase
 from app.middleware.auth import token_required
+from app.utils.timezone_helper import now_ph, now_ph_iso
 
 camera_bp = Blueprint('camera', __name__, url_prefix='/api/camera')
 
@@ -44,7 +43,7 @@ def upload_snapshot():
         
         supabase = get_supabase()
         
-        # ✅ FIXED: Get device using 'id' column (not 'device_id')
+        # Get device using 'id' column (not 'device_id')
         device_response = supabase.table('user_devices')\
             .select('id, user_id')\
             .eq('device_token', device_token)\
@@ -54,7 +53,7 @@ def upload_snapshot():
         if not device_response.data:
             return jsonify({'error': 'Invalid device token'}), 401
         
-        # ✅ FIXED: Extract 'id' field (not 'device_id')
+        # Extract 'id' field (not 'device_id')
         device_id = device_response.data[0]['id']
         
         # Upload to Supabase Storage
@@ -71,7 +70,7 @@ def upload_snapshot():
                 headers={
                     'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
                     'Content-Type': 'image/jpeg',
-                    'x-upsert': 'true'  # Overwrite if exists
+                    'x-upsert': 'true'
                 },
                 timeout=15
             )
@@ -87,11 +86,11 @@ def upload_snapshot():
         # Build public URL
         public_url = f"{SUPABASE_URL}/storage/v1/object/public/{SNAPSHOT_BUCKET}/{file_path}"
         
-        # ✅ FIXED: Update using 'id' field (user_devices has 'id' as primary key)
+        # ✅ FIXED: Update using 'id' field with Philippine time
         supabase.table('user_devices')\
             .update({
                 'camera_snapshot_url': public_url,
-                'snapshot_updated_at': datetime.now().isoformat()
+                'snapshot_updated_at': now_ph_iso()  # ✅ FIXED
             })\
             .eq('id', device_id)\
             .execute()
