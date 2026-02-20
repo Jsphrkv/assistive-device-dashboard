@@ -14,7 +14,7 @@ MODEL_FILES = [
     'danger_predictor.pkl',
     'environment_classifier.pkl',
     'object_detector.pkl',
-    ''yolov5s.onnx'',
+    'yolov5s.onnx',
 ]
 
 
@@ -70,7 +70,7 @@ def load_model(name):
 
 def get_yolo_model_path():
     """Return path to 'yolov5s.onnx' or None if not downloaded."""
-    path = os.path.join(MODELS_DIR, ''yolov5s.onnx'')
+    path = os.path.join(MODELS_DIR, 'yolov5s.onnx')
     return path if os.path.exists(path) else None
 
 
