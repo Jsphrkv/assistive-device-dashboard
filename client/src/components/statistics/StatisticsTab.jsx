@@ -6,7 +6,6 @@ import ObstaclesChart from "./ObstaclesChart";
 import PeakTimesChart from "./PeakTimesChart";
 import AnomalyAlert from "../ml/AnomalyAlert";
 import DeviceHealthMonitor from "../ml/DeviceHealthMonitor";
-import MaintenanceStatus from "../ml/MaintenanceStatus";
 import DangerMonitor from "../ml/DangerMonitor";
 import EnvironmentMonitor from "../ml/EnvironmentMonitor";
 
@@ -21,8 +20,6 @@ const StatisticsTab = ({ deviceId }) => {
 
   useEffect(() => {
     fetchStatistics();
-
-    // Auto-refresh every 60 seconds
     const interval = setInterval(fetchStatistics, 60000);
     return () => clearInterval(interval);
   }, [deviceId]);
@@ -58,10 +55,6 @@ const StatisticsTab = ({ deviceId }) => {
       const hourlyRaw = hourlyRes.data?.data || [];
       const summary = summaryRes.data || null;
 
-      console.log("📊 Raw daily data from API:", dailyRaw);
-      console.log("📊 Raw hourly data from API:", hourlyRaw);
-      console.log("📊 Raw obstacles data from API:", obstaclesRaw);
-
       // Transform daily data
       const transformedDaily = dailyRaw.map((item) => ({
         date: item.stat_date || item.date,
@@ -81,10 +74,6 @@ const StatisticsTab = ({ deviceId }) => {
         value: item.total_count || item.count || 0,
       }));
 
-      console.log("📊 Transformed daily data:", transformedDaily);
-      console.log("📊 Transformed hourly data:", transformedHourly);
-      console.log("📊 Transformed obstacles data:", transformedObstacles);
-
       const hasAnyData =
         transformedDaily.length > 0 ||
         transformedObstacles.length > 0 ||
@@ -95,13 +84,6 @@ const StatisticsTab = ({ deviceId }) => {
       setHourlyStats(transformedHourly);
       setMlSummary(summary);
       setHasData(hasAnyData);
-
-      console.log("✅ Statistics loaded:", {
-        daily: transformedDaily.length,
-        obstacles: transformedObstacles.length,
-        hourly: transformedHourly.length,
-        summary: summary ? "yes" : "no",
-      });
     } catch (error) {
       console.error("Error fetching statistics:", error);
       setError(error.message || "Failed to load statistics");
@@ -230,18 +212,17 @@ const StatisticsTab = ({ deviceId }) => {
         <PeakTimesChart data={hourlyStats} loading={loading} />
       </div>
 
-      {/* ML Statistics Section - All 5 Components */}
+      {/* ✅ FIXED: ML Statistics Section - 2+2 Grid Layout */}
       <div className="mt-8">
         <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
           <BarChart3 className="w-5 h-5 text-blue-600" />
           ML Statistics
         </h3>
 
-        {/* First Row: 3 columns */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        {/* ✅ First Row: 2 columns (was 3) */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           <AnomalyAlert deviceId={deviceId} />
           <DeviceHealthMonitor deviceId={deviceId} />
-          <MaintenanceStatus deviceId={deviceId} />
         </div>
 
         {/* Second Row: 2 columns */}

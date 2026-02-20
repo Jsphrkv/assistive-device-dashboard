@@ -10,7 +10,6 @@ import {
   Clock,
   Brain,
   AlertTriangle,
-  Package,
   Camera,
   Eye,
   ChevronLeft,
@@ -30,11 +29,10 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { useMLHistory } from "../../hooks/ml/useMLHistory";
-import { mlAPI } from "../../services/api"; // ✅ ADD: needed for getDailySummary
+import { mlAPI } from "../../services/api";
 
 const TYPE_ICONS = {
   anomaly: AlertTriangle,
-  maintenance: Package,
   detection: Camera,
   object_detection: Camera,
   danger_prediction: Shield,
@@ -45,7 +43,6 @@ const TYPE_ICONS = {
 
 const TYPE_COLORS = {
   anomaly: "bg-red-50 text-red-700 border-red-200",
-  maintenance: "bg-orange-50 text-orange-700 border-orange-200",
   detection: "bg-purple-50 text-purple-700 border-purple-200",
   object_detection: "bg-purple-50 text-purple-700 border-purple-200",
   danger_prediction: "bg-red-50 text-red-700 border-red-200",
@@ -67,7 +64,6 @@ const HistoricalDataTab = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [showAnomaliesOnly, setShowAnomaliesOnly] = useState(false);
 
-  // ✅ REPLACED: dailySummary from DB instead of computing from truncated history
   const [dailySummary, setDailySummary] = useState([]);
   const [dailyLoading, setDailyLoading] = useState(false);
 
@@ -78,15 +74,13 @@ const HistoricalDataTab = () => {
       cacheDuration: 30000,
     });
 
-  // ✅ Helper to derive days int from dateRange string
   const getDays = useCallback(
     (range = dateRange) =>
       range === "7days" ? 7 : range === "30days" ? 30 : 90,
     [dateRange],
   );
 
-  // ✅ Fetch daily summary from the new backend endpoint (accurate, not truncated)
-  const fetchDailySummary = useCallback(async (days, force = false) => {
+  const fetchDailySummary = useCallback(async (days) => {
     setDailyLoading(true);
     try {
       const response = await mlAPI.getDailySummary(days);
@@ -99,14 +93,13 @@ const HistoricalDataTab = () => {
     }
   }, []);
 
-  // ✅ Re-fetch both daily summary AND stats whenever Charts date range changes
   useEffect(() => {
     const days = getDays(dateRange);
     fetchDailySummary(days);
-    fetchStats(days, true); // force=true bypasses cache for accurate per-range counts
+    fetchStats(days, true);
   }, [dateRange]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Logs filtering (still uses local history — this is fine for the logs table) ──
+  // ── Logs filtering ────────────────────────────────────────────────────────
   const filteredLogs = useMemo(() => {
     let filtered = [...history];
 
@@ -182,7 +175,6 @@ const HistoricalDataTab = () => {
     setCurrentPage(1);
   }, [filterType, filterSource, searchQuery, showAnomaliesOnly]);
 
-  // ✅ Export uses dailySummary (accurate DB data) for charts mode
   const exportData = () => {
     if (viewMode === "charts") {
       if (dailySummary.length === 0) return;
@@ -190,7 +182,6 @@ const HistoricalDataTab = () => {
         [
           "Date",
           "Anomalies",
-          "Maintenance",
           "Detections",
           "Dangers",
           "Avg Confidence",
@@ -199,7 +190,6 @@ const HistoricalDataTab = () => {
         ...dailySummary.map((row) => [
           row.date,
           row.anomalies,
-          row.maintenance_alerts,
           row.detections,
           row.danger_predictions,
           row.avg_confidence.toFixed(2),
@@ -266,26 +256,6 @@ const HistoricalDataTab = () => {
             {result.severity && (
               <span className="ml-2 text-xs text-red-600">
                 Severity: {result.severity}
-              </span>
-            )}
-          </div>
-        );
-      case "maintenance":
-        return (
-          <div className="text-sm">
-            <p className="text-gray-700">
-              {result.recommendation || "Maintenance check"}
-            </p>
-            {result.needs_maintenance !== undefined && (
-              <span
-                className={`text-xs ${result.needs_maintenance ? "text-orange-600" : "text-green-600"}`}
-              >
-                {result.needs_maintenance ? "Required" : "Not required"}
-              </span>
-            )}
-            {result.priority && (
-              <span className="ml-2 text-xs text-orange-600">
-                Priority: {result.priority}
               </span>
             )}
           </div>
@@ -455,7 +425,6 @@ const HistoricalDataTab = () => {
             </div>
           )}
 
-          {/* ✅ Refresh — re-fetches both dailySummary and stats */}
           <button
             onClick={() => {
               const days = getDays();
@@ -472,7 +441,6 @@ const HistoricalDataTab = () => {
             <span className="text-sm">Refresh</span>
           </button>
 
-          {/* ✅ Export disabled guard uses dailySummary for charts mode */}
           <button
             onClick={exportData}
             disabled={
@@ -525,8 +493,6 @@ const HistoricalDataTab = () => {
 
       {/* ══════════════════════════════════════════════════════════════════════
           CHARTS VIEW
-          All data comes from dailySummary (server-aggregated) so it always
-          matches the summary cards which pull from stats (also server-side).
       ══════════════════════════════════════════════════════════════════════ */}
       {history.length > 0 && viewMode === "charts" && (
         <>
@@ -541,7 +507,6 @@ const HistoricalDataTab = () => {
               </div>
             ) : dailySummary.some((d) => d.total_logs > 0) ? (
               <ResponsiveContainer width="100%" height={400}>
-                {/* ✅ data={dailySummary} — was historicalData (truncated) */}
                 <LineChart data={dailySummary}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="date" />
@@ -555,14 +520,6 @@ const HistoricalDataTab = () => {
                     strokeWidth={2}
                     name="Anomalies"
                     dot={{ fill: "#EF4444", r: 4 }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="maintenance_alerts"
-                    stroke="#F59E0B"
-                    strokeWidth={2}
-                    name="Maintenance"
-                    dot={{ fill: "#F59E0B", r: 4 }}
                   />
                   <Line
                     type="monotone"
@@ -592,8 +549,8 @@ const HistoricalDataTab = () => {
             )}
           </div>
 
-          {/* ✅ Summary cards — all values from stats (DB-accurate, never truncated) */}
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          {/* Summary cards — 4 columns */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-white rounded-lg shadow p-4">
               <p className="text-sm text-gray-600 mb-1">Total Anomalies</p>
               <p className="text-2xl font-bold text-red-600">
@@ -602,14 +559,6 @@ const HistoricalDataTab = () => {
               <p className="text-xs text-gray-500 mt-1">
                 {daysLabel} • ML + Sensor
               </p>
-            </div>
-
-            <div className="bg-white rounded-lg shadow p-4">
-              <p className="text-sm text-gray-600 mb-1">Maintenance Alerts</p>
-              <p className="text-2xl font-bold text-orange-600">
-                {stats?.byType?.maintenance ?? 0}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">Total ML Predictions</p>
             </div>
 
             <div className="bg-white rounded-lg shadow p-4">
@@ -640,7 +589,7 @@ const HistoricalDataTab = () => {
             </div>
           </div>
 
-          {/* ✅ Daily Summary table — uses dailySummary (was historicalData) */}
+          {/* Daily Summary table */}
           <div className="bg-white rounded-lg shadow overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">
@@ -657,9 +606,6 @@ const HistoricalDataTab = () => {
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                         Anomalies
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                        Maintenance
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                         Detections
@@ -687,11 +633,6 @@ const HistoricalDataTab = () => {
                           <td className="px-6 py-4 whitespace-nowrap">
                             <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
                               {row.anomalies}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className="px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">
-                              {row.maintenance_alerts}
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -740,8 +681,8 @@ const HistoricalDataTab = () => {
       ══════════════════════════════════════════════════════════════════════ */}
       {history.length > 0 && viewMode === "logs" && (
         <>
-          {/* ✅ Logs stats cards — all from stats (DB-accurate) */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          {/* Logs stats cards — 4 columns */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-white rounded-lg shadow p-4">
               <p className="text-xs text-gray-600 mb-1">Total Entries</p>
               <p className="text-2xl font-bold text-gray-900">
@@ -760,15 +701,6 @@ const HistoricalDataTab = () => {
                 {stats
                   ? `${stats.anomalyRate}% rate • ML + Sensor`
                   : "ML + Sensor"}
-              </p>
-            </div>
-            <div className="bg-orange-50 rounded-lg shadow p-4">
-              <p className="text-xs text-orange-600 mb-1">Maintenance</p>
-              <p className="text-2xl font-bold text-orange-600">
-                {stats?.byType?.maintenance ?? 0}
-              </p>
-              <p className="text-xs text-orange-500 mt-1">
-                ML predictions only
               </p>
             </div>
             <div className="bg-purple-50 rounded-lg shadow p-4">
@@ -816,7 +748,6 @@ const HistoricalDataTab = () => {
               >
                 <option value="all">All Types</option>
                 <option value="anomaly">Anomalies</option>
-                <option value="maintenance">Maintenance</option>
                 <option value="detection">Object Detection</option>
                 <option value="danger">Danger Prediction</option>
                 <option value="environment">Environment</option>

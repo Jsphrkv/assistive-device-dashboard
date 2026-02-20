@@ -2,8 +2,6 @@ import React, { useState, useEffect, useMemo } from "react";
 import {
   LineChart,
   Line,
-  BarChart,
-  Bar,
   PieChart,
   Pie,
   Cell,
@@ -36,11 +34,9 @@ const MLStatistics = ({ deviceId }) => {
       return {
         anomalyHistory: [],
         activityDistribution: [],
-        maintenanceTimeline: [],
         modelPerformance: {
           anomalyAccuracy: 0,
           activityAccuracy: 0,
-          maintenanceAccuracy: 0,
         },
       };
     }
@@ -57,20 +53,17 @@ const MLStatistics = ({ deviceId }) => {
       const nextDay = new Date(date);
       nextDay.setDate(nextDay.getDate() + 1);
 
-      // ✅ CORRECT: Filter by is_anomaly flag
       const dayLogs = history.filter((item) => {
         const itemDate = new Date(item.timestamp);
         return (
-          itemDate >= date && itemDate < nextDay && item.is_anomaly === true // ← Use database flag
+          itemDate >= date && itemDate < nextDay && item.is_anomaly === true
         );
       });
 
       const avgSeverity =
         dayLogs.length > 0
           ? dayLogs.reduce((sum, item) => {
-              // Get severity from result object
-              let severity = 30; // default low
-
+              let severity = 30;
               if (
                 item.result?.severity === "high" ||
                 item.result?.danger_level === "High"
@@ -82,7 +75,6 @@ const MLStatistics = ({ deviceId }) => {
               ) {
                 severity = 60;
               }
-
               return sum + severity;
             }, 0) / dayLogs.length
           : 0;
@@ -100,11 +92,8 @@ const MLStatistics = ({ deviceId }) => {
     // 2. Activity Distribution
     const activityCounts = history.reduce(
       (acc, item) => {
-        // ✅ CORRECT: Check prediction_type directly
         if (item.prediction_type === "activity") {
-          // ✅ CORRECT: Get activity from result object
           const activity = item.result?.activity?.toLowerCase() || "";
-
           if (activity.includes("resting") || activity === "sitting") {
             acc.resting++;
           } else if (activity.includes("walking")) {
@@ -141,21 +130,7 @@ const MLStatistics = ({ deviceId }) => {
           ]
         : [];
 
-    // 3. Maintenance Timeline - Group by month (next 6 months projection)
-    const maintenanceLogs = history.filter(
-      (item) => item.prediction_type === "maintenance", // ✅ Fixed
-    );
-    const next6Months = Array.from({ length: 6 }, (_, i) => {
-      const d = new Date();
-      d.setMonth(d.getMonth() + i);
-      return {
-        month: d.toLocaleDateString("en-US", { month: "short" }),
-        probability: Math.min(95, 30 + i * 12 + maintenanceLogs.length * 2),
-        devices: Math.max(1, Math.floor(maintenanceLogs.length / 10) + i),
-      };
-    });
-
-    // 4. Model Performance - Calculate from confidence scores
+    // 3. Model Performance - Calculate from confidence scores
     const anomalyLogs = history.filter((item) => item.is_anomaly === true);
     const activityLogs = history.filter(
       (item) => item.prediction_type === "activity",
@@ -173,13 +148,11 @@ const MLStatistics = ({ deviceId }) => {
     const modelPerformance = {
       anomalyAccuracy: avgConfidence(anomalyLogs),
       activityAccuracy: avgConfidence(activityLogs),
-      maintenanceAccuracy: avgConfidence(maintenanceLogs),
     };
 
     return {
       anomalyHistory,
       activityDistribution,
-      maintenanceTimeline: next6Months,
       modelPerformance,
     };
   }, [history]);
@@ -193,19 +166,15 @@ const MLStatistics = ({ deviceId }) => {
       return;
     }
 
-    // ✅ CORRECT: Count using database fields
     const anomalyCount = history.filter(
       (item) => item.is_anomaly === true,
     ).length;
     const activityCount = history.filter(
       (item) => item.prediction_type === "activity",
     ).length;
-    const maintenanceCount = history.filter(
-      (item) => item.prediction_type === "maintenance",
-    ).length;
 
     console.log(
-      `📊 Statistics Analysis: ${anomalyCount} anomalies, ${activityCount} activities, ${maintenanceCount} maintenance events`,
+      `📊 Statistics Analysis: ${anomalyCount} anomalies, ${activityCount} activities`,
     );
 
     setLastAnalysisTime(now);
@@ -306,107 +275,71 @@ const MLStatistics = ({ deviceId }) => {
             )}
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Activity Distribution */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center mb-4">
-                <Activity className="w-5 h-5 text-blue-600 mr-2" />
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Activity Distribution
-                </h3>
-              </div>
-              {stats.activityDistribution.length > 0 ? (
-                <>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
-                      <Pie
-                        data={stats.activityDistribution}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={({ name, percent }) =>
-                          `${name} ${(percent * 100).toFixed(0)}%`
-                        }
-                        outerRadius={80}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        {stats.activityDistribution.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="mt-4 space-y-2">
-                    {stats.activityDistribution.map((activity, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center justify-between text-sm"
-                      >
-                        <div className="flex items-center">
-                          <div
-                            className="w-3 h-3 rounded-full mr-2"
-                            style={{ backgroundColor: activity.color }}
-                          ></div>
-                          <span className="text-gray-700">{activity.name}</span>
-                        </div>
-                        <span className="font-semibold text-gray-900">
-                          {activity.value}%
-                        </span>
+          {/* Activity Distribution */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center mb-4">
+              <Activity className="w-5 h-5 text-blue-600 mr-2" />
+              <h3 className="text-lg font-semibold text-gray-900">
+                Activity Distribution
+              </h3>
+            </div>
+            {stats.activityDistribution.length > 0 ? (
+              <div className="flex flex-col lg:flex-row items-center gap-8">
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={stats.activityDistribution}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percent }) =>
+                        `${name} ${(percent * 100).toFixed(0)}%`
+                      }
+                      outerRadius={100}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {stats.activityDistribution.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="flex flex-col gap-3 min-w-[160px]">
+                  {stats.activityDistribution.map((activity, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between text-sm gap-4"
+                    >
+                      <div className="flex items-center">
+                        <div
+                          className="w-3 h-3 rounded-full mr-2 flex-shrink-0"
+                          style={{ backgroundColor: activity.color }}
+                        />
+                        <span className="text-gray-700">{activity.name}</span>
                       </div>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <div className="text-center py-12 text-gray-500">
-                  <Activity className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                  <p>No activity data collected yet</p>
+                      <span className="font-semibold text-gray-900">
+                        {activity.value}%
+                      </span>
+                    </div>
+                  ))}
                 </div>
-              )}
-            </div>
-
-            {/* Maintenance Predictions */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center mb-4">
-                <TrendingUp className="w-5 h-5 text-purple-600 mr-2" />
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Maintenance Predictions
-                </h3>
               </div>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={stats.maintenanceTimeline}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar
-                    dataKey="probability"
-                    fill="#8B5CF6"
-                    name="Maintenance Probability (%)"
-                    radius={[8, 8, 0, 0]}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-              <div className="mt-4 bg-purple-50 rounded-lg p-3">
-                <p className="text-sm text-purple-800">
-                  <span className="font-semibold">Prediction:</span> Based on
-                  current usage patterns, maintenance probability trending{" "}
-                  {stats.maintenanceTimeline[0]?.probability > 50
-                    ? "high"
-                    : "moderate"}
-                </p>
+            ) : (
+              <div className="text-center py-12 text-gray-500">
+                <Activity className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <p>No activity data collected yet</p>
               </div>
-            </div>
+            )}
           </div>
 
-          {/* ML Model Performance */}
+          {/* ML Model Performance — 2 columns */}
           <div className="bg-white rounded-lg shadow p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
               ML Model Performance (Average Confidence)
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4">
                 <p className="text-sm text-blue-600 font-medium mb-1">
                   Anomaly Detection
@@ -424,15 +357,6 @@ const MLStatistics = ({ deviceId }) => {
                   {stats.modelPerformance.activityAccuracy.toFixed(1)}%
                 </p>
                 <p className="text-xs text-green-600 mt-1">Avg Confidence</p>
-              </div>
-              <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4">
-                <p className="text-sm text-purple-600 font-medium mb-1">
-                  Maintenance Prediction
-                </p>
-                <p className="text-3xl font-bold text-purple-900">
-                  {stats.modelPerformance.maintenanceAccuracy.toFixed(1)}%
-                </p>
-                <p className="text-xs text-purple-600 mt-1">Avg Confidence</p>
               </div>
             </div>
           </div>

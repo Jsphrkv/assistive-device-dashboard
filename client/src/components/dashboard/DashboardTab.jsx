@@ -1,37 +1,22 @@
 import React, { useState, useEffect } from "react";
-import {
-  Activity,
-  Camera,
-  Battery,
-  AlertTriangle,
-  Brain,
-  Zap,
-} from "lucide-react";
+import { Activity, Camera, Battery, AlertTriangle, Zap } from "lucide-react";
 import { deviceAPI, detectionsAPI, mlAPI } from "../../services/api";
 import { formatRelativeTime } from "../../utils/helpers";
 import AnomalyAlert from "../ml/AnomalyAlert";
-import MaintenanceStatus from "../ml/MaintenanceStatus";
 import DangerMonitor from "../ml/DangerMonitor";
 
 const DashboardTab = () => {
   const [deviceStatus, setDeviceStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [hasDevice, setHasDevice] = useState(true);
-
-  // Real data states
   const [totalDetections, setTotalDetections] = useState(0);
   const [mlStats, setMlStats] = useState(null);
   const [anomalyCount, setAnomalyCount] = useState(0);
-  const [lastSeenTime, setLastSeenTime] = useState(null); // ✅ NEW: Store raw timestamp
+  const [lastSeenTime, setLastSeenTime] = useState(null);
 
   useEffect(() => {
     fetchAllData();
-
-    // Refresh every 30 seconds
-    const interval = setInterval(() => {
-      fetchAllData();
-    }, 30000);
-
+    const interval = setInterval(fetchAllData, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -48,12 +33,9 @@ const DashboardTab = () => {
       const response = await deviceAPI.getStatus();
       const data = response.data;
 
-      console.log("📊 [Dashboard] Device Status Response:", data); // ✅ DEBUG
-
       setDeviceStatus(data);
       setHasDevice(data.hasDevice !== false);
 
-      // ✅ IMPROVED: Try all possible field name variations
       const lastSeen =
         data.lastSeen ||
         data.last_seen ||
@@ -63,16 +45,14 @@ const DashboardTab = () => {
         data.updated_at;
 
       if (lastSeen) {
-        console.log("⏰ [Dashboard] Last Seen Time:", lastSeen); // ✅ DEBUG
         setLastSeenTime(lastSeen);
       } else {
-        console.warn("⚠️ [Dashboard] No lastSeen field found in device status");
         setLastSeenTime(null);
       }
 
       setLoading(false);
     } catch (error) {
-      console.error("❌ [Dashboard] Error fetching device status:", error);
+      console.error("❌ Error fetching device status:", error);
 
       if (error.response?.status === 404) {
         setHasDevice(false);
@@ -88,81 +68,61 @@ const DashboardTab = () => {
       const response = await detectionsAPI.getRecent();
       const detections = response.data?.detections || [];
       setTotalDetections(detections.length);
-      console.log(`📸 [Dashboard] Total detections: ${detections.length}`); // ✅ DEBUG
     } catch (error) {
-      console.error("❌ [Dashboard] Error fetching detection stats:", error);
+      console.error("❌ Error fetching detection stats:", error);
       setTotalDetections(0);
     }
   };
 
   const fetchMLStats = async () => {
     try {
-      const response = await mlAPI.getStats(7); // Last 7 days
+      const response = await mlAPI.getStats(7);
       const stats = response.data;
-
-      console.log("🤖 [Dashboard] ML Stats Response:", stats); // ✅ DEBUG
 
       setMlStats(stats);
 
-      // ✅ FIXED: Use anomalyCount from ML stats (more efficient and accurate)
       if (stats && stats.anomalyCount !== undefined) {
         setAnomalyCount(stats.anomalyCount);
-        console.log(`🚨 [Dashboard] Anomaly count: ${stats.anomalyCount}`); // ✅ DEBUG
       } else {
         setAnomalyCount(0);
       }
     } catch (error) {
-      console.error("❌ [Dashboard] Error fetching ML stats:", error);
+      console.error("❌ Error fetching ML stats:", error);
       setMlStats(null);
       setAnomalyCount(0);
     }
   };
 
-  // ✅ NEW: Dynamic calculation that updates every render
   const getLastActiveDisplay = () => {
-    if (!lastSeenTime) {
-      return "N/A";
-    }
+    if (!lastSeenTime) return "N/A";
 
     try {
       const now = new Date();
       const lastSeenDate = new Date(lastSeenTime);
 
-      // Check if date is valid
-      if (isNaN(lastSeenDate.getTime())) {
-        console.warn("⚠️ Invalid date for lastSeenTime:", lastSeenTime);
-        return "N/A";
-      }
+      if (isNaN(lastSeenDate.getTime())) return "N/A";
 
       const diffMs = now - lastSeenDate;
       const diffMins = Math.floor(diffMs / 60000);
 
-      // If less than 1 minute, show "Just now"
       if (diffMins < 1) return "Just now";
-
-      // Minutes
       if (diffMins < 60) return `${diffMins}m ago`;
 
-      // Hours
       const diffHours = Math.floor(diffMins / 60);
       if (diffHours < 24) return `${diffHours}h ago`;
 
-      // Days
       const diffDays = Math.floor(diffHours / 24);
       return `${diffDays}d ago`;
     } catch (error) {
-      console.error("❌ Error calculating last active time:", error);
       return "N/A";
     }
   };
 
-  // ✅ IMPROVED: Better online status determination
   const isDeviceOnline = () => {
     if (deviceStatus?.deviceOnline !== undefined) {
       return deviceStatus.deviceOnline;
     }
 
-    // Fallback: Consider online if last seen within 2 minutes
     if (lastSeenTime) {
       const now = new Date();
       const lastSeenDate = new Date(lastSeenTime);
@@ -227,17 +187,8 @@ const DashboardTab = () => {
           />
         </div>
 
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200 opacity-50">
-          <h3 className="text-lg font-semibold text-gray-700 mb-2 flex items-center">
-            <Brain className="w-5 h-5 mr-2" />
-            AI-Powered Analysis
-          </h3>
-          <p className="text-sm text-gray-600">
-            Register a device to see AI-powered insights
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 opacity-50">
+        {/* ✅ FIXED: 2 columns grid (was 3) */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 opacity-50">
           <div className="bg-white rounded-lg shadow p-6">
             <h4 className="font-semibold text-gray-500 mb-2">
               Anomaly Detection
@@ -246,12 +197,6 @@ const DashboardTab = () => {
           </div>
           <div className="bg-white rounded-lg shadow p-6">
             <h4 className="font-semibold text-gray-500 mb-2">Danger Monitor</h4>
-            <p className="text-sm text-gray-400">No data available</p>
-          </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <h4 className="font-semibold text-gray-500 mb-2">
-              Maintenance Status
-            </h4>
             <p className="text-sm text-gray-400">No data available</p>
           </div>
         </div>
@@ -307,40 +252,14 @@ const DashboardTab = () => {
         </div>
       </div>
 
-      {/* AI Analysis Banner */}
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2 flex items-center">
-              <Brain className="w-5 h-5 mr-2 text-blue-600" />
-              AI-Powered Analysis
-            </h3>
-            <p className="text-sm text-gray-600">
-              Real-time machine learning insights for device health, danger
-              detection, and maintenance predictions
-            </p>
-          </div>
-          {mlStats && (
-            <div className="bg-white rounded-lg p-3 shadow-sm">
-              <p className="text-xs text-gray-600 mb-1">ML Accuracy</p>
-              <p className="text-2xl font-bold text-blue-600">
-                {mlStats.avgConfidence || 0}%
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ML Components Grid - 3 columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* ✅ FIXED: ML Components Grid - 2 columns (was 3) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <AnomalyAlert deviceId={deviceStatus?.deviceId || "device-001"} />
         <DangerMonitor deviceId={deviceStatus?.deviceId || "device-001"} />
-        <MaintenanceStatus deviceId={deviceStatus?.deviceId || "device-001"} />
       </div>
 
-      {/* Quick Stats - Real Data (3 cards) */}
+      {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Anomalies - ✅ FIXED: Shows real total count */}
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center justify-between">
             <div>
@@ -356,7 +275,6 @@ const DashboardTab = () => {
           </div>
         </div>
 
-        {/* Last Active - ✅ FIXED: Shows real time ago */}
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center justify-between">
             <div>
@@ -374,7 +292,6 @@ const DashboardTab = () => {
           </div>
         </div>
 
-        {/* Last Obstacle - ✅ IMPROVED: Better display */}
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center justify-between">
             <div>

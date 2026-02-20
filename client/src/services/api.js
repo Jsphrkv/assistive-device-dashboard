@@ -153,10 +153,6 @@ export const mlAPI = {
   detectAnomaly: (telemetryData) =>
     api.post("/ml/detect/anomaly", telemetryData),
 
-  // ========== Maintenance Prediction ==========
-  predictMaintenance: (deviceData) =>
-    api.post("/ml/predict/maintenance", deviceData),
-
   // ========== Object Detection ==========
   detectObject: (detectionData) =>
     api.post("/ml/detect/object", {
