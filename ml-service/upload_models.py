@@ -16,7 +16,7 @@ load_dotenv()
 
 # Point to your server's saved_models folder
 SERVER_MODELS_DIR = os.path.join(
-    os.path.dirname(__file__), '..', 'server', 'ml_models', 'saved_models'
+    os.path.dirname(__file__), 'ml_models', 'saved_models'
 )
 
 # Also check local saved_models
