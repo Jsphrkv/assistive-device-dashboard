@@ -31,31 +31,3 @@ class Device(DeviceBase):
     
     class Config:
         from_attributes = True
-
-# ========== ML MODEL INPUT SCHEMAS ==========
-
-# 1. Anomaly Detection Input
-class DeviceTelemetry(BaseModel):
-    """
-    Device telemetry data for ML anomaly detection
-    Used by: /api/ml/detect/anomaly
-    """
-    device_id: UUID
-    temperature: float = Field(default=37.0, description="Temperature in Celsius")
-    heart_rate: float = Field(default=75.0, description="Heart rate in BPM")
-    battery_level: float = Field(default=80.0, ge=0, le=100, description="Battery percentage")
-    signal_strength: float = Field(default=-50.0, description="Signal strength in dBm")
-    usage_hours: float = Field(default=8.0, ge=0, description="Usage hours")
-
-
-# ========== COMPREHENSIVE ANALYSIS ==========
-
-class DeviceAnalysisRequest(BaseModel):
-    """
-    Comprehensive device analysis request
-    Can include multiple types of data for different ML models
-    """
-    device_id: UUID
-    telemetry: Optional[DeviceTelemetry] = None  # For anomaly detection
-    device_info: Optional[DeviceMaintenanceInfo] = None  # For maintenance prediction
-
