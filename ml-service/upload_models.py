@@ -1,6 +1,6 @@
 """
 Run this script LOCALLY after training your models.
-It uploads all .pkl files + yolov5n.onnx to Supabase Storage.
+It uploads all .pkl files + 'yolov5s.onnx' to Supabase Storage.
 Hugging Face will download them automatically on startup.
 
 Usage:
@@ -29,7 +29,7 @@ FILES_TO_UPLOAD = [
     'danger_predictor.pkl',
     'environment_classifier.pkl',
     'object_detector.pkl',
-    'yolov5n.onnx',
+    'yolov5s.onnx',
 ]
 
 
