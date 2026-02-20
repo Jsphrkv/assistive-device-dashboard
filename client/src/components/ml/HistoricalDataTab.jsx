@@ -549,7 +549,7 @@ const HistoricalDataTab = () => {
             )}
           </div>
 
-          {/* Summary cards — 4 columns */}
+          {/* Summary cards — 4 columns (maintenance removed) */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-white rounded-lg shadow p-4">
               <p className="text-sm text-gray-600 mb-1">Total Anomalies</p>
@@ -569,7 +569,9 @@ const HistoricalDataTab = () => {
                     (stats.byType?.detection ?? 0)
                   : 0}
               </p>
-              <p className="text-xs text-gray-500 mt-1">ML + Sensor logs</p>
+              <p className="text-xs text-gray-500 mt-1">
+                Object detections only
+              </p>
             </div>
 
             <div className="bg-white rounded-lg shadow p-4">
@@ -681,7 +683,7 @@ const HistoricalDataTab = () => {
       ══════════════════════════════════════════════════════════════════════ */}
       {history.length > 0 && viewMode === "logs" && (
         <>
-          {/* Logs stats cards — 4 columns */}
+          {/* Logs stats cards — 4 columns (maintenance removed) */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-white rounded-lg shadow p-4">
               <p className="text-xs text-gray-600 mb-1">Total Entries</p>
@@ -704,14 +706,16 @@ const HistoricalDataTab = () => {
               </p>
             </div>
             <div className="bg-purple-50 rounded-lg shadow p-4">
-              <p className="text-xs text-purple-600 mb-1">Detections</p>
+              <p className="text-xs text-purple-600 mb-1">Object Detections</p>
               <p className="text-2xl font-bold text-purple-600">
                 {stats
                   ? (stats.byType?.object_detection ?? 0) +
                     (stats.byType?.detection ?? 0)
                   : 0}
               </p>
-              <p className="text-xs text-purple-500 mt-1">ML + Sensor logs</p>
+              <p className="text-xs text-purple-500 mt-1">
+                Object detections only
+              </p>
             </div>
             <div className="bg-green-50 rounded-lg shadow p-4">
               <p className="text-xs text-green-600 mb-1">Avg Confidence</p>
@@ -719,7 +723,7 @@ const HistoricalDataTab = () => {
                 {stats?.avgConfidence ?? 0}%
               </p>
               <p className="text-xs text-green-500 mt-1">
-                ML + Sensor combined
+                Across all prediction types
               </p>
             </div>
           </div>

@@ -16,7 +16,6 @@ import {
 import { detectionsAPI, statisticsAPI, mlAPI } from "../../services/api";
 import { useDetectionLogs } from "../../hooks/useDetectionLogs";
 
-// Object icons mapping
 const OBJECT_ICONS = {
   person: "👤",
   vehicle: "🚗",
@@ -48,18 +47,18 @@ const DetectionLogsTab = () => {
     getMLDetections,
     getMLStats,
   } = useDetectionLogs({
-    limit: 1000, // keep at 1000 — logs table only needs recent rows
+    limit: 1000,
     autoFetch: true,
     cacheDuration: 30000,
   });
 
-  // ✅ DB-accurate stats (replaces local array counts for cards)
   const [dbStats, setDbStats] = useState({
     total: 0,
     critical: 0,
     navigation: 0,
     environmental: 0,
     high_danger: 0,
+    avg_confidence: 0,
   });
   const [statsLoading, setStatsLoading] = useState(false);
 
@@ -71,10 +70,8 @@ const DetectionLogsTab = () => {
   const [dateRange, setDateRange] = useState("7days");
   const [showMLOnly, setShowMLOnly] = useState(false);
 
-  // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
 
-  // ✅ Fetch DB-accurate stats on mount
   useEffect(() => {
     fetchDBStats();
   }, []);
@@ -92,9 +89,6 @@ const DetectionLogsTab = () => {
     showMLOnly,
   ]);
 
-  // ✅ Fetch all card numbers from the DB via statisticsAPI.getSummary()
-  //    This uses COUNT queries server-side so numbers are always accurate
-  //    regardless of how many records exist (no truncation issue).
   const fetchDBStats = async () => {
     setStatsLoading(true);
     try {
@@ -111,8 +105,7 @@ const DetectionLogsTab = () => {
         navigation: data?.categoryBreakdown?.navigation || 0,
         environmental: data?.categoryBreakdown?.environmental || 0,
         high_danger: data?.severityBreakdown?.high || 0,
-        ml_detections: mlData?.totalPredictions || 0,
-        ml_confidence: mlData?.avgConfidence || 0,
+        avg_confidence: mlData?.avgConfidence || 0, // ← replaces ml_detections
       });
     } catch (error) {
       console.error("Error fetching DB stats:", error);
@@ -126,15 +119,13 @@ const DetectionLogsTab = () => {
           (d) => d.object_category === "environmental",
         ).length,
         high_danger: detections.filter((d) => d.danger_level === "High").length,
-        ml_detections: 0,
-        ml_confidence: 0,
+        avg_confidence: 0,
       });
     } finally {
       setStatsLoading(false);
     }
   };
 
-  // ✅ applyFilters still works on local detections array — correct for the table
   const applyFilters = () => {
     let filtered = [...detections];
 
@@ -206,7 +197,7 @@ const DetectionLogsTab = () => {
   const handleRefresh = async () => {
     try {
       await refresh();
-      await fetchDBStats(); // ✅ also refresh DB-accurate stats
+      await fetchDBStats();
     } catch (error) {
       console.error("Failed to refresh:", error);
     }
@@ -286,7 +277,6 @@ const DetectionLogsTab = () => {
     return colors[level] || colors.Low;
   };
 
-  // Pagination calculations — based on filtered local array (correct for table)
   const totalPages = Math.ceil(filteredDetections.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const endIndex = startIndex + ITEMS_PER_PAGE;
@@ -389,7 +379,7 @@ const DetectionLogsTab = () => {
         </div>
       </div>
 
-      {/* ✅ Statistics Cards — all from DB (accurate regardless of row limit) */}
+      {/* Statistics Cards */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
         <div className="bg-white rounded-lg shadow p-4">
           <p className="text-xs text-gray-600 mb-1">Total Logs</p>
@@ -408,6 +398,7 @@ const DetectionLogsTab = () => {
           <p className="text-2xl font-bold text-red-600">
             {dbStats.critical.toLocaleString()}
           </p>
+          <p className="text-xs text-red-500 mt-1">Critical detections</p>
         </div>
 
         <div className="bg-orange-50 rounded-lg shadow p-4">
@@ -415,6 +406,7 @@ const DetectionLogsTab = () => {
           <p className="text-2xl font-bold text-orange-600">
             {dbStats.navigation.toLocaleString()}
           </p>
+          <p className="text-xs text-orange-500 mt-1">Navigation hazards</p>
         </div>
 
         <div className="bg-yellow-50 rounded-lg shadow p-4">
@@ -422,6 +414,7 @@ const DetectionLogsTab = () => {
           <p className="text-2xl font-bold text-yellow-600">
             {dbStats.environmental.toLocaleString()}
           </p>
+          <p className="text-xs text-yellow-500 mt-1">Environmental hazards</p>
         </div>
 
         <div className="bg-purple-50 rounded-lg shadow p-4">
@@ -429,21 +422,18 @@ const DetectionLogsTab = () => {
           <p className="text-2xl font-bold text-purple-600">
             {dbStats.high_danger.toLocaleString()}
           </p>
+          <p className="text-xs text-purple-500 mt-1">High danger events</p>
         </div>
 
+        {/* ✅ Replaced redundant "Total Records" with Avg Detection Confidence */}
         <div className="bg-blue-50 rounded-lg shadow p-4">
-          <div className="flex items-center gap-1 mb-1">
-            <Brain className="w-3 h-3 text-blue-600" />
-            <p className="text-xs text-blue-600">Total Records</p>
-          </div>
-          {/* mlStats is from the local array — acceptable here as an approximation */}
+          <p className="text-xs text-blue-600 mb-1">Avg Confidence</p>
           <p className="text-2xl font-bold text-blue-600">
-            {dbStats.ml_detections}
+            {dbStats.avg_confidence > 0
+              ? `${dbStats.avg_confidence.toFixed(1)}%`
+              : "—"}
           </p>
-          <p className="text-xs text-blue-500 mt-1">
-            ML + Sensor combined
-            {/* {dbStats.ml_confidence}% */}
-          </p>
+          <p className="text-xs text-blue-500 mt-1">Across all predictions</p>
         </div>
       </div>
 
@@ -544,7 +534,7 @@ const DetectionLogsTab = () => {
         </div>
       </div>
 
-      {/* Logs Table — reads from local detections array (1000 most recent) */}
+      {/* Logs Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -663,7 +653,7 @@ const DetectionLogsTab = () => {
         </div>
       </div>
 
-      {/* Pagination — based on filteredDetections (local array) */}
+      {/* Pagination */}
       {filteredDetections.length > 0 && (
         <div className="flex items-center justify-between">
           <p className="text-sm text-gray-600">
