@@ -27,8 +27,6 @@ if __name__ == '__main__':
                 loaded = []
                 if model_loader.anomaly_detector: 
                     loaded.append("anomaly_detector")
-                if model_loader.maintenance_predictor: 
-                    loaded.append("maintenance_predictor")
                 if model_loader.object_detector: 
                     loaded.append("object_detector")
                 if model_loader.danger_predictor: 
@@ -49,18 +47,17 @@ if __name__ == '__main__':
             traceback.print_exc()
     
     print(f"""
-╔══════════════════════════════════════════════════════════╗
-║     Assistive Device Server API                         ║
+╔════════════════════════════════════════════════════════════════════╗
+║     Assistive Device Server API                                    ║
 ║     Running on: http://{host}:{port}{''.ljust(25 - len(str(port)))}║
-║     Environment: {os.getenv('FLASK_ENV', 'development').ljust(40)}║
-║                                                          ║
-║     Available Models (5):                                ║
-║       • Anomaly Detection                                ║
-║       • Maintenance Prediction                           ║
-║       • Object Detection                                 ║
-║       • Danger Prediction                                ║
-║       • Environment Classification                       ║
-╚══════════════════════════════════════════════════════════╝
+║     Environment: {os.getenv('FLASK_ENV', 'development').ljust(40)} ║
+║                                                                    ║
+║     Available Models (4):                                          ║
+║       • Anomaly Detection                                          ║
+║       • Object Detection                                           ║
+║       • Danger Prediction                                          ║
+║       • Environment Classification                                 ║
+╚════════════════════════════════════════════════════════════════════╝
     """)
     
     # Run application

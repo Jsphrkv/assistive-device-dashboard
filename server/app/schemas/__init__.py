@@ -3,7 +3,6 @@ from .device import (
     DeviceCreate,
     DeviceUpdate,
     DeviceTelemetry,
-    DeviceMaintenanceInfo,
     DeviceAnalysisRequest
 )
 
@@ -11,7 +10,6 @@ from .detection import (
     Detection,
     DetectionCreate,
     AnomalyDetectionResponse,
-    MaintenancePredictionResponse,
     ObjectDetectionResponse,
     DangerPredictionResponse,
     EnvironmentClassificationResponse
@@ -31,14 +29,12 @@ __all__ = [
     'DeviceCreate',
     'DeviceUpdate',
     'DeviceTelemetry',
-    'DeviceMaintenanceInfo',
     'DeviceAnalysisRequest',
 
     # Detection schemas (5 models)
     'Detection',
     'DetectionCreate',
     'AnomalyDetectionResponse',
-    'MaintenancePredictionResponse',
     'ObjectDetectionResponse',
     'DangerPredictionResponse',
     'EnvironmentClassificationResponse',

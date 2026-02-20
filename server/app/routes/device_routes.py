@@ -20,13 +20,7 @@ def receive_telemetry():
         "heart_rate": 75,
         "battery_level": 80,
         "signal_strength": -50,
-        "usage_hours": 8,
-        "accel_x": 0.1,
-        "accel_y": 0.2,
-        "accel_z": 0.3,
-        "gyro_x": 0.05,
-        "gyro_y": 0.02,
-        "gyro_z": 0.01
+        "usage_hours": 8
     }
     """
     try:
@@ -45,7 +39,7 @@ def receive_telemetry():
         supabase = get_supabase()
         results = {}
         
-        # ========== 1. ANOMALY DETECTION ==========
+        # ========== ANOMALY DETECTION ==========
         print(f"\n🔍 [ANOMALY] Running anomaly detection...")
         try:
             telemetry = {
@@ -86,95 +80,6 @@ def receive_telemetry():
             import traceback
             traceback.print_exc()
             results['anomaly'] = {'error': str(e)}
-        
-        # ========== 2. ACTIVITY RECOGNITION ==========
-        print(f"\n🏃 [ACTIVITY] Running activity recognition...")
-        try:
-            sensor_data = {
-                'accelerometer_x': data.get('accel_x', 0.0),
-                'accelerometer_y': data.get('accel_y', 0.0),
-                'accelerometer_z': data.get('accel_z', 0.0),
-                'gyroscope_x': data.get('gyro_x', 0.0),
-                'gyroscope_y': data.get('gyro_y', 0.0),
-                'gyroscope_z': data.get('gyro_z', 0.0)
-            }
-            
-            activity_result = ml_service.recognize_activity(sensor_data)
-            results['activity'] = activity_result
-            
-            print(f"   Result: {activity_result}")
-            
-            # Save to database
-            prediction = {
-                'device_id': device_id,
-                'prediction_type': 'activity',
-                'detected_activity': activity_result.get('activity', ''),
-                'activity_confidence': activity_result.get('confidence', 0),
-                'activity_intensity': activity_result.get('intensity', 'low'),
-                'activity_probabilities': activity_result.get('probabilities', {}),
-                'sensor_data': sensor_data,
-                'model_version': 'v1.0'
-            }
-            
-            print(f"💾 [ACTIVITY] Saving to database...")
-            db_result = supabase.table('ml_predictions').insert(prediction).execute()
-            
-            if db_result.data:
-                print(f"✅ [ACTIVITY] Saved! ID: {db_result.data[0].get('id')}")
-            else:
-                print(f"⚠️ [ACTIVITY] No data returned from insert")
-                
-        except Exception as e:
-            print(f"❌ [ACTIVITY] Error: {e}")
-            import traceback
-            traceback.print_exc()
-            results['activity'] = {'error': str(e)}
-        
-        # ========== 3. MAINTENANCE PREDICTION ==========
-        # Only check maintenance periodically (not every telemetry)
-        should_check_maintenance = data.get('check_maintenance', False)
-        
-        if should_check_maintenance:
-            print(f"\n🔧 [MAINTENANCE] Running maintenance prediction...")
-            try:
-                device_info = {
-                    'battery_health': data.get('battery_health', 80.0),
-                    'charge_cycles': data.get('charge_cycles', 100),
-                    'temperature_avg': data.get('temperature', 37.0),
-                    'error_count': data.get('error_count', 0),
-                    'uptime_days': data.get('uptime_days', 30)
-                }
-                
-                maintenance_result = ml_service.predict_maintenance(device_info)
-                results['maintenance'] = maintenance_result
-                
-                print(f"   Result: {maintenance_result}")
-                
-                # Save to database
-                prediction = {
-                    'device_id': device_id,
-                    'prediction_type': 'maintenance',
-                    'needs_maintenance': maintenance_result.get('needs_maintenance', False),
-                    'maintenance_confidence': maintenance_result.get('probability', 0),
-                    'maintenance_priority': maintenance_result.get('priority', 'low'),
-                    'maintenance_recommendations': maintenance_result.get('recommendations', {}),
-                    'telemetry_data': device_info,
-                    'model_version': 'v1.0'
-                }
-                
-                print(f"💾 [MAINTENANCE] Saving to database...")
-                db_result = supabase.table('ml_predictions').insert(prediction).execute()
-                
-                if db_result.data:
-                    print(f"✅ [MAINTENANCE] Saved! ID: {db_result.data[0].get('id')}")
-                else:
-                    print(f"⚠️ [MAINTENANCE] No data returned from insert")
-                    
-            except Exception as e:
-                print(f"❌ [MAINTENANCE] Error: {e}")
-                import traceback
-                traceback.print_exc()
-                results['maintenance'] = {'error': str(e)}
         
         print(f"\n✅ Telemetry processed successfully for device {device_id}\n")
         

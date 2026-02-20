@@ -6,7 +6,7 @@ from uuid import UUID
 class DetectionBase(BaseModel):
     """Base detection schema"""
     device_id: UUID
-    detection_type: str = Field(..., description="Type of detection (anomaly, maintenance, object_detection, danger_prediction, environment_classification)")
+    detection_type: str = Field(..., description="Type of detection (anomaly, object_detection, danger_prediction, environment_classification)")
     severity: str = Field(..., description="Severity level (low, medium, high, critical)")
     message: str
 
@@ -38,19 +38,7 @@ class AnomalyDetectionResponse(BaseModel):
     message: str
     timestamp: int
 
-# ========== 2. MAINTENANCE PREDICTION ==========
-
-class MaintenancePredictionResponse(BaseModel):
-    """Response schema for maintenance prediction"""
-    maintenance_needed: bool
-    probability: float = Field(..., ge=0, le=1)
-    priority: str  # 'low', 'medium', 'high'
-    days_until: int
-    recommendations: dict
-    message: str
-    timestamp: int
-
-# ========== 3. OBJECT DETECTION ==========
+# ========== 2. OBJECT DETECTION ==========
 
 class ObjectDetectionResponse(BaseModel):
     """Response schema for object detection"""
@@ -61,7 +49,7 @@ class ObjectDetectionResponse(BaseModel):
     message: str
     timestamp: int
 
-# ========== 4. DANGER PREDICTION (NEW) ==========
+# ========== 3. DANGER PREDICTION (NEW) ==========
 
 class DangerPredictionResponse(BaseModel):
     """Response schema for danger prediction"""
@@ -72,7 +60,7 @@ class DangerPredictionResponse(BaseModel):
     message: str
     timestamp: int
 
-# ========== 5. ENVIRONMENT CLASSIFICATION (NEW) ==========
+# ========== 4. ENVIRONMENT CLASSIFICATION (NEW) ==========
 
 class EnvironmentClassificationResponse(BaseModel):
     """Response schema for environment classification"""

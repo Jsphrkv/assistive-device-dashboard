@@ -47,22 +47,6 @@ class DeviceTelemetry(BaseModel):
     signal_strength: float = Field(default=-50.0, description="Signal strength in dBm")
     usage_hours: float = Field(default=8.0, ge=0, description="Usage hours")
 
-# 2. Maintenance Prediction Input
-class DeviceMaintenanceInfo(BaseModel):
-    """
-    Device maintenance information for predictive maintenance
-    Used by: /api/ml/predict/maintenance
-    """
-    device_id: UUID
-    battery_health: float = Field(default=80.0, ge=0, le=100, description="Battery health percentage")
-    charge_cycles: int = Field(default=100, ge=0, description="Number of charge cycles")
-    temperature_avg: float = Field(default=35.0, description="Average temperature in Celsius")
-    error_count: int = Field(default=0, ge=0, description="Number of errors")
-    uptime_days: int = Field(default=30, ge=0, description="Days since last reboot")
-
-# 3. Object Detection Input (handled by ml_types.py ObjectDetectionRequest)
-# 4. Danger Prediction Input (handled by ml_types.py DangerPredictionRequest)
-# 5. Environment Classification Input (handled by ml_types.py EnvironmentClassificationRequest)
 
 # ========== COMPREHENSIVE ANALYSIS ==========
 

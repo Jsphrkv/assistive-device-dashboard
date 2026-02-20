@@ -49,7 +49,7 @@ def create_app(config_name=None):
     from app.routes.devices import devices_bp     
     from app.routes.device_routes import device_bp
     from app.routes.detections import detections_bp
-    from app.routes.ml_routes import ml_bp
+    # from app.routes.ml_routes import ml_bp
     from app.routes.ml_history import ml_history_bp
     from app.routes.statistics import statistics_bp
     from app.routes.settings import settings_bp
@@ -69,7 +69,7 @@ def create_app(config_name=None):
     app.register_blueprint(devices_bp)      
     app.register_blueprint(device_bp)      
     app.register_blueprint(detections_bp)     
-    app.register_blueprint(ml_bp)            
+    # app.register_blueprint(ml_bp)            
     app.register_blueprint(ml_history_bp)  
     app.register_blueprint(statistics_bp)    
     app.register_blueprint(settings_bp)

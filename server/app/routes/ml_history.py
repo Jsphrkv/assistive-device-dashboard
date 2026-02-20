@@ -63,7 +63,6 @@ def get_ml_history():
                     'danger': 'danger_prediction',
                     'environment': 'environment_classification',
                     'anomaly': 'anomaly',
-                    'maintenance': 'maintenance'
                 }
                 db_type = type_mapping.get(prediction_type, prediction_type)
                 ml_query = ml_query.eq('prediction_type', db_type)
@@ -92,16 +91,6 @@ def get_ml_history():
                         'message': f"Device anomaly detected (health: {item.get('device_health_score', 0):.1f}%)"
                     }
                     confidence = item.get('anomaly_score', 0)
-                    
-                elif pred_type == 'maintenance':
-                    result = {
-                        'needs_maintenance': item.get('needs_maintenance'),
-                        'confidence': item.get('maintenance_confidence'),
-                        'priority': item.get('maintenance_priority'),
-                        'days_until': item.get('days_until_maintenance'),
-                        'recommendation': f"Maintenance {item.get('maintenance_priority', 'low')} priority"
-                    }
-                    confidence = item.get('maintenance_confidence', 0)
                     
                 elif pred_type == 'object_detection':
                     obj = item.get('object_detected', 'object')
@@ -187,8 +176,7 @@ def get_ml_history():
         # Sort combined data by timestamp
         combined_data.sort(key=lambda x: x['timestamp'], reverse=True)
 
-        # ✅ FIX: Get real total counts using count='exact' with head=True
-        # This avoids loading any data rows — only retrieves the count metadata
+        # Get real total counts using count='exact' with head=True
         real_total = 0
         try:
             if source in ['all', 'predictions']:
@@ -427,22 +415,18 @@ def get_ml_stats():
         print(f"   Det total: {det_total_count} | Det anomalies: {det_anomaly_count}")
         print(f"   Combined anomalyCount: {total_anomalies}")
 
-        # ─── Per-type counts (each a separate cheap COUNT query) ─────────────
-        # ✅ FIX: Never iterate ml_total.data — use dedicated count queries
-        #    so the result is always the true DB total, not a capped row slice.
-        type_anomaly      = ml_base({'prediction_type': 'anomaly'}).execute().count or 0
-        type_maintenance  = ml_base({'prediction_type': 'maintenance'}).execute().count or 0
-        type_obj_detect   = ml_base({'prediction_type': 'object_detection'}).execute().count or 0
-        type_danger       = ml_base({'prediction_type': 'danger_prediction'}).execute().count or 0
-        type_environment  = ml_base({'prediction_type': 'environment_classification'}).execute().count or 0
+        # ─── Per-type counts ─────────────────────────────────────────────────
+        type_anomaly     = ml_base({'prediction_type': 'anomaly'}).execute().count or 0
+        type_obj_detect  = ml_base({'prediction_type': 'object_detection'}).execute().count or 0
+        type_danger      = ml_base({'prediction_type': 'danger_prediction'}).execute().count or 0
+        type_environment = ml_base({'prediction_type': 'environment_classification'}).execute().count or 0
 
         by_type = {
             'anomaly': type_anomaly,
-            'maintenance': type_maintenance,
             'object_detection': type_obj_detect,
             'danger_prediction': type_danger,
             'environment_classification': type_environment,
-            'detection': det_total_count,  # all detection_logs rows in range
+            'detection': det_total_count,
         }
 
         by_source = {
@@ -451,11 +435,10 @@ def get_ml_stats():
         }
 
         # ─── Average confidence ───────────────────────────────────────────────
-        # Fetch only the confidence columns we need (no head=True — we need data)
         conf_scores = []
         try:
             conf_query = supabase.table('ml_predictions')\
-                .select('prediction_type, anomaly_score, maintenance_confidence, detection_confidence, danger_score')\
+                .select('prediction_type, anomaly_score, detection_confidence, danger_score')\
                 .gte('created_at', start_iso)
             if device_ids:
                 conf_query = conf_query.in_('device_id', device_ids)
@@ -466,8 +449,6 @@ def get_ml_stats():
                 pt = pred.get('prediction_type')
                 if pt == 'anomaly' and pred.get('anomaly_score'):
                     conf_scores.append(pred['anomaly_score'])
-                elif pt == 'maintenance' and pred.get('maintenance_confidence'):
-                    conf_scores.append(pred['maintenance_confidence'])
                 elif pt == 'object_detection' and pred.get('detection_confidence'):
                     conf_scores.append(pred['detection_confidence'])
                 elif pt == 'danger_prediction' and pred.get('danger_score'):
@@ -495,6 +476,7 @@ def get_ml_stats():
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'Failed to get ML stats'}), 500
+
     
 @ml_history_bp.route('/daily-summary', methods=['GET'])
 @token_required
@@ -573,48 +555,44 @@ def get_daily_summary():
             day_label = day_dt.strftime('%b %-d')  # e.g. "Feb 13"
 
             # ── Per-type counts from ml_predictions ─────────────────────────
-            count_anomaly_type  = ml_count(day_start, day_end, {'prediction_type': 'anomaly'})
-            count_maintenance   = ml_count(day_start, day_end, {'prediction_type': 'maintenance'})
-            count_obj_detect    = ml_count(day_start, day_end, {'prediction_type': 'object_detection'})
-            count_danger        = ml_count(day_start, day_end, {'prediction_type': 'danger_prediction'})
-            count_environment   = ml_count(day_start, day_end, {'prediction_type': 'environment_classification'})
+            count_anomaly_type = ml_count(day_start, day_end, {'prediction_type': 'anomaly'})
+            count_obj_detect   = ml_count(day_start, day_end, {'prediction_type': 'object_detection'})
+            count_danger       = ml_count(day_start, day_end, {'prediction_type': 'danger_prediction'})
+            count_environment  = ml_count(day_start, day_end, {'prediction_type': 'environment_classification'})
 
             # ── Detection logs count ─────────────────────────────────────────
-            count_det_logs      = det_count(day_start, day_end)
+            count_det_logs     = det_count(day_start, day_end)
 
             # ── Anomaly counts (ml is_anomaly flag + High/Critical det logs) ─
-            ml_anomaly_count    = ml_count(day_start, day_end, {'is_anomaly': True})
-            det_anomaly_count   = det_count(day_start, day_end, {'danger_level': ['High', 'Critical']})
-            total_anomalies     = ml_anomaly_count + det_anomaly_count
+            ml_anomaly_count   = ml_count(day_start, day_end, {'is_anomaly': True})
+            det_anomaly_count  = det_count(day_start, day_end, {'danger_level': ['High', 'Critical']})
+            total_anomalies    = ml_anomaly_count + det_anomaly_count
 
             # ── Totals ───────────────────────────────────────────────────────
-            ml_total  = count_anomaly_type + count_maintenance + count_obj_detect + count_danger + count_environment
-            total     = ml_total + count_det_logs
+            ml_total = count_anomaly_type + count_obj_detect + count_danger + count_environment
+            total    = ml_total + count_det_logs
 
             # ── Avg confidence (weighted estimate, no row fetch needed) ──────
-            # Use known default confidences per type to estimate avg
             conf_sum = 0.0
-            if ml_total + count_det_logs > 0:
-                conf_sum += count_obj_detect   * 0.85  # detection_confidence default
-                conf_sum += count_danger       * 0.80  # danger_score / 100 avg estimate
-                conf_sum += count_maintenance  * 0.85  # maintenance_confidence default
-                conf_sum += count_anomaly_type * 0.85  # anomaly_score default
-                conf_sum += count_environment  * 0.85  # fixed default
-                conf_sum += count_det_logs     * 0.85  # detection logs fixed default
-                avg_confidence = round((conf_sum / total) * 100, 2) if total > 0 else 0.0
+            if total > 0:
+                conf_sum += count_obj_detect   * 0.85
+                conf_sum += count_danger       * 0.80
+                conf_sum += count_anomaly_type * 0.85
+                conf_sum += count_environment  * 0.85
+                conf_sum += count_det_logs     * 0.85
+                avg_confidence = round((conf_sum / total) * 100, 2)
             else:
                 avg_confidence = 0.0
 
             result.append({
-                'date_iso':          day_key,
-                'date':              day_label,
-                'anomalies':         total_anomalies,
-                'maintenance_alerts': count_maintenance,
+                'date_iso':           day_key,
+                'date':               day_label,
+                'anomalies':          total_anomalies,
                 # detections = object_detection ML rows + all detection_log rows
-                'detections':        count_obj_detect + count_det_logs,
+                'detections':         count_obj_detect + count_det_logs,
                 'danger_predictions': count_danger,
-                'avg_confidence':    avg_confidence,
-                'total_logs':        total,
+                'avg_confidence':     avg_confidence,
+                'total_logs':         total,
             })
 
         return jsonify({'data': result}), 200
