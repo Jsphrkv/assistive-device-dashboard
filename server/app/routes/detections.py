@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, Response
-from app.services.supabase_client import get_supabase
+from app.services.supabase_client import get_supabase, get_admin_client
 from app.middleware.auth import device_token_required, token_required, check_permission
 from app.constants.detection_categories import (
     get_detection_info,
@@ -307,7 +307,8 @@ def log_detection():
         if not data:
             return jsonify({'error': 'No data provided'}), 400
         
-        supabase = get_supabase()
+        # ✅ FIXED: Use admin client for device operations (bypasses RLS)
+        supabase = get_admin_client()
         
         # Get user_id from device
         print(f"🔍 Looking up user for device: {device_id}")
@@ -427,7 +428,7 @@ def log_detection():
         
         print(f"📝 Inserting detection: {object_detected} at {parsed_distance}cm")
         
-        # INSERT DETECTION
+        # INSERT DETECTION (supabase is already admin client)
         try:
             response = supabase.table('detection_logs')\
                 .insert(detection_log)\
@@ -450,12 +451,12 @@ def log_detection():
                 'details': str(db_error)
             }), 500
         
-        # ✅ FIXED: UPDATE LAST_SEEN with Philippine time
+        # ✅ FIXED: UPDATE LAST_SEEN with Philippine time (supabase is already admin client)
         try:
             print(f"⏰ Updating last_seen for device {device_id}")
             supabase.table('user_devices')\
                 .update({
-                    'last_seen': now_ph_iso(),  # ✅ FIXED
+                    'last_seen': now_ph_iso(),
                 })\
                 .eq('id', device_id)\
                 .execute()
@@ -509,7 +510,7 @@ def _update_user_statistics_safe(user_id, object_detected, detected_at):
         from datetime import datetime
         from app.utils.timezone_helper import utc_to_ph, PH_TIMEZONE
         
-        supabase = get_supabase()
+        supabase = get_admin_client()
         
         # ✅ FIXED: Parse timestamp and convert to Philippine time
         dt = datetime.fromisoformat(detected_at.replace('Z', '+00:00'))
@@ -611,7 +612,7 @@ def _update_user_statistics_safe(user_id, object_detected, detected_at):
 def _update_device_status_safe(device_id, detection_log, detected_at):
     """Update device status safely - Doesn't fail the request"""
     try:
-        supabase = get_supabase()
+        supabase = get_admin_client()
         
         status_check = supabase.table('device_status')\
             .select('id')\
@@ -653,7 +654,7 @@ def _upload_image_to_supabase(device_id, image_base64):
         timestamp = now_ph().strftime('%Y%m%d_%H%M%S')
         filename = f"{device_id}/{timestamp}_{uuid.uuid4().hex[:8]}.jpg"
         
-        supabase = get_supabase()
+        supabase = get_admin_client()
         supabase.storage.from_('detection-image').upload(
             path=filename,
             file=image_data,
