@@ -43,6 +43,8 @@ const StatisticsTab = ({ deviceId }) => {
             console.error("Hourly stats error:", err);
             return { data: { data: [] } };
           }),
+          // ✅ FIXED: statisticsAPI.getSummary calls /statistics/summary which returns
+          // { totalPredictions, anomalyRate, severityBreakdown: {high, medium, low}, categoryBreakdown: {critical, navigation, environmental} }
           statisticsAPI.getSummary().catch((err) => {
             console.error("Summary stats error:", err);
             return { data: null };
@@ -125,6 +127,14 @@ const StatisticsTab = ({ deviceId }) => {
     );
   }
 
+  // ✅ FIXED: Field mapping matches /statistics/summary backend response exactly
+  // Response: { totalPredictions, anomalyRate, severityBreakdown: {high, medium, low}, categoryBreakdown: {critical, navigation, environmental} }
+  const totalDetections = mlSummary?.totalPredictions ?? 0;
+  const highDanger = mlSummary?.severityBreakdown?.high ?? 0;
+  const mediumDanger = mlSummary?.severityBreakdown?.medium ?? 0;
+  const lowDanger = mlSummary?.severityBreakdown?.low ?? 0;
+  const anomalyRate = mlSummary?.anomalyRate ?? 0;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -165,7 +175,9 @@ const StatisticsTab = ({ deviceId }) => {
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="bg-white rounded-lg shadow p-6">
             <p className="text-sm text-gray-600 mb-1">Total Detections</p>
-            <p className="text-3xl font-bold text-gray-900">3710</p>
+            <p className="text-3xl font-bold text-gray-900">
+              {totalDetections.toLocaleString()}
+            </p>
             <p className="text-xs text-gray-500 mt-1">
               All-time sensor records
             </p>
@@ -173,7 +185,9 @@ const StatisticsTab = ({ deviceId }) => {
 
           <div className="bg-red-50 rounded-lg shadow p-6">
             <p className="text-sm text-red-600 mb-1">High Danger</p>
-            <p className="text-3xl font-bold text-red-600">309</p>
+            <p className="text-3xl font-bold text-red-600">
+              {highDanger.toLocaleString()}
+            </p>
             <p className="text-xs text-red-500 mt-1">
               Immediate attention needed
             </p>
@@ -181,19 +195,27 @@ const StatisticsTab = ({ deviceId }) => {
 
           <div className="bg-yellow-50 rounded-lg shadow p-6">
             <p className="text-sm text-yellow-600 mb-1">Medium Danger</p>
-            <p className="text-3xl font-bold text-yellow-600">420</p>
+            <p className="text-3xl font-bold text-yellow-600">
+              {mediumDanger.toLocaleString()}
+            </p>
             <p className="text-xs text-yellow-500 mt-1">Caution recommended</p>
           </div>
 
           <div className="bg-blue-50 rounded-lg shadow p-6">
             <p className="text-sm text-blue-600 mb-1">Low Danger</p>
-            <p className="text-3xl font-bold text-blue-600">2981</p>
+            <p className="text-3xl font-bold text-blue-600">
+              {lowDanger.toLocaleString()}
+            </p>
             <p className="text-xs text-blue-500 mt-1">Normal operation range</p>
           </div>
 
           <div className="bg-purple-50 rounded-lg shadow p-6">
             <p className="text-sm text-purple-600 mb-1">Anomaly Rate</p>
-            <p className="text-3xl font-bold text-purple-600">8.33%</p>
+            <p className="text-3xl font-bold text-purple-600">
+              {typeof anomalyRate === "number"
+                ? `${anomalyRate.toFixed(2)}%`
+                : `${anomalyRate}%`}
+            </p>
             <p className="text-xs text-purple-500 mt-1">
               High + Critical detections
             </p>
@@ -212,14 +234,14 @@ const StatisticsTab = ({ deviceId }) => {
         <PeakTimesChart data={hourlyStats} loading={loading} />
       </div>
 
-      {/* ✅ FIXED: ML Statistics Section - 2+2 Grid Layout */}
+      {/* ML Statistics Section - 2+2 Grid Layout */}
       <div className="mt-8">
         <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
           <BarChart3 className="w-5 h-5 text-blue-600" />
           ML Statistics
         </h3>
 
-        {/* ✅ First Row: 2 columns (was 3) */}
+        {/* First Row: 2 columns */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           <AnomalyAlert deviceId={deviceId} />
           <DeviceHealthMonitor deviceId={deviceId} />
