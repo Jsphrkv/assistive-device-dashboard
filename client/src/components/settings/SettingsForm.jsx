@@ -9,18 +9,20 @@ const SettingsForm = ({
   onCancel,
   editMode,
   loading,
+  isDirty, // FIX: receives dirty flag from parent to show unsaved changes warning
 }) => {
   return (
     <div className="space-y-6">
-      {/* View mode banner */}
-      {/* {!editMode && (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-          <p className="text-sm text-gray-600">
-            📋 Viewing current settings. Click <strong>Edit Settings</strong> to
-            make changes.
-          </p>
+      {/* FIX: Removed stale commented-out view mode banner — dead JSX
+          comment blocks cause confusion about intended behaviour.
+          If the banner is needed again, restore it from git history. */}
+
+      {/* Unsaved changes warning */}
+      {editMode && isDirty && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+          <p className="text-sm text-amber-700">⚠️ You have unsaved changes.</p>
         </div>
-      )} */}
+      )}
 
       {/* Sensitivity */}
       <div>
@@ -157,7 +159,6 @@ const SettingsForm = ({
 
       {/* Buttons */}
       {!editMode ? (
-        // View mode - show Edit button
         <button
           onClick={onEdit}
           className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium"
@@ -165,7 +166,6 @@ const SettingsForm = ({
           ✏️ Edit Settings
         </button>
       ) : (
-        // Edit mode - show Save + Cancel
         <div className="flex gap-3">
           <button
             onClick={onCancel}

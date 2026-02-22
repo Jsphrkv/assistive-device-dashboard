@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { BarChart3, RefreshCw, AlertCircle } from "lucide-react";
-import { statisticsAPI } from "../../services/api";
+import { statisticsAPI, mlAPI } from "../../services/api";
 import AlertsChart from "./AlertsChart";
 import ObstaclesChart from "./ObstaclesChart";
 import PeakTimesChart from "./PeakTimesChart";
@@ -14,14 +14,34 @@ const StatisticsTab = ({ deviceId }) => {
   const [obstacleStats, setObstacleStats] = useState([]);
   const [hourlyStats, setHourlyStats] = useState([]);
   const [mlSummary, setMlSummary] = useState(null);
+
+  // ✅ NEW: Centralized ML data state
+  const [mlData, setMlData] = useState({
+    anomalies: [],
+    healthData: [],
+    dangerData: [],
+    environmentData: [],
+  });
+
   const [loading, setLoading] = useState(true);
+  const [mlLoading, setMlLoading] = useState(true);
   const [error, setError] = useState(null);
   const [hasData, setHasData] = useState(false);
 
   useEffect(() => {
     fetchStatistics();
-    const interval = setInterval(fetchStatistics, 60000);
-    return () => clearInterval(interval);
+    fetchMLData();
+
+    // Refresh statistics every 60s
+    const statsInterval = setInterval(fetchStatistics, 60000);
+
+    // ✅ OPTIMIZATION: Single ML data fetch every 30s instead of 4 separate calls
+    const mlInterval = setInterval(fetchMLData, 30000);
+
+    return () => {
+      clearInterval(statsInterval);
+      clearInterval(mlInterval);
+    };
   }, [deviceId]);
 
   const fetchStatistics = async () => {
@@ -43,8 +63,6 @@ const StatisticsTab = ({ deviceId }) => {
             console.error("Hourly stats error:", err);
             return { data: { data: [] } };
           }),
-          // ✅ FIXED: statisticsAPI.getSummary calls /statistics/summary which returns
-          // { totalPredictions, anomalyRate, severityBreakdown: {high, medium, low}, categoryBreakdown: {critical, navigation, environmental} }
           statisticsAPI.getSummary().catch((err) => {
             console.error("Summary stats error:", err);
             return { data: null };
@@ -95,6 +113,51 @@ const StatisticsTab = ({ deviceId }) => {
     }
   };
 
+  // ✅ NEW: Centralized ML data fetching (replaces 4 separate API calls)
+  const fetchMLData = async () => {
+    setMlLoading(true);
+
+    try {
+      // Fetch all ML data types in parallel
+      const [anomaliesRes, healthRes, dangerRes, environmentRes] =
+        await Promise.all([
+          mlAPI.getAnomalies(10).catch(() => ({ data: { data: [] } })),
+          mlAPI
+            .getHistory({ type: "anomaly", limit: 10 })
+            .catch(() => ({ data: { data: [] } })),
+          mlAPI
+            .getHistory({ type: "danger_prediction", limit: 10 })
+            .catch(() => ({ data: { data: [] } })),
+          mlAPI
+            .getHistory({ type: "environment_classification", limit: 10 })
+            .catch(() => ({ data: { data: [] } })),
+        ]);
+
+      // Filter by deviceId if provided
+      const filterByDevice = (items) => {
+        if (!deviceId || deviceId === "device-001") return items;
+        return items.filter((item) => item.device_id === deviceId);
+      };
+
+      setMlData({
+        anomalies: filterByDevice(anomaliesRes.data?.data || []),
+        healthData: filterByDevice(healthRes.data?.data || []),
+        dangerData: filterByDevice(dangerRes.data?.data || []),
+        environmentData: filterByDevice(environmentRes.data?.data || []),
+      });
+    } catch (error) {
+      console.error("Error fetching ML data:", error);
+    } finally {
+      setMlLoading(false);
+    }
+  };
+
+  // ✅ NEW: Refresh both statistics and ML data
+  const handleRefresh = () => {
+    fetchStatistics();
+    fetchMLData();
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -115,7 +178,7 @@ const StatisticsTab = ({ deviceId }) => {
               </h3>
               <p className="text-red-800 mb-4">{error}</p>
               <button
-                onClick={fetchStatistics}
+                onClick={handleRefresh}
                 className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
               >
                 Try Again
@@ -127,8 +190,6 @@ const StatisticsTab = ({ deviceId }) => {
     );
   }
 
-  // ✅ FIXED: Field mapping matches /statistics/summary backend response exactly
-  // Response: { totalPredictions, anomalyRate, severityBreakdown: {high, medium, low}, categoryBreakdown: {critical, navigation, environmental} }
   const totalDetections = mlSummary?.totalPredictions ?? 0;
   const highDanger = mlSummary?.severityBreakdown?.high ?? 0;
   const mediumDanger = mlSummary?.severityBreakdown?.medium ?? 0;
@@ -143,12 +204,14 @@ const StatisticsTab = ({ deviceId }) => {
           Statistics & Analytics
         </h2>
         <button
-          onClick={fetchStatistics}
-          disabled={loading}
+          onClick={handleRefresh}
+          disabled={loading || mlLoading}
           className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
         >
-          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-          <span className="text-sm">Refresh</span>
+          <RefreshCw
+            className={`w-4 h-4 ${loading || mlLoading ? "animate-spin" : ""}`}
+          />
+          <span className="text-sm">Refresh All</span>
         </button>
       </div>
 
@@ -243,14 +306,32 @@ const StatisticsTab = ({ deviceId }) => {
 
         {/* First Row: 2 columns */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          <AnomalyAlert deviceId={deviceId} />
-          <DeviceHealthMonitor deviceId={deviceId} />
+          {/* ✅ OPTIMIZED: Pass pre-fetched data as props */}
+          <AnomalyAlert
+            deviceId={deviceId}
+            anomaliesData={mlData.anomalies}
+            loading={mlLoading}
+          />
+          <DeviceHealthMonitor
+            deviceId={deviceId}
+            healthData={mlData.healthData}
+            loading={mlLoading}
+          />
         </div>
 
         {/* Second Row: 2 columns */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <DangerMonitor deviceId={deviceId} />
-          <EnvironmentMonitor deviceId={deviceId} />
+          {/* ✅ OPTIMIZED: Pass pre-fetched data as props */}
+          <DangerMonitor
+            deviceId={deviceId}
+            dangerData={mlData.dangerData}
+            loading={mlLoading}
+          />
+          <EnvironmentMonitor
+            deviceId={deviceId}
+            environmentData={mlData.environmentData}
+            loading={mlLoading}
+          />
         </div>
       </div>
     </div>

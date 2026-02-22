@@ -192,7 +192,8 @@ export const mlAPI = {
   getHistory: (params = {}) => {
     const queryParams = new URLSearchParams();
     if (params.limit) queryParams.append("limit", params.limit);
-    if (params.offset) queryParams.append("offset", params.offset);
+    if (params.offset !== undefined)
+      queryParams.append("offset", params.offset);
     if (params.type) queryParams.append("type", params.type);
     if (params.anomalies_only)
       queryParams.append("anomalies_only", params.anomalies_only);

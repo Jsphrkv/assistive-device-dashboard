@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { mlAPI } from "../../services/api";
 
-// ✅ FIX: Cache keyed by days so fetchStats(7) and fetchStats(90) never share a slot
+// Cache keyed by days so fetchStats(7) and fetchStats(90) never share a slot
 const cache = {
   data: null,
   timestamp: null,
@@ -106,9 +106,7 @@ export const useMLHistory = (options = {}) => {
     ],
   );
 
-  // ✅ FIX: fetchStats now keys cache by days value
-  //    Previously all days shared one cache slot, so fetchStats(90) would
-  //    return the same cached result as fetchStats(7).
+  // fetchStats keyed by days value to avoid cache collisions
   const fetchStats = useCallback(
     async (days = 7, force = false) => {
       const now = Date.now();
@@ -124,6 +122,7 @@ export const useMLHistory = (options = {}) => {
         const cached = cache.statsByDays[cacheKey];
         if (isMounted.current) {
           setStats(cached);
+          // FIX: anomalyCount comes from stats, use it as source of truth
           setTotalAnomalyCount(cached.anomalyCount || 0);
         }
         return cached;
@@ -138,6 +137,7 @@ export const useMLHistory = (options = {}) => {
 
         if (isMounted.current) {
           setStats(statsData);
+          // FIX: use anomalyCount from stats API as the single source of truth
           setTotalAnomalyCount(statsData.anomalyCount || 0);
         }
 
@@ -150,19 +150,23 @@ export const useMLHistory = (options = {}) => {
     [cacheDuration],
   );
 
-  // ✅ Lightweight fetch just for total anomaly count (all-time, unfiltered)
+  // FIX: fetchTotalAnomalyCount now uses getStats(7) as source of truth
+  // instead of relying on response.data.total from a limit=1 query
+  // which is unreliable if backend doesn't return total when limit=1.
   const fetchTotalAnomalyCount = useCallback(async () => {
     try {
-      const response = await mlAPI.getHistory({
-        anomalies_only: true,
-        limit: 1,
-        offset: 0,
-      });
-      const count = response.data.total || 0;
+      const response = await mlAPI.getStats(7);
+      const count = response.data?.anomalyCount || 0;
       if (isMounted.current) setTotalAnomalyCount(count);
       return count;
     } catch (err) {
       console.error("Failed to fetch total anomaly count:", err);
+      // Fallback: count anomalies in already-loaded history
+      if (isMounted.current && cache.data) {
+        const fallback = cache.data.filter((item) => item.is_anomaly).length;
+        setTotalAnomalyCount(fallback);
+        return fallback;
+      }
       return 0;
     }
   }, []);

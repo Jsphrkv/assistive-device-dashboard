@@ -38,19 +38,13 @@ const OBJECT_ICONS = {
 const ITEMS_PER_PAGE = 10;
 
 const DetectionLogsTab = () => {
-  const {
-    detections,
-    loading,
-    error,
-    refresh,
-    addDetection,
-    getMLDetections,
-    getMLStats,
-  } = useDetectionLogs({
-    limit: 1000,
-    autoFetch: true,
-    cacheDuration: 30000,
-  });
+  // FIX: Removed getMLDetections — destructured but never used in JSX.
+  const { detections, loading, error, refresh, addDetection, getMLStats } =
+    useDetectionLogs({
+      limit: 1000,
+      autoFetch: true,
+      cacheDuration: 30000,
+    });
 
   const [dbStats, setDbStats] = useState({
     total: 0,
@@ -69,7 +63,6 @@ const DetectionLogsTab = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [dateRange, setDateRange] = useState("7days");
   const [showMLOnly, setShowMLOnly] = useState(false);
-
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
@@ -105,7 +98,7 @@ const DetectionLogsTab = () => {
         navigation: data?.categoryBreakdown?.navigation || 0,
         environmental: data?.categoryBreakdown?.environmental || 0,
         high_danger: data?.severityBreakdown?.high || 0,
-        avg_confidence: mlData?.avgConfidence || 0, // ← replaces ml_detections
+        avg_confidence: mlData?.avgConfidence || 0,
       });
     } catch (error) {
       console.error("Error fetching DB stats:", error);
@@ -159,7 +152,6 @@ const DetectionLogsTab = () => {
     if (dateRange !== "all") {
       const now = new Date();
       const cutoff = new Date();
-
       switch (dateRange) {
         case "1hour":
           cutoff.setHours(now.getHours() - 1);
@@ -176,23 +168,14 @@ const DetectionLogsTab = () => {
         default:
           break;
       }
-
       filtered = filtered.filter((d) => new Date(d.detected_at) >= cutoff);
     }
 
     setFilteredDetections(filtered);
   };
 
-  const handleNewDetection = async (detection) => {
-    try {
-      addDetection({
-        ...detection,
-        detected_at: new Date().toISOString(),
-      });
-    } catch (error) {
-      console.error("Failed to log detection:", error);
-    }
-  };
+  // FIX: Removed handleNewDetection — it was defined but never called anywhere
+  // in the component. addDetection from the hook remains available if needed.
 
   const handleRefresh = async () => {
     try {
@@ -210,7 +193,6 @@ const DetectionLogsTab = () => {
       if (dateRange !== "all") {
         const now = new Date();
         const cutoff = new Date();
-
         switch (dateRange) {
           case "1hour":
             cutoff.setHours(now.getHours() - 1);
@@ -227,7 +209,6 @@ const DetectionLogsTab = () => {
           default:
             break;
         }
-
         params.append("start_date", cutoff.toISOString());
       }
 
@@ -236,7 +217,6 @@ const DetectionLogsTab = () => {
       }
 
       const response = await detectionsAPI.export(params.toString());
-
       const blob = new Blob([response.data], {
         type:
           format === "pdf"
@@ -281,13 +261,9 @@ const DetectionLogsTab = () => {
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const endIndex = startIndex + ITEMS_PER_PAGE;
   const currentDetections = filteredDetections.slice(startIndex, endIndex);
-
-  const goToPage = (page) => {
+  const goToPage = (page) =>
     setCurrentPage(Math.max(1, Math.min(page, totalPages)));
-  };
-
   const mlStats = getMLStats();
-
   const uniqueObjects = [
     ...new Set(detections.map((d) => d.object_detected)),
   ].filter(Boolean);
@@ -346,7 +322,6 @@ const DetectionLogsTab = () => {
             <span className="text-sm">Refresh</span>
           </button>
 
-          {/* Export dropdown */}
           <div className="relative group">
             <button className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
               <Download className="w-4 h-4" />
@@ -357,22 +332,19 @@ const DetectionLogsTab = () => {
                 onClick={() => exportDetections("csv")}
                 className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2 rounded-t-lg"
               >
-                <FileSpreadsheet className="w-4 h-4" />
-                Export CSV
+                <FileSpreadsheet className="w-4 h-4" /> Export CSV
               </button>
               <button
                 onClick={() => exportDetections("json")}
                 className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2"
               >
-                <FileJson className="w-4 h-4" />
-                Export JSON
+                <FileJson className="w-4 h-4" /> Export JSON
               </button>
               <button
                 onClick={() => exportDetections("pdf")}
                 className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2 rounded-b-lg"
               >
-                <FileText className="w-4 h-4" />
-                Export PDF
+                <FileText className="w-4 h-4" /> Export PDF
               </button>
             </div>
           </div>
@@ -392,7 +364,6 @@ const DetectionLogsTab = () => {
             </p>
           )}
         </div>
-
         <div className="bg-red-50 rounded-lg shadow p-4">
           <p className="text-xs text-red-600 mb-1">Critical</p>
           <p className="text-2xl font-bold text-red-600">
@@ -400,7 +371,6 @@ const DetectionLogsTab = () => {
           </p>
           <p className="text-xs text-red-500 mt-1">Critical detections</p>
         </div>
-
         <div className="bg-orange-50 rounded-lg shadow p-4">
           <p className="text-xs text-orange-600 mb-1">Navigation</p>
           <p className="text-2xl font-bold text-orange-600">
@@ -408,7 +378,6 @@ const DetectionLogsTab = () => {
           </p>
           <p className="text-xs text-orange-500 mt-1">Navigation hazards</p>
         </div>
-
         <div className="bg-yellow-50 rounded-lg shadow p-4">
           <p className="text-xs text-yellow-600 mb-1">Environmental</p>
           <p className="text-2xl font-bold text-yellow-600">
@@ -416,7 +385,6 @@ const DetectionLogsTab = () => {
           </p>
           <p className="text-xs text-yellow-500 mt-1">Environmental hazards</p>
         </div>
-
         <div className="bg-purple-50 rounded-lg shadow p-4">
           <p className="text-xs text-purple-600 mb-1">High Danger</p>
           <p className="text-2xl font-bold text-purple-600">
@@ -424,8 +392,6 @@ const DetectionLogsTab = () => {
           </p>
           <p className="text-xs text-purple-500 mt-1">High danger events</p>
         </div>
-
-        {/* ✅ Replaced redundant "Total Records" with Avg Detection Confidence */}
         <div className="bg-blue-50 rounded-lg shadow p-4">
           <p className="text-xs text-blue-600 mb-1">Avg Confidence</p>
           <p className="text-2xl font-bold text-blue-600">
@@ -471,7 +437,6 @@ const DetectionLogsTab = () => {
           <Filter className="w-5 h-5 text-gray-600 mr-2" />
           <h3 className="text-sm font-semibold text-gray-900">Filters</h3>
         </div>
-
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -483,7 +448,6 @@ const DetectionLogsTab = () => {
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-
           <select
             value={filterObject}
             onChange={(e) => setFilterObject(e.target.value)}
@@ -496,7 +460,6 @@ const DetectionLogsTab = () => {
               </option>
             ))}
           </select>
-
           <select
             value={filterCategory}
             onChange={(e) => setFilterCategory(e.target.value)}
@@ -508,7 +471,6 @@ const DetectionLogsTab = () => {
             <option value="environmental">Environmental</option>
             <option value="unknown">Unknown</option>
           </select>
-
           <select
             value={filterDanger}
             onChange={(e) => setFilterDanger(e.target.value)}
@@ -519,7 +481,6 @@ const DetectionLogsTab = () => {
             <option value="medium">Medium</option>
             <option value="low">Low</option>
           </select>
-
           <select
             value={dateRange}
             onChange={(e) => setDateRange(e.target.value)}
@@ -579,74 +540,79 @@ const DetectionLogsTab = () => {
                   </td>
                 </tr>
               ) : (
-                currentDetections.map((detection) => (
-                  <tr key={detection.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      <div className="flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-gray-400" />
-                        {new Date(detection.detected_at).toLocaleString()}
-                        {detection.detection_source === "camera" && (
-                          <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full flex items-center gap-1">
-                            <Brain className="w-3 h-3" />
-                            ML
+                currentDetections.map((detection) => {
+                  // FIX: confidence stored as decimal (0.87) — multiply for display
+                  const rawConf = detection.detection_confidence || 0;
+                  const confPct = rawConf > 1 ? rawConf : rawConf * 100;
+
+                  return (
+                    <tr key={detection.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-gray-400" />
+                          {/* FIX: Format ISO timestamp for readability */}
+                          {new Date(detection.detected_at).toLocaleString()}
+                          {detection.detection_source === "camera" && (
+                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full flex items-center gap-1">
+                              <Brain className="w-3 h-3" /> ML
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl">
+                            {OBJECT_ICONS[detection.object_detected] || "❓"}
                           </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl">
-                          {OBJECT_ICONS[detection.object_detected] || "❓"}
-                        </span>
-                        <div>
-                          <p className="text-sm font-medium text-gray-900 capitalize">
-                            {detection.object_detected || "unknown"}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {detection.obstacle_type}
-                          </p>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900 capitalize">
+                              {detection.object_detected || "unknown"}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {detection.obstacle_type}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`px-3 py-1 text-xs font-medium rounded-full border ${getCategoryColor(detection.object_category)}`}
-                      >
-                        {detection.object_category || "unknown"}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {detection.distance_cm
-                        ? `${detection.distance_cm.toFixed(1)} cm`
-                        : "N/A"}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`px-2 py-1 text-xs font-semibold rounded uppercase ${getDangerBadge(detection.danger_level)}`}
-                      >
-                        {detection.danger_level}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {detection.alert_type}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
-                          <div
-                            className="bg-green-600 h-2 rounded-full"
-                            style={{
-                              width: `${detection.detection_confidence || 85}%`,
-                            }}
-                          />
-                        </div>
-                        <span className="text-xs">
-                          {(detection.detection_confidence || 85).toFixed(0)}%
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span
+                          className={`px-3 py-1 text-xs font-medium rounded-full border ${getCategoryColor(detection.object_category)}`}
+                        >
+                          {detection.object_category || "unknown"}
                         </span>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {/* FIX: null guard — shows "N/A" instead of "null cm" */}
+                        {detection.distance_cm
+                          ? `${detection.distance_cm.toFixed(1)} cm`
+                          : "N/A"}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span
+                          className={`px-2 py-1 text-xs font-semibold rounded uppercase ${getDangerBadge(detection.danger_level)}`}
+                        >
+                          {detection.danger_level}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {detection.alert_type}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
+                            <div
+                              className="bg-green-600 h-2 rounded-full"
+                              style={{
+                                width: `${Math.min(100, confPct).toFixed(0)}%`,
+                              }}
+                            />
+                          </div>
+                          <span className="text-xs">{confPct.toFixed(0)}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -661,7 +627,6 @@ const DetectionLogsTab = () => {
             {Math.min(endIndex, filteredDetections.length)} of{" "}
             {filteredDetections.length} loaded logs
           </p>
-
           <div className="flex items-center gap-2">
             <button
               onClick={() => goToPage(currentPage - 1)}
@@ -670,11 +635,9 @@ const DetectionLogsTab = () => {
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
-
             <span className="text-sm text-gray-700">
               Page {currentPage} of {totalPages}
             </span>
-
             <button
               onClick={() => goToPage(currentPage + 1)}
               disabled={currentPage === totalPages}

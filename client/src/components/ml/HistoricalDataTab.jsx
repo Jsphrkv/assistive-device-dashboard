@@ -51,6 +51,11 @@ const TYPE_COLORS = {
   environment: "bg-blue-50 text-blue-700 border-blue-200",
 };
 
+// FIX: Extracted as plain function — useCallback was unnecessary overhead
+// for a pure string-to-number mapping with no dependencies to close over.
+const getDays = (range) =>
+  range === "7days" ? 7 : range === "30days" ? 30 : 90;
+
 const HistoricalDataTab = () => {
   const [dateRange, setDateRange] = useState("7days");
   const [viewMode, setViewMode] = useState("charts");
@@ -67,18 +72,17 @@ const HistoricalDataTab = () => {
   const [dailySummary, setDailySummary] = useState([]);
   const [dailyLoading, setDailyLoading] = useState(false);
 
+  // FIX: Separate stats for Logs view so its stat cards reflect
+  // logsDateRange instead of incorrectly showing charts dateRange.
+  const [logsStats, setLogsStats] = useState(null);
+  const [logsStatsLoading, setLogsStatsLoading] = useState(false);
+
   const { history, totalCount, stats, loading, error, refresh, fetchStats } =
     useMLHistory({
       limit: 10000,
       autoFetch: true,
       cacheDuration: 30000,
     });
-
-  const getDays = useCallback(
-    (range = dateRange) =>
-      range === "7days" ? 7 : range === "30days" ? 30 : 90,
-    [dateRange],
-  );
 
   const fetchDailySummary = useCallback(async (days) => {
     setDailyLoading(true);
@@ -93,11 +97,39 @@ const HistoricalDataTab = () => {
     }
   }, []);
 
+  // FIX: Removed hardcoded `true` (force-refresh) — was bypassing the
+  // 30-second cache on every date change, making the cache useless.
+  // Now respects cache normally; user can still force via Refresh button.
   useEffect(() => {
     const days = getDays(dateRange);
     fetchDailySummary(days);
-    fetchStats(days, true);
+    fetchStats(days);
   }, [dateRange]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // FIX: Fetch separate stats scoped to logsDateRange so the Logs view
+  // stat cards (Anomalies, Object Detections, Avg Confidence) always
+  // reflect the logs filter period, not the charts period.
+  useEffect(() => {
+    if (viewMode !== "logs") return;
+
+    if (logsDateRange === "all") {
+      // "All time" — reuse the existing hook stats (no date filter)
+      setLogsStats(null);
+      return;
+    }
+
+    const days = getDays(logsDateRange);
+    setLogsStatsLoading(true);
+    mlAPI
+      .getStats(days)
+      .then((res) => setLogsStats(res.data || null))
+      .catch(() => setLogsStats(null))
+      .finally(() => setLogsStatsLoading(false));
+  }, [logsDateRange, viewMode]);
+
+  // The stats shown in Logs cards: prefer logsStats when available,
+  // fall back to hook stats for "all time" range.
+  const activeLogsStats = logsDateRange === "all" ? stats : logsStats;
 
   // ── Logs filtering ────────────────────────────────────────────────────────
   const filteredLogs = useMemo(() => {
@@ -161,7 +193,6 @@ const HistoricalDataTab = () => {
     filterSource,
     searchQuery,
     showAnomaliesOnly,
-    getDays,
   ]);
 
   const paginatedLogs = useMemo(() => {
@@ -221,7 +252,10 @@ const HistoricalDataTab = () => {
           log.prediction_type || "unknown",
           log.source || "N/A",
           log.device_name || "Unknown",
-          ((log.confidence_score || 0.85) * 100).toFixed(1) + "%",
+          // FIX: No fabricated fallback — export real value or blank
+          log.confidence_score != null
+            ? (log.confidence_score * 100).toFixed(1) + "%"
+            : "N/A",
           log.is_anomaly ? "Yes" : "No",
           JSON.stringify(log.result || {}).replace(/,/g, ";"),
         ]),
@@ -322,6 +356,27 @@ const HistoricalDataTab = () => {
     }
   };
 
+  // ── Helper: render confidence cell ────────────────────────────────────────
+  // FIX: Removed `|| 0.85` fabricated fallback. When confidence_score is
+  // null/undefined we now show "N/A" instead of a fake 85% reading.
+  const renderConfidence = (score) => {
+    if (score == null) {
+      return <span className="text-xs text-gray-400">N/A</span>;
+    }
+    const pct = (score * 100).toFixed(0);
+    return (
+      <div className="flex items-center">
+        <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
+          <div
+            className="bg-green-600 h-2 rounded-full"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <span className="text-xs">{pct}%</span>
+      </div>
+    );
+  };
+
   // ── Error state ───────────────────────────────────────────────────────────
   if (error) {
     return (
@@ -330,9 +385,9 @@ const HistoricalDataTab = () => {
         <p className="text-red-600 font-medium">{error}</p>
         <button
           onClick={() => {
-            const days = getDays();
+            const days = getDays(dateRange);
             refresh();
-            fetchStats(days, true);
+            fetchStats(days);
             fetchDailySummary(days);
           }}
           className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
@@ -427,9 +482,9 @@ const HistoricalDataTab = () => {
 
           <button
             onClick={() => {
-              const days = getDays();
+              const days = getDays(dateRange);
               refresh();
-              fetchStats(days, true);
+              fetchStats(days);
               fetchDailySummary(days);
             }}
             disabled={loading || dailyLoading}
@@ -549,7 +604,7 @@ const HistoricalDataTab = () => {
             )}
           </div>
 
-          {/* Summary cards — 4 columns (maintenance removed) */}
+          {/* Summary cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-white rounded-lg shadow p-4">
               <p className="text-sm text-gray-600 mb-1">Total Anomalies</p>
@@ -683,7 +738,9 @@ const HistoricalDataTab = () => {
       ══════════════════════════════════════════════════════════════════════ */}
       {history.length > 0 && viewMode === "logs" && (
         <>
-          {/* Logs stats cards — 4 columns (maintenance removed) */}
+          {/* FIX: Logs stat cards now use activeLogsStats (scoped to
+              logsDateRange) instead of the charts-period `stats`.
+              A loading spinner is shown while logsStats is being fetched. */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-white rounded-lg shadow p-4">
               <p className="text-xs text-gray-600 mb-1">Total Entries</p>
@@ -696,32 +753,44 @@ const HistoricalDataTab = () => {
             </div>
             <div className="bg-red-50 rounded-lg shadow p-4">
               <p className="text-xs text-red-600 mb-1">Anomalies</p>
-              <p className="text-2xl font-bold text-red-600">
-                {stats?.anomalyCount ?? 0}
-              </p>
+              {logsStatsLoading ? (
+                <div className="animate-pulse h-8 bg-red-100 rounded w-12 mb-1" />
+              ) : (
+                <p className="text-2xl font-bold text-red-600">
+                  {activeLogsStats?.anomalyCount ?? 0}
+                </p>
+              )}
               <p className="text-xs text-red-500 mt-1">
-                {stats
-                  ? `${stats.anomalyRate}% rate • ML + Sensor`
+                {activeLogsStats
+                  ? `${activeLogsStats.anomalyRate}% rate • ML + Sensor`
                   : "ML + Sensor"}
               </p>
             </div>
             <div className="bg-purple-50 rounded-lg shadow p-4">
               <p className="text-xs text-purple-600 mb-1">Object Detections</p>
-              <p className="text-2xl font-bold text-purple-600">
-                {stats
-                  ? (stats.byType?.object_detection ?? 0) +
-                    (stats.byType?.detection ?? 0)
-                  : 0}
-              </p>
+              {logsStatsLoading ? (
+                <div className="animate-pulse h-8 bg-purple-100 rounded w-12 mb-1" />
+              ) : (
+                <p className="text-2xl font-bold text-purple-600">
+                  {activeLogsStats
+                    ? (activeLogsStats.byType?.object_detection ?? 0) +
+                      (activeLogsStats.byType?.detection ?? 0)
+                    : 0}
+                </p>
+              )}
               <p className="text-xs text-purple-500 mt-1">
                 Object detections only
               </p>
             </div>
             <div className="bg-green-50 rounded-lg shadow p-4">
               <p className="text-xs text-green-600 mb-1">Avg Confidence</p>
-              <p className="text-2xl font-bold text-green-600">
-                {stats?.avgConfidence ?? 0}%
-              </p>
+              {logsStatsLoading ? (
+                <div className="animate-pulse h-8 bg-green-100 rounded w-12 mb-1" />
+              ) : (
+                <p className="text-2xl font-bold text-green-600">
+                  {activeLogsStats?.avgConfidence ?? 0}%
+                </p>
+              )}
               <p className="text-xs text-green-500 mt-1">
                 Across all prediction types
               </p>
@@ -863,23 +932,9 @@ const HistoricalDataTab = () => {
                             <td className="px-6 py-4 text-sm max-w-md">
                               {renderResult(log)}
                             </td>
+                            {/* FIX: Uses renderConfidence() — no fabricated 0.85 fallback */}
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex items-center">
-                                <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
-                                  <div
-                                    className="bg-green-600 h-2 rounded-full"
-                                    style={{
-                                      width: `${(log.confidence_score || 0.85) * 100}%`,
-                                    }}
-                                  />
-                                </div>
-                                <span className="text-xs">
-                                  {(
-                                    (log.confidence_score || 0.85) * 100
-                                  ).toFixed(0)}
-                                  %
-                                </span>
-                              </div>
+                              {renderConfidence(log.confidence_score)}
                             </td>
                           </tr>
                         );

@@ -1,6 +1,11 @@
 import React from "react";
 import { getDangerColor } from "../../utils/helpers";
 
+// NOTE: This component is NOT currently used by DetectionLogsTab —
+// that tab renders its own inline table. LogsTable is a simpler
+// read-only table, likely intended for embedding elsewhere (e.g. Dashboard
+// or a modal). Keeping it here in case it's used in other places.
+
 const LogsTable = ({ logs }) => {
   if (!logs || logs.length === 0) {
     return (
@@ -36,25 +41,29 @@ const LogsTable = ({ logs }) => {
           {logs.map((log) => (
             <tr key={log.id} className="hover:bg-gray-50">
               <td className="px-6 py-4 text-sm text-gray-900">
-                {log.detected_at}
+                {/* FIX: Format raw ISO timestamp so it's human-readable */}
+                {log.detected_at
+                  ? new Date(log.detected_at).toLocaleString()
+                  : "N/A"}
               </td>
               <td className="px-6 py-4 text-sm text-gray-900">
-                {log.obstacle_type}
+                {log.obstacle_type || "unknown"}
               </td>
               <td className="px-6 py-4 text-sm text-gray-900">
-                {log.distance_cm} cm
+                {/* FIX: null guard — was rendering "null cm" or "undefined cm" */}
+                {log.distance_cm != null ? `${log.distance_cm} cm` : "N/A"}
               </td>
               <td className="px-6 py-4">
                 <span
                   className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getDangerColor(
-                    log.danger_level
+                    log.danger_level,
                   )}`}
                 >
-                  {log.danger_level}
+                  {log.danger_level || "Unknown"}
                 </span>
               </td>
               <td className="px-6 py-4 text-sm text-gray-900">
-                {log.alert_type}
+                {log.alert_type || "—"}
               </td>
             </tr>
           ))}

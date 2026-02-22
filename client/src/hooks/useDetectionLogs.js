@@ -21,12 +21,10 @@ export const useDetectionLogs = (options = {}) => {
   const [error, setError] = useState(null);
   const isMounted = useRef(true);
 
-  // Fetch detections with caching
   const fetchDetections = useCallback(
     async (force = false) => {
       const now = Date.now();
 
-      // Return cached data if fresh
       if (
         !force &&
         cache.data &&
@@ -42,13 +40,9 @@ export const useDetectionLogs = (options = {}) => {
       setError(null);
 
       try {
-        // Fetch from detections API (includes ML data!)
         const response = await detectionsAPI.getRecent(limit);
-
-        // Backend returns: { detections: [...] }
         const data = response.data.detections || [];
 
-        // Update cache
         cache.data = data;
         cache.timestamp = now;
 
@@ -77,7 +71,6 @@ export const useDetectionLogs = (options = {}) => {
     [limit, cacheDuration],
   );
 
-  // Auto-fetch on mount
   useEffect(() => {
     isMounted.current = true;
 
@@ -90,35 +83,33 @@ export const useDetectionLogs = (options = {}) => {
     };
   }, [autoFetch, fetchDetections]);
 
-  // Add new detection (for real-time updates)
   const addDetection = useCallback((detection) => {
     setDetections((prev) => [detection, ...prev]);
-
-    // Invalidate cache since we have new data
     cache.data = null;
     cache.timestamp = null;
   }, []);
 
-  // Clear detections and cache
   const clearDetections = useCallback(() => {
     setDetections([]);
     cache.data = null;
     cache.timestamp = null;
   }, []);
 
-  // Refresh data (force fetch)
   const refresh = useCallback(async () => {
     return fetchDetections(true);
   }, [fetchDetections]);
 
-  // Get ML-detected items only
+  // Returns only camera/ML-sourced detections from detection_logs
+  // Note: ML predictions stored in ml_predictions table won't appear here —
+  // they are fetched separately via mlAPI in the stats cards.
   const getMLDetections = useCallback(() => {
     return detections.filter((d) => d.detection_source === "camera");
   }, [detections]);
 
-  // Get high-confidence detections
+  // FIX: detection_confidence is stored as decimal (0.87), not percentage (87).
+  // Threshold parameter should be 0–1. Default changed from 80 → 0.80.
   const getHighConfidenceDetections = useCallback(
-    (threshold = 80) => {
+    (threshold = 0.8) => {
       return detections.filter(
         (d) => d.detection_confidence && d.detection_confidence >= threshold,
       );
@@ -126,7 +117,6 @@ export const useDetectionLogs = (options = {}) => {
     [detections],
   );
 
-  // Get detections by object type
   const getDetectionsByObject = useCallback(
     (objectType) => {
       return detections.filter((d) => d.object_detected === objectType);
@@ -134,12 +124,13 @@ export const useDetectionLogs = (options = {}) => {
     [detections],
   );
 
-  // Calculate ML statistics
+  // FIX: avgConfidence and highConfidence now correctly handle decimal confidence values.
   const getMLStats = useCallback(() => {
     const mlDetections = detections.filter(
       (d) => d.detection_source === "camera",
     );
-    const avgConfidence =
+
+    const avgConfidenceRaw =
       mlDetections.length > 0
         ? mlDetections.reduce(
             (sum, d) => sum + (d.detection_confidence || 0),
@@ -147,11 +138,21 @@ export const useDetectionLogs = (options = {}) => {
           ) / mlDetections.length
         : 0;
 
+    // FIX: convert decimal to percentage for display
+    const avgConfidencePct =
+      avgConfidenceRaw > 1
+        ? avgConfidenceRaw // already a percentage
+        : avgConfidenceRaw * 100;
+
+    // FIX: compare against decimal threshold (0.80), not 80
+    const highConfidenceCount = mlDetections.filter(
+      (d) => d.detection_confidence >= 0.8,
+    ).length;
+
     return {
       total: mlDetections.length,
-      avgConfidence: avgConfidence.toFixed(1),
-      highConfidence: mlDetections.filter((d) => d.detection_confidence >= 80)
-        .length,
+      avgConfidence: avgConfidencePct.toFixed(1),
+      highConfidence: highConfidenceCount,
       uniqueObjects: [
         ...new Set(mlDetections.map((d) => d.object_detected)),
       ].filter(Boolean).length,
@@ -166,7 +167,6 @@ export const useDetectionLogs = (options = {}) => {
     addDetection,
     clearDetections,
     refresh,
-    // ML-specific helpers
     getMLDetections,
     getHighConfidenceDetections,
     getDetectionsByObject,

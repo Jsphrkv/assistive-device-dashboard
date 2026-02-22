@@ -2,46 +2,79 @@ import React, { useState, useEffect } from "react";
 import { Heart, Activity, RefreshCw } from "lucide-react";
 import { mlAPI } from "../../services/api";
 
-const DeviceHealthMonitor = ({ deviceId }) => {
+const DeviceHealthMonitor = ({
+  deviceId,
+  healthData: propHealthData,
+  loading: propLoading,
+}) => {
   const [healthData, setHealthData] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // ✅ OPTIMIZED: Use props if provided, otherwise fetch independently
+  const usingProps = propHealthData !== undefined;
+
   useEffect(() => {
-    fetchHealthData();
-    const interval = setInterval(fetchHealthData, 30000); // Refresh every 30s
-    return () => clearInterval(interval);
-  }, [deviceId]);
+    if (usingProps) {
+      // Use data passed from parent
+      processHealthData(propHealthData);
+      setLoading(propLoading || false);
+    } else {
+      // Fetch independently (fallback for standalone usage)
+      fetchHealthData();
+      const interval = setInterval(fetchHealthData, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [deviceId, propHealthData, propLoading, usingProps]);
+
+  const processHealthData = (data) => {
+    if (!data || data.length === 0) {
+      setHealthData(null);
+      return;
+    }
+
+    const latest = data[0];
+
+    // ✅ FIXED: Correct field paths from backend
+    // Backend: { is_anomaly, anomaly_severity, confidence_score, result: { score, severity, device_health_score, message } }
+    setHealthData({
+      isAnomaly: latest.is_anomaly || false,
+      anomalyScore: (latest.result?.score || latest.anomaly_score || 0) * 100, // ✅ result.score (not anomaly_score)
+      severity: latest.result?.severity || latest.anomaly_severity || "low",
+      deviceHealthScore: latest.result?.device_health_score || 100,
+      message: latest.result?.message || "Device operating normally",
+      timestamp: latest.timestamp,
+    });
+  };
 
   const fetchHealthData = async () => {
     try {
       setLoading(true);
 
-      // Get latest anomaly detections
       const response = await mlAPI.getHistory({
         type: "anomaly",
-        limit: 1,
+        limit: 10,
       });
 
       const predictions = response.data?.data || [];
 
-      if (predictions.length > 0) {
-        const latest = predictions[0];
-        setHealthData({
-          isAnomaly: latest.result?.is_anomaly || false,
-          anomalyScore: (latest.result?.anomaly_score || 0) * 100,
-          severity: latest.result?.severity || "low",
-          deviceHealthScore: latest.result?.device_health_score || 100,
-          message: latest.result?.message || "Device operating normally",
-          timestamp: latest.timestamp,
-        });
-      } else {
-        setHealthData(null);
-      }
+      // Filter by deviceId
+      const filtered =
+        deviceId && deviceId !== "device-001"
+          ? predictions.filter((p) => p.device_id === deviceId)
+          : predictions;
+
+      processHealthData(filtered);
     } catch (error) {
       console.error("Error fetching health data:", error);
       setHealthData(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRefresh = () => {
+    if (!usingProps) {
+      fetchHealthData();
     }
   };
 
@@ -64,7 +97,6 @@ const DeviceHealthMonitor = ({ deviceId }) => {
     high: { color: "bg-red-100 text-red-700 border-red-300", icon: "🚨" },
   };
 
-  // Calculate health status
   const getHealthStatus = (score) => {
     if (score >= 90) return { label: "Excellent", color: "text-green-600" };
     if (score >= 70) return { label: "Good", color: "text-blue-600" };
@@ -79,13 +111,15 @@ const DeviceHealthMonitor = ({ deviceId }) => {
           <Heart className="w-5 h-5 text-green-600" />
           Device Health
         </h3>
-        <button
-          onClick={fetchHealthData}
-          disabled={loading}
-          className="text-sm text-green-600 hover:text-green-700"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-        </button>
+        {!usingProps && (
+          <button
+            onClick={handleRefresh}
+            disabled={loading}
+            className="text-sm text-green-600 hover:text-green-700"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+          </button>
+        )}
       </div>
 
       {!healthData ? (
@@ -101,7 +135,6 @@ const DeviceHealthMonitor = ({ deviceId }) => {
           {/* Health Score Circle */}
           <div className="text-center">
             <div className="relative inline-flex items-center justify-center w-32 h-32">
-              {/* Background circle */}
               <svg className="transform -rotate-90 w-32 h-32">
                 <circle
                   cx="64"
@@ -112,7 +145,6 @@ const DeviceHealthMonitor = ({ deviceId }) => {
                   fill="transparent"
                   className="text-gray-200"
                 />
-                {/* Progress circle */}
                 <circle
                   cx="64"
                   cy="64"
@@ -134,7 +166,6 @@ const DeviceHealthMonitor = ({ deviceId }) => {
                   strokeLinecap="round"
                 />
               </svg>
-              {/* Score text */}
               <div className="absolute">
                 <div
                   className={`text-3xl font-bold ${getHealthStatus(healthData.deviceHealthScore).color}`}
@@ -203,7 +234,9 @@ const DeviceHealthMonitor = ({ deviceId }) => {
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
                   className="bg-red-600 h-2 rounded-full transition-all"
-                  style={{ width: `${healthData.anomalyScore}%` }}
+                  style={{
+                    width: `${Math.min(100, healthData.anomalyScore)}%`,
+                  }}
                 ></div>
               </div>
             </div>

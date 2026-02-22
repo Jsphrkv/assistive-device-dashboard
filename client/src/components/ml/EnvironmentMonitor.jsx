@@ -2,45 +2,82 @@ import React, { useState, useEffect } from "react";
 import { MapPin, Sun, Layers, RefreshCw } from "lucide-react";
 import { mlAPI } from "../../services/api";
 
-const EnvironmentMonitor = ({ deviceId }) => {
+const EnvironmentMonitor = ({
+  deviceId,
+  environmentData: propEnvironmentData,
+  loading: propLoading,
+}) => {
   const [environmentData, setEnvironmentData] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // ✅ OPTIMIZED: Use props if provided, otherwise fetch independently
+  const usingProps = propEnvironmentData !== undefined;
+
   useEffect(() => {
-    fetchEnvironmentData();
-    const interval = setInterval(fetchEnvironmentData, 30000); // Refresh every 30s
-    return () => clearInterval(interval);
-  }, [deviceId]);
+    if (usingProps) {
+      // Use data passed from parent
+      processEnvironmentData(propEnvironmentData);
+      setLoading(propLoading || false);
+    } else {
+      // Fetch independently (fallback for standalone usage)
+      fetchEnvironmentData();
+      const interval = setInterval(fetchEnvironmentData, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [deviceId, propEnvironmentData, propLoading, usingProps]);
+
+  const processEnvironmentData = (data) => {
+    if (!data || data.length === 0) {
+      setEnvironmentData(null);
+      return;
+    }
+
+    const latest = data[0];
+
+    // ✅ FIXED: confidence_score is at top level, not in result
+    // Backend: { confidence_score, result: { environment_type, lighting_condition, complexity_level, message } }
+    const rawConfidence = latest.confidence_score || 0;
+    const confidencePct =
+      rawConfidence > 1 ? rawConfidence : rawConfidence * 100;
+
+    setEnvironmentData({
+      environmentType: latest.result?.environment_type || "unknown",
+      lightingCondition: latest.result?.lighting_condition || "unknown",
+      complexityLevel: latest.result?.complexity_level || "unknown",
+      confidence: confidencePct, // ✅ From top level, not result
+      timestamp: latest.timestamp,
+    });
+  };
 
   const fetchEnvironmentData = async () => {
     try {
       setLoading(true);
 
-      // Get latest environment classifications
       const response = await mlAPI.getHistory({
         type: "environment_classification",
-        limit: 1,
+        limit: 10,
       });
 
       const predictions = response.data?.data || [];
 
-      if (predictions.length > 0) {
-        const latest = predictions[0];
-        setEnvironmentData({
-          environmentType: latest.result?.environment_type || "unknown",
-          lightingCondition: latest.result?.lighting_condition || "unknown",
-          complexityLevel: latest.result?.complexity_level || "unknown",
-          confidence: (latest.result?.confidence || 0) * 100,
-          timestamp: latest.timestamp,
-        });
-      } else {
-        setEnvironmentData(null);
-      }
+      // Filter by deviceId
+      const filtered =
+        deviceId && deviceId !== "device-001"
+          ? predictions.filter((p) => p.device_id === deviceId)
+          : predictions;
+
+      processEnvironmentData(filtered);
     } catch (error) {
       console.error("Error fetching environment data:", error);
       setEnvironmentData(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRefresh = () => {
+    if (!usingProps) {
+      fetchEnvironmentData();
     }
   };
 
@@ -54,7 +91,6 @@ const EnvironmentMonitor = ({ deviceId }) => {
     );
   }
 
-  // Environment type icons and colors
   const environmentConfig = {
     indoor: { icon: "🏢", color: "bg-blue-100 text-blue-700", label: "Indoor" },
     outdoor: {
@@ -84,7 +120,6 @@ const EnvironmentMonitor = ({ deviceId }) => {
     },
   };
 
-  // Lighting conditions
   const lightingConfig = {
     bright: { icon: "☀️", color: "text-yellow-600" },
     dim: { icon: "🌥️", color: "text-gray-600" },
@@ -92,7 +127,6 @@ const EnvironmentMonitor = ({ deviceId }) => {
     unknown: { icon: "💡", color: "text-gray-400" },
   };
 
-  // Complexity levels
   const complexityConfig = {
     simple: {
       color: "bg-green-100 text-green-700 border-green-300",
@@ -119,13 +153,15 @@ const EnvironmentMonitor = ({ deviceId }) => {
           <MapPin className="w-5 h-5 text-purple-600" />
           Environment Monitor
         </h3>
-        <button
-          onClick={fetchEnvironmentData}
-          disabled={loading}
-          className="text-sm text-purple-600 hover:text-purple-700"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-        </button>
+        {!usingProps && (
+          <button
+            onClick={handleRefresh}
+            disabled={loading}
+            className="text-sm text-purple-600 hover:text-purple-700"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+          </button>
+        )}
       </div>
 
       {!environmentData ? (
@@ -187,7 +223,7 @@ const EnvironmentMonitor = ({ deviceId }) => {
             </div>
           </div>
 
-          {/* Recommendations based on environment */}
+          {/* Recommendations */}
           <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
             <p className="text-xs text-blue-600 font-medium mb-2">
               💡 Recommendations
@@ -222,7 +258,9 @@ const EnvironmentMonitor = ({ deviceId }) => {
             <div className="w-full bg-gray-200 rounded-full h-2">
               <div
                 className="bg-purple-600 h-2 rounded-full transition-all"
-                style={{ width: `${environmentData.confidence}%` }}
+                style={{
+                  width: `${Math.min(100, environmentData.confidence)}%`,
+                }}
               ></div>
             </div>
           </div>

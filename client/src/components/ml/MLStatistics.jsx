@@ -22,10 +22,14 @@ import {
 import { useMLHistory } from "../../hooks/ml/useMLHistory";
 
 const MLStatistics = ({ deviceId }) => {
-  const { history, loading, refresh } = useMLHistory(
-    deviceId || "default",
-    500,
-  );
+  // FIX: was useMLHistory(deviceId || "default", 500) — wrong positional args.
+  // Hook expects an options object, not positional arguments.
+  const { history, loading, refresh } = useMLHistory({
+    deviceId: deviceId || undefined,
+    limit: 500,
+    autoFetch: true,
+  });
+
   const [lastAnalysisTime, setLastAnalysisTime] = useState(null);
 
   // Process real data into chart formats
@@ -334,7 +338,7 @@ const MLStatistics = ({ deviceId }) => {
             )}
           </div>
 
-          {/* ML Model Performance — 2 columns */}
+          {/* ML Model Performance */}
           <div className="bg-white rounded-lg shadow p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
               ML Model Performance (Average Confidence)

@@ -9,7 +9,6 @@ import {
 } from "recharts";
 import { Package } from "lucide-react";
 
-// Colors matching the number of OBJECT_ICONS entries (16 items)
 const COLORS = [
   "#3B82F6",
   "#10B981",
@@ -26,11 +25,10 @@ const COLORS = [
   "#D946EF",
   "#F43F5E",
   "#64748B",
-  "#7C3AED", // One more color for the 16th item
+  "#7C3AED",
 ];
 
 const ObstaclesChart = ({ data, loading }) => {
-  // ✅ Debug logging
   useEffect(() => {
     console.log("📊 ObstaclesChart received data:", data);
     console.log("📊 ObstaclesChart data length:", data?.length);
@@ -39,19 +37,30 @@ const ObstaclesChart = ({ data, loading }) => {
 
   const hasData = data && data.length > 0;
 
-  // Format data to remove any line/percentage artifacts
+  // ✅ FIXED: Safe string handling with null guards
   const formattedData = hasData
-    ? data.map((item) => ({
-        ...item,
-        name: item.name.split(">")[0].split("%")[0], // Remove any > or % and everything after
-      }))
+    ? data.map((item) => {
+        // Guard against null/undefined name
+        const safeName = item.name || item.obstacle_type || "unknown";
+
+        // Convert to string and safely split
+        const cleanName = String(safeName)
+          .split(">")[0] // Remove anything after >
+          .split("%")[0] // Remove anything after %
+          .trim(); // Remove whitespace
+
+        return {
+          ...item,
+          name: cleanName || "unknown", // Final fallback
+        };
+      })
     : [];
 
   // Custom label renderer to show only percentage
   const renderCustomLabel = (entry) => {
     const total = formattedData.reduce((sum, item) => sum + item.value, 0);
     const percentage = Math.round((entry.value / total) * 100);
-    return percentage > 5 ? `${percentage}%` : ""; // Only show labels for slices > 5%
+    return percentage > 5 ? `${percentage}%` : "";
   };
 
   return (
@@ -76,7 +85,7 @@ const ObstaclesChart = ({ data, loading }) => {
         </div>
       ) : (
         <div className="flex flex-col md:flex-row justify-center items-center gap-8 md:gap-4">
-          {/* Legend on the left - with balanced width */}
+          {/* Legend on the left */}
           <div className="w-full md:w-1/3 md:max-w-[200px]">
             <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-2">
               {formattedData.map((item, index) => {
@@ -106,7 +115,7 @@ const ObstaclesChart = ({ data, loading }) => {
             </div>
           </div>
 
-          {/* Chart on the right - centered */}
+          {/* Chart on the right */}
           <div className="w-full md:w-2/3 h-[300px] flex justify-center">
             <div className="w-full max-w-[300px] md:max-w-none">
               <ResponsiveContainer width="100%" height="100%">

@@ -2,47 +2,74 @@ import React, { useState, useEffect } from "react";
 import { AlertTriangle, Shield, RefreshCw } from "lucide-react";
 import { mlAPI } from "../../services/api";
 
-const AnomalyAlert = ({ deviceId }) => {
+const AnomalyAlert = ({
+  deviceId,
+  anomaliesData: propAnomaliesData,
+  loading: propLoading,
+}) => {
   const [anomalyData, setAnomalyData] = useState(null);
   const [recentAnomalies, setRecentAnomalies] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // ✅ OPTIMIZED: Use props if provided, otherwise fetch independently
+  const usingProps = propAnomaliesData !== undefined;
+
   useEffect(() => {
-    fetchAnomalyData();
-    const interval = setInterval(fetchAnomalyData, 30000); // Refresh every 30s
-    return () => clearInterval(interval);
-  }, [deviceId]);
+    if (usingProps) {
+      // Use data passed from parent
+      processAnomalyData(propAnomaliesData);
+      setLoading(propLoading || false);
+    } else {
+      // Fetch independently (fallback for standalone usage)
+      fetchAnomalyData();
+      const interval = setInterval(fetchAnomalyData, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [deviceId, propAnomaliesData, propLoading, usingProps]);
+
+  const processAnomalyData = (anomalies) => {
+    setRecentAnomalies(anomalies);
+
+    if (anomalies.length > 0) {
+      const latest = anomalies[0];
+
+      const rawScore = latest.score || 0;
+      const scorePercent = rawScore > 1 ? rawScore : rawScore * 100;
+
+      setAnomalyData({
+        isAnomaly: true,
+        severity: latest.severity || "medium",
+        message: latest.message || "Anomaly detected",
+        score: scorePercent,
+        timestamp: latest.timestamp,
+        type: latest.type || "anomaly",
+      });
+    } else {
+      setAnomalyData({
+        isAnomaly: false,
+        severity: "low",
+        message: "All systems normal",
+        score: 0,
+        timestamp: new Date().toISOString(),
+        type: "normal",
+      });
+    }
+  };
 
   const fetchAnomalyData = async () => {
     try {
       setLoading(true);
 
-      // ✅ Use getAnomalies to get recent anomalies (this works!)
-      const response = await mlAPI.getAnomalies(5);
-      const anomalies = response.data?.data || [];
+      const response = await mlAPI.getAnomalies(10);
+      const allAnomalies = response.data?.data || [];
 
-      setRecentAnomalies(anomalies);
+      // Filter to current device
+      const anomalies =
+        deviceId && deviceId !== "device-001"
+          ? allAnomalies.filter((a) => a.device_id === deviceId)
+          : allAnomalies;
 
-      if (anomalies.length > 0) {
-        const latest = anomalies[0];
-        setAnomalyData({
-          isAnomaly: true,
-          severity: latest.severity || "medium",
-          message: latest.message || "Anomaly detected",
-          score: (latest.score || 0.5) * 100,
-          timestamp: latest.timestamp,
-          type: latest.type || "anomaly",
-        });
-      } else {
-        setAnomalyData({
-          isAnomaly: false,
-          severity: "low",
-          message: "All systems normal",
-          score: 0,
-          timestamp: new Date().toISOString(),
-          type: "normal",
-        });
-      }
+      processAnomalyData(anomalies);
     } catch (error) {
       console.error("Error fetching anomaly data:", error);
       setAnomalyData({
@@ -55,6 +82,12 @@ const AnomalyAlert = ({ deviceId }) => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRefresh = () => {
+    if (!usingProps) {
+      fetchAnomalyData();
     }
   };
 
@@ -72,6 +105,7 @@ const AnomalyAlert = ({ deviceId }) => {
     high: "bg-red-100 text-red-700 border-red-300",
     medium: "bg-yellow-100 text-yellow-700 border-yellow-300",
     low: "bg-green-100 text-green-700 border-green-300",
+    critical: "bg-red-100 text-red-700 border-red-300",
   };
 
   return (
@@ -85,13 +119,15 @@ const AnomalyAlert = ({ deviceId }) => {
           )}
           Anomaly Detection
         </h3>
-        <button
-          onClick={fetchAnomalyData}
-          disabled={loading}
-          className="text-sm text-gray-600 hover:text-gray-700"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-        </button>
+        {!usingProps && (
+          <button
+            onClick={handleRefresh}
+            disabled={loading}
+            className="text-sm text-gray-600 hover:text-gray-700"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+          </button>
+        )}
       </div>
 
       {anomalyData && (
@@ -133,7 +169,9 @@ const AnomalyAlert = ({ deviceId }) => {
           <div className="flex items-center justify-between">
             <span className="text-sm text-gray-600">Severity Level</span>
             <span
-              className={`px-3 py-1 rounded-full text-xs font-semibold border ${severityColors[anomalyData.severity]}`}
+              className={`px-3 py-1 rounded-full text-xs font-semibold border ${
+                severityColors[anomalyData.severity] || severityColors.low
+              }`}
             >
               {anomalyData.severity.toUpperCase()}
             </span>
@@ -146,7 +184,7 @@ const AnomalyAlert = ({ deviceId }) => {
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
                   className="bg-red-600 h-2 rounded-full transition-all"
-                  style={{ width: `${anomalyData.score}%` }}
+                  style={{ width: `${Math.min(100, anomalyData.score)}%` }}
                 ></div>
               </div>
               <p className="text-sm text-gray-600 mt-1">
@@ -167,16 +205,18 @@ const AnomalyAlert = ({ deviceId }) => {
                   >
                     <div>
                       <p className="font-medium text-gray-900 capitalize">
-                        {anomaly.type}
+                        {anomaly.type?.replace(/_/g, " ") || "anomaly"}
                       </p>
                       <p className="text-gray-600 text-xs">
                         {new Date(anomaly.timestamp).toLocaleTimeString()}
                       </p>
                     </div>
                     <span
-                      className={`px-2 py-0.5 rounded-full text-xs font-semibold ${severityColors[anomaly.severity]}`}
+                      className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                        severityColors[anomaly.severity] || severityColors.low
+                      }`}
                     >
-                      {anomaly.severity}
+                      {anomaly.severity || "low"}
                     </span>
                   </div>
                 ))}

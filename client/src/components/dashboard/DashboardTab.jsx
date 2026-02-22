@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Activity, Camera, Battery, AlertTriangle, Zap } from "lucide-react";
-import { deviceAPI, detectionsAPI, mlAPI } from "../../services/api";
+import { deviceAPI, statisticsAPI, mlAPI } from "../../services/api";
 import { formatRelativeTime } from "../../utils/helpers";
 import AnomalyAlert from "../ml/AnomalyAlert";
 import DangerMonitor from "../ml/DangerMonitor";
@@ -14,6 +14,13 @@ const DashboardTab = () => {
   const [anomalyCount, setAnomalyCount] = useState(0);
   const [lastSeenTime, setLastSeenTime] = useState(null);
 
+  // ✅ NEW: Centralized ML data state
+  const [mlData, setMlData] = useState({
+    anomalies: [],
+    dangerData: [],
+  });
+  const [mlLoading, setMlLoading] = useState(true);
+
   useEffect(() => {
     fetchAllData();
     const interval = setInterval(fetchAllData, 30000);
@@ -25,27 +32,34 @@ const DashboardTab = () => {
       fetchDeviceStatus(),
       fetchDetectionStats(),
       fetchMLStats(),
+      fetchMLData(), // ✅ NEW: Centralized ML data fetch
     ]);
   };
 
   const fetchDeviceStatus = async () => {
     try {
       const response = await deviceAPI.getStatus();
-      const data = response.data;
+      const raw = response.data;
+
+      // Normalize all fields so every card reads the correct value
+      const data = {
+        ...raw,
+        batteryLevel: raw.batteryLevel ?? raw.battery_level ?? 0,
+        cameraStatus: raw.cameraStatus ?? raw.camera_status ?? "Unknown",
+        deviceOnline: raw.deviceOnline ?? raw.device_online ?? false,
+        lastObstacle: raw.lastObstacle ?? raw.last_obstacle ?? null,
+        lastDetectionTime:
+          raw.lastDetectionTime ?? raw.last_detection_time ?? null,
+        lastSeen: raw.lastSeen ?? raw.last_seen ?? null,
+        hasDevice: raw.hasDevice ?? raw.has_device ?? true,
+        deviceId: raw.deviceId ?? raw.device_id ?? null,
+      };
 
       setDeviceStatus(data);
       setHasDevice(data.hasDevice !== false);
 
-      const lastSeen =
-        data.lastSeen ||
-        data.last_seen ||
-        data.lastSeenAt ||
-        data.last_seen_at ||
-        data.updatedAt ||
-        data.updated_at;
-
-      if (lastSeen) {
-        setLastSeenTime(lastSeen);
+      if (data.lastSeen) {
+        setLastSeenTime(data.lastSeen);
       } else {
         setLastSeenTime(null);
       }
@@ -65,9 +79,8 @@ const DashboardTab = () => {
 
   const fetchDetectionStats = async () => {
     try {
-      const response = await detectionsAPI.getRecent();
-      const detections = response.data?.detections || [];
-      setTotalDetections(detections.length);
+      const response = await statisticsAPI.getSummary();
+      setTotalDetections(response.data?.totalPredictions || 0);
     } catch (error) {
       console.error("❌ Error fetching detection stats:", error);
       setTotalDetections(0);
@@ -90,6 +103,42 @@ const DashboardTab = () => {
       console.error("❌ Error fetching ML stats:", error);
       setMlStats(null);
       setAnomalyCount(0);
+    }
+  };
+
+  // ✅ NEW: Centralized ML data fetching (replaces 2 separate component API calls)
+  const fetchMLData = async () => {
+    setMlLoading(true);
+
+    try {
+      // Fetch both ML data types in parallel
+      const [anomaliesRes, dangerRes] = await Promise.all([
+        mlAPI.getAnomalies(10).catch(() => ({ data: { data: [] } })),
+        mlAPI
+          .getHistory({ type: "danger_prediction", limit: 10 })
+          .catch(() => ({ data: { data: [] } })),
+      ]);
+
+      // Filter by deviceId if available
+      const filterByDevice = (items) => {
+        const deviceId = deviceStatus?.deviceId;
+        if (!deviceId || deviceId === "device-001") return items;
+        return items.filter((item) => item.device_id === deviceId);
+      };
+
+      setMlData({
+        anomalies: filterByDevice(anomaliesRes.data?.data || []),
+        dangerData: filterByDevice(dangerRes.data?.data || []),
+      });
+    } catch (error) {
+      console.error("❌ Error fetching ML data:", error);
+      // Set empty data on error so components show empty state
+      setMlData({
+        anomalies: [],
+        dangerData: [],
+      });
+    } finally {
+      setMlLoading(false);
     }
   };
 
@@ -187,7 +236,6 @@ const DashboardTab = () => {
           />
         </div>
 
-        {/* ✅ FIXED: 2 columns grid (was 3) */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 opacity-50">
           <div className="bg-white rounded-lg shadow p-6">
             <h4 className="font-semibold text-gray-500 mb-2">
@@ -244,7 +292,7 @@ const DashboardTab = () => {
             }
             subtitle={
               totalDetections > 0
-                ? `${totalDetections} detections`
+                ? `${totalDetections.toLocaleString()} detections`
                 : "No detections yet"
             }
           />
@@ -252,10 +300,18 @@ const DashboardTab = () => {
         </div>
       </div>
 
-      {/* ✅ FIXED: ML Components Grid - 2 columns (was 3) */}
+      {/* ✅ OPTIMIZED: Pass pre-fetched data as props */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <AnomalyAlert deviceId={deviceStatus?.deviceId || "device-001"} />
-        <DangerMonitor deviceId={deviceStatus?.deviceId || "device-001"} />
+        <AnomalyAlert
+          deviceId={deviceStatus?.deviceId}
+          anomaliesData={mlData.anomalies} // ✅ Data from parent
+          loading={mlLoading}
+        />
+        <DangerMonitor
+          deviceId={deviceStatus?.deviceId}
+          dangerData={mlData.dangerData} // ✅ Data from parent
+          loading={mlLoading}
+        />
       </div>
 
       {/* Quick Stats */}
@@ -306,7 +362,9 @@ const DashboardTab = () => {
               )}
             </div>
             <AlertTriangle
-              className={`w-8 h-8 ${deviceStatus?.lastObstacle ? "text-orange-500" : "text-gray-300"}`}
+              className={`w-8 h-8 ${
+                deviceStatus?.lastObstacle ? "text-orange-500" : "text-gray-300"
+              }`}
             />
           </div>
         </div>
@@ -337,7 +395,9 @@ const StatusCard = ({
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm text-gray-600">{title}</span>
         <div
-          className={`p-2 rounded-lg ${empty ? "bg-gray-50 text-gray-400" : colorClasses[color]}`}
+          className={`p-2 rounded-lg ${
+            empty ? "bg-gray-50 text-gray-400" : colorClasses[color]
+          }`}
         >
           <Icon className="w-5 h-5" />
         </div>

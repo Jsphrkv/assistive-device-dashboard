@@ -5,7 +5,7 @@ from app.services.supabase_client import get_supabase
 from app.middleware.auth import device_token_required
 from app.services.ml_service import ml_service
 from app.services.yolo_service import run_yolo
-from app.schemas.device import DeviceTelemetry   
+from app.schemas.device import DeviceTelemetry
 from app.schemas.ml_types import (
     YOLODetectionRequest,
     ObjectDetectionRequest,
@@ -22,7 +22,7 @@ def save_to_db(prediction_data):
         supabase = get_supabase()
         supabase.table('ml_predictions').insert(prediction_data).execute()
     except Exception as e:
-        print(f"DB save failed: {e}")
+        print(f"[DB] Save failed: {e}")
 
 
 # ── YOLO Detection ────────────────────────────────────────────────────────────
@@ -56,14 +56,15 @@ def detect_yolo():
             })
 
         return jsonify({
-            'detected':       result.get('detected', False),
-            'object_type':    result.get('object_type', 'none'),
-            'raw_label':      result.get('raw_label', 'none'),
-            'category':       result.get('category', 'navigation'),
-            'confidence':     result.get('confidence', 0.0),
-            'all_detections': result.get('all_detections', []),
-            'message':        result.get('message', ''),
-            'timestamp':      int(time.time() * 1000)
+            'detected':        result.get('detected',       False),
+            'object_type':     result.get('object_type',    'none'),
+            'raw_label':       result.get('raw_label',      'none'),
+            'category':        result.get('category',       'navigation'),
+            'confidence':      result.get('confidence',     0.0),
+            'box':             result.get('box'),                     # NEW: for Option A
+            'all_detections':  result.get('all_detections', []),
+            'message':         result.get('message',        ''),
+            'timestamp':       int(time.time() * 1000)
         }), 200
 
     except Exception as e:
@@ -97,6 +98,7 @@ def detect_object():
             'distance_cm':          result.get('distance_cm'),
             'danger_level':         result.get('danger_level'),
             'detection_confidence': result.get('detection_confidence'),
+            'model_source':         result.get('model_source'),       # NEW
             'is_anomaly':           result.get('danger_level') in ['High', 'Critical']
         })
 
@@ -105,6 +107,7 @@ def detect_object():
             'distance_cm':          result.get('distance_cm'),
             'danger_level':         result.get('danger_level'),
             'detection_confidence': result.get('detection_confidence'),
+            'model_source':         result.get('model_source'),       # NEW
             'message':              result.get('message'),
             'timestamp':            int(time.time() * 1000)
         }), 200
@@ -138,6 +141,7 @@ def predict_danger():
             'danger_score':       result.get('danger_score'),
             'recommended_action': result.get('recommended_action'),
             'time_to_collision':  result.get('time_to_collision'),
+            'model_source':       result.get('model_source'),         # NEW
             'is_anomaly':         result.get('danger_score', 0) > 70
         })
 
@@ -146,6 +150,7 @@ def predict_danger():
             'recommended_action': result.get('recommended_action'),
             'time_to_collision':  result.get('time_to_collision'),
             'confidence':         result.get('confidence'),
+            'model_source':       result.get('model_source'),         # NEW
             'message':            result.get('message'),
             'timestamp':          int(time.time() * 1000)
         }), 200
@@ -176,19 +181,21 @@ def detect_anomaly():
         save_to_db({
             'device_id':           device_id,
             'prediction_type':     'anomaly',
-            'is_anomaly':          result.get('is_anomaly', False),
-            'anomaly_score':       result.get('anomaly_score', 0),
-            'anomaly_severity':    result.get('severity', 'low'),
-            'device_health_score': result.get('device_health_score', 100)
+            'is_anomaly':          result.get('is_anomaly',          False),
+            'anomaly_score':       result.get('anomaly_score',       0),
+            'anomaly_severity':    result.get('severity',            'low'),
+            'device_health_score': result.get('device_health_score', 100),
+            'model_source':        result.get('model_source'),               # NEW
         })
 
         return jsonify({
-            'is_anomaly':          result.get('is_anomaly', False),
+            'is_anomaly':          result.get('is_anomaly',          False),
             'anomaly_score':       float(result.get('anomaly_score', 0)),
-            'confidence':          float(result.get('confidence', 0)),
-            'severity':            result.get('severity', 'low'),
+            'confidence':          float(result.get('confidence',    0)),
+            'severity':            result.get('severity',            'low'),
             'device_health_score': result.get('device_health_score', 100),
-            'message':             result.get('message', ''),
+            'model_source':        result.get('model_source'),               # NEW
+            'message':             result.get('message',             ''),
             'timestamp':           int(time.time() * 1000)
         }), 200
 
@@ -221,6 +228,7 @@ def classify_environment():
             'environment_type':   result.get('environment_type'),
             'lighting_condition': result.get('lighting_condition'),
             'complexity_level':   result.get('complexity_level'),
+            'model_source':       result.get('model_source'),         # NEW
             'is_anomaly':         False
         })
 
@@ -229,6 +237,7 @@ def classify_environment():
             'lighting_condition': result.get('lighting_condition'),
             'complexity_level':   result.get('complexity_level'),
             'confidence':         result.get('confidence'),
+            'model_source':       result.get('model_source'),         # NEW
             'message':            result.get('message'),
             'timestamp':          int(time.time() * 1000)
         }), 200
