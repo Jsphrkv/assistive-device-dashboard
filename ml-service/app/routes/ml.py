@@ -52,7 +52,8 @@ def detect_yolo():
                 'object_detected':      result.get('object_type'),
                 'distance_cm':          req.distance_cm,
                 'detection_confidence': result.get('confidence'),
-                'is_anomaly':           False
+                'is_anomaly':           False,
+                'model_source':         'yolo_onnx',
             })
 
         return jsonify({
@@ -61,7 +62,7 @@ def detect_yolo():
             'raw_label':       result.get('raw_label',      'none'),
             'category':        result.get('category',       'navigation'),
             'confidence':      result.get('confidence',     0.0),
-            'box':             result.get('box'),                     # NEW: for Option A
+            'box':             result.get('box'),
             'all_detections':  result.get('all_detections', []),
             'message':         result.get('message',        ''),
             'timestamp':       int(time.time() * 1000)
@@ -98,8 +99,8 @@ def detect_object():
             'distance_cm':          result.get('distance_cm'),
             'danger_level':         result.get('danger_level'),
             'detection_confidence': result.get('detection_confidence'),
-            'model_source':         result.get('model_source'),       # NEW
-            'is_anomaly':           result.get('danger_level') in ['High', 'Critical']
+            'is_anomaly':           result.get('danger_level') in ['High', 'Critical'],
+            'model_source':         result.get('model_source', 'fallback'),
         })
 
         return jsonify({
@@ -107,7 +108,7 @@ def detect_object():
             'distance_cm':          result.get('distance_cm'),
             'danger_level':         result.get('danger_level'),
             'detection_confidence': result.get('detection_confidence'),
-            'model_source':         result.get('model_source'),       # NEW
+            'model_source':         result.get('model_source', 'fallback'),
             'message':              result.get('message'),
             'timestamp':            int(time.time() * 1000)
         }), 200
@@ -141,8 +142,8 @@ def predict_danger():
             'danger_score':       result.get('danger_score'),
             'recommended_action': result.get('recommended_action'),
             'time_to_collision':  result.get('time_to_collision'),
-            'model_source':       result.get('model_source'),         # NEW
-            'is_anomaly':         result.get('danger_score', 0) > 70
+            'is_anomaly':         result.get('danger_score', 0) > 70,
+            'model_source':       result.get('model_source', 'fallback'),
         })
 
         return jsonify({
@@ -150,7 +151,7 @@ def predict_danger():
             'recommended_action': result.get('recommended_action'),
             'time_to_collision':  result.get('time_to_collision'),
             'confidence':         result.get('confidence'),
-            'model_source':       result.get('model_source'),         # NEW
+            'model_source':       result.get('model_source', 'fallback'),
             'message':            result.get('message'),
             'timestamp':          int(time.time() * 1000)
         }), 200
@@ -185,7 +186,7 @@ def detect_anomaly():
             'anomaly_score':       result.get('anomaly_score',       0),
             'anomaly_severity':    result.get('severity',            'low'),
             'device_health_score': result.get('device_health_score', 100),
-            'model_source':        result.get('model_source'),               # NEW
+            'model_source':        result.get('model_source',        'fallback'),
         })
 
         return jsonify({
@@ -194,7 +195,7 @@ def detect_anomaly():
             'confidence':          float(result.get('confidence',    0)),
             'severity':            result.get('severity',            'low'),
             'device_health_score': result.get('device_health_score', 100),
-            'model_source':        result.get('model_source'),               # NEW
+            'model_source':        result.get('model_source',        'fallback'),
             'message':             result.get('message',             ''),
             'timestamp':           int(time.time() * 1000)
         }), 200
@@ -228,8 +229,8 @@ def classify_environment():
             'environment_type':   result.get('environment_type'),
             'lighting_condition': result.get('lighting_condition'),
             'complexity_level':   result.get('complexity_level'),
-            'model_source':       result.get('model_source'),         # NEW
-            'is_anomaly':         False
+            'is_anomaly':         False,
+            'model_source':       result.get('model_source', 'fallback'),
         })
 
         return jsonify({
@@ -237,7 +238,7 @@ def classify_environment():
             'lighting_condition': result.get('lighting_condition'),
             'complexity_level':   result.get('complexity_level'),
             'confidence':         result.get('confidence'),
-            'model_source':       result.get('model_source'),         # NEW
+            'model_source':       result.get('model_source', 'fallback'),
             'message':            result.get('message'),
             'timestamp':          int(time.time() * 1000)
         }), 200
