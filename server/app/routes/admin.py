@@ -267,17 +267,17 @@ def get_ml_analytics():
 
         # ── Model source ratio: ml_model vs fallback ──────────────────────────
         # detection_source field stores 'camera' (YOLO), 'ultrasonic', etc.
-        # ml_predictions table has model_version to indicate real model vs rules
+        # ml_predictions table has model_source to indicate real model vs rules
         ml_source_raw = supabase.table('ml_predictions')\
-            .select('model_version')\
+            .select('model_source')\
             .gte('created_at', start_iso)\
             .execute()
 
         ml_model_count = 0
         fallback_count = 0
         for row in (ml_source_raw.data or []):
-            version = row.get('model_version', '')
-            if version and 'rules' in version.lower():
+            source = row.get('model_source', '')
+            if source and 'rules' in source.lower():
                 fallback_count += 1
             else:
                 ml_model_count += 1

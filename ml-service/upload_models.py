@@ -98,8 +98,8 @@ def upload_all():
         print("\nNext steps:")
         print("  1. Push ml-service/ to your Hugging Face Space repo")
         print("  2. Models will download automatically on startup")
-        print("  3. Update ML_URL in your Pi .env:")
-        print("     ML_URL=https://your-username-assistive-device-ml.hf.space")
+        print("  3. Update HF_URL in your Pi .env:")
+        print("     HF_URL     = \"https://Josephrkv-capstone2_proj.hf.space\"")
 
 
 if __name__ == '__main__':

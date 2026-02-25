@@ -14,9 +14,13 @@ def create_app():
     from ml_models.model_loader import download_all_models
     download_all_models()
 
-    # Register blueprint
+    # Register blueprints
     from app.routes.ml import ml_bp
     app.register_blueprint(ml_bp)
+
+    # Admin health-check endpoints (used by Render backend /api/admin/health)
+    from app.routes.model_status_route import model_status_bp
+    app.register_blueprint(model_status_bp)
 
     @app.route('/health', methods=['GET'])
     def health():
@@ -32,6 +36,8 @@ def create_app():
                 'POST /api/ml/predict/danger',
                 'POST /api/ml/classify/environment',
                 'POST /api/ml/detect/anomaly',
+                'GET  /health',
+                'GET  /model-status',
             ]
         }), 200
 
