@@ -34,6 +34,7 @@ def create_app(config_name=None):
 
     # Register blueprints
     from app.routes.auth import auth_bp
+    from app.routes.admin import admin_bp
     from app.routes.devices import devices_bp     
     from app.routes.device_routes import device_bp
     from app.routes.detections import detections_bp
@@ -42,7 +43,8 @@ def create_app(config_name=None):
     from app.routes.settings import settings_bp
     from app.routes.camera_routes import camera_bp
     
-    app.register_blueprint(auth_bp)         
+    app.register_blueprint(auth_bp)   
+    app.register_blueprint(admin_bp)      
     app.register_blueprint(devices_bp)      
     app.register_blueprint(device_bp)      
     app.register_blueprint(detections_bp)     
