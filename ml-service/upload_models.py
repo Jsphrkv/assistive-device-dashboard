@@ -99,7 +99,7 @@ def upload_all():
         print("  1. Push ml-service/ to your Hugging Face Space repo")
         print("  2. Models will download automatically on startup")
         print("  3. Update HF_URL in your Pi .env:")
-        print("     HF_URL     = \"https://Josephrkv-capstone2_proj.hf.space\"")
+        print("     HF_URL     = \"https://Josephrkv-capstone2-proj.hf.space\"")
 
 
 if __name__ == '__main__':
