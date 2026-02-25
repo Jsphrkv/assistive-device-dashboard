@@ -108,14 +108,14 @@ def create_app(config_name=None):
         import requests as http_requests
         import time
         
-        ML_URL = os.getenv('HF_URL', 'https://Josephrkv-capstone2_proj.hf.space')
+        HF_URL = os.getenv('HF_URL', 'https://Josephrkv-capstone2_proj.hf.space')
         
         # Check HF Space
         hf_online = False
         hf_latency = None
         try:
             start = time.time()
-            hf_resp = http_requests.get(f"{ML_URL}/health", timeout=3)
+            hf_resp = http_requests.get(f"{HF_URL}/health", timeout=3)
             hf_latency = int((time.time() - start) * 1000)
             hf_online = hf_resp.status_code == 200
         except Exception as e:
@@ -130,7 +130,7 @@ def create_app(config_name=None):
         }
         
         try:
-            model_resp = http_requests.get(f"{ML_URL}/model-status", timeout=3)
+            model_resp = http_requests.get(f"{HF_URL}/model-status", timeout=3)
             if model_resp.status_code == 200:
                 model_data = model_resp.json()
                 for name in ('yolo', 'danger', 'anomaly', 'object'):

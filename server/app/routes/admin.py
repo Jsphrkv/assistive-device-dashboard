@@ -11,8 +11,8 @@ from datetime import timedelta
 admin_bp = Blueprint('admin', __name__, url_prefix='/api/admin')
 
 # ── External service URLs (set these in your .env) ───────────────────────────
-HF_SPACE_URL    = os.getenv('HF_URL', 'https://Josephrkv-capstone2_proj.hf.space')
-RENDER_BASE_URL = os.getenv('RENDER_URL', 'https://assistive-device-dashboard.onrender.com')
+HF_URL    = os.getenv('HF_URL', 'https://Josephrkv-capstone2_proj.hf.space')
+VITE_API_URL = os.getenv('VITE_API_URL', 'https://assistive-device-dashboard.onrender.com')
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -29,10 +29,10 @@ def get_system_health():
     """
     try:
         # ── Ping Hugging Face Space ──────────────────────────────────────────
-        hf_status = _ping_service(f"{HF_SPACE_URL}/health")
+        hf_status = _ping_service(f"{HF_URL}/health")
 
         # ── Ping Render backend itself (self-check) ──────────────────────────
-        render_status = _ping_service(f"{RENDER_BASE_URL}/api/auth/me", expect_401=True)
+        render_status = _ping_service(f"{VITE_API_URL}/api/auth/me", expect_401=True)
 
         # ── Check ML model files via HF /model-status endpoint ───────────────
         # Your ml-service should expose GET /model-status — add it if missing
@@ -86,7 +86,7 @@ def _fetch_ml_model_status():
     }
     """
     try:
-        resp = http_requests.get(f"{HF_SPACE_URL}/model-status", timeout=6)
+        resp = http_requests.get(f"{HF_URL}/model-status", timeout=6)
         if resp.status_code == 200:
             data = resp.json()
             result = {}
