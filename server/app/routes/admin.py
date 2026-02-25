@@ -1,7 +1,7 @@
-
 import os
 import time
 import requests as http_requests
+from concurrent.futures import ThreadPoolExecutor
 from flask import Blueprint, request, jsonify
 from app.services.supabase_client import get_supabase, get_admin_client
 from app.middleware.auth import token_required, admin_required
@@ -10,8 +10,8 @@ from datetime import timedelta
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/api/admin')
 
-# ── External service URLs (set these in your .env) ───────────────────────────
-HF_URL = os.getenv('HF_URL', 'https://josephrkv-capstone2-proj.hf.space')
+# ── External service URLs ─────────────────────────────────────────────────────
+HF_URL       = os.getenv('HF_URL',       'https://josephrkv-capstone2-proj.hf.space')
 VITE_API_URL = os.getenv('VITE_API_URL', 'https://assistive-device-dashboard.onrender.com')
 
 
@@ -24,20 +24,20 @@ VITE_API_URL = os.getenv('VITE_API_URL', 'https://assistive-device-dashboard.onr
 @admin_required
 def get_system_health():
     """
-    Ping HF Space and Render backend, check ML model status,
-    return a single health object for the System Health tab.
+    Ping HF Space and Render backend IN PARALLEL, check ML model status.
+    Uses ThreadPoolExecutor so the two pings don't block each other.
+    Total max wait = max(HF_timeout, Render_timeout) = 20s, not 20+10=30s.
     """
     try:
-        # ── Ping Hugging Face Space ──────────────────────────────────────────
-        hf_status = _ping_service(f"{HF_URL}/health")
+        # Run all three network calls in parallel
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            hf_future     = pool.submit(_ping_service, f"{HF_URL}/health",            20, False)
+            render_future = pool.submit(_ping_service, f"{VITE_API_URL}/api/auth/me", 10, True)
+            ml_future     = pool.submit(_fetch_ml_model_status)
 
-        # ── Ping Render backend itself (self-check) ──────────────────────────
-        render_status = _ping_service(f"{VITE_API_URL}/api/auth/me", expect_401=True)
-
-        # ── Check ML model files via HF /model-status endpoint ───────────────
-        # Your ml-service should expose GET /model-status — add it if missing
-        # (see _build_ml_status_fallback below for the fallback logic)
-        ml_models = _fetch_ml_model_status()
+        hf_status     = hf_future.result()
+        render_status = render_future.result()
+        ml_models     = ml_future.result()
 
         return jsonify({
             'hfSpace':       hf_status,
@@ -51,10 +51,10 @@ def get_system_health():
         return jsonify({'error': 'Failed to get system health'}), 500
 
 
-def _ping_service(url, timeout=6, expect_401=False):
+def _ping_service(url, timeout=10, expect_401=False):
     """
     Ping a URL and return a status dict.
-    expect_401=True: treat HTTP 401 as 'ok' (auth endpoint responds but rejects no-auth ping).
+    expect_401=True: treat HTTP 401 as 'ok'.
     """
     try:
         start = time.time()
@@ -62,7 +62,7 @@ def _ping_service(url, timeout=6, expect_401=False):
         ms    = int((time.time() - start) * 1000)
         ok    = resp.status_code < 500 or (expect_401 and resp.status_code == 401)
         return {
-            'status':    'ok'    if ok else 'error',
+            'status':    'ok' if ok else 'error',
             'latencyMs': ms,
             'code':      resp.status_code,
         }
@@ -74,19 +74,11 @@ def _ping_service(url, timeout=6, expect_401=False):
 
 def _fetch_ml_model_status():
     """
-    Try to GET /model-status from HF Space.
-    Falls back to a degraded dict if the endpoint doesn't exist yet.
-
-    Expected response from HF Space:
-    {
-      "yolo":    {"loaded": true,  "source": "yolo_onnx"},
-      "danger":  {"loaded": true,  "source": "ml_model"},
-      "anomaly": {"loaded": true,  "source": "ml_model"},
-      "object":  {"loaded": false, "source": "fallback"}
-    }
+    GET /model-status from HF Space.
+    Falls back to unknown dict if endpoint isn't deployed yet or space is sleeping.
     """
     try:
-        resp = http_requests.get(f"{HF_URL}/model-status", timeout=6)
+        resp = http_requests.get(f"{HF_URL}/model-status", timeout=20)
         if resp.status_code == 200:
             data = resp.json()
             result = {}
@@ -97,10 +89,9 @@ def _fetch_ml_model_status():
                     'source': m.get('source', 'unknown'),
                 }
             return result
-    except Exception:
-        pass  # Fall through to fallback
+    except Exception as e:
+        print(f"[Admin Health] model-status fetch failed: {e}")
 
-    # Fallback: endpoint not available — return unknown status
     return {
         'yolo':    {'status': 'unknown', 'source': 'yolo_onnx'},
         'danger':  {'status': 'unknown', 'source': 'ml_model'},
@@ -117,46 +108,30 @@ def _fetch_ml_model_status():
 @token_required
 @admin_required
 def get_all_detections():
-    """
-    Paginated detection_logs across ALL users/devices.
-    Supports: limit, offset, search (object name / device name), danger_level,
-              start_date, end_date.
-    Joins user_devices to include device_name in each row.
-    """
     try:
-        limit       = request.args.get('limit',       25,    type=int)
-        offset      = request.args.get('offset',      0,     type=int)
-        search      = request.args.get('search',      '').strip()
-        danger      = request.args.get('danger_level', '').strip()
-        start_date  = request.args.get('start_date',  '')
-        end_date    = request.args.get('end_date',    '')
-
-        # Cap limit to prevent runaway queries
-        limit = min(limit, 100)
+        limit      = min(request.args.get('limit',       25,  type=int), 100)
+        offset     = request.args.get('offset',      0,     type=int)
+        search     = request.args.get('search',      '').strip()
+        danger     = request.args.get('danger_level', '').strip()
+        start_date = request.args.get('start_date',  '')
+        end_date   = request.args.get('end_date',    '')
 
         supabase = get_admin_client()
 
-        # Build base query — join user_devices for device_name
         query = supabase.table('detection_logs')\
             .select('*, user_devices!detection_logs_device_id_fkey(device_name, user_id)',
                     count='exact')
 
-        if danger:
-            query = query.eq('danger_level', danger)
-        if start_date:
-            query = query.gte('detected_at', start_date)
-        if end_date:
-            query = query.lte('detected_at', end_date)
-        if search:
-            # Supabase PostgREST ilike filter on object_detected
-            query = query.ilike('object_detected', f'%{search}%')
+        if danger:     query = query.eq('danger_level', danger)
+        if start_date: query = query.gte('detected_at', start_date)
+        if end_date:   query = query.lte('detected_at', end_date)
+        if search:     query = query.ilike('object_detected', f'%{search}%')
 
         response = query\
             .order('detected_at', desc=True)\
             .range(offset, offset + limit - 1)\
             .execute()
 
-        # Flatten device_name into each row for the frontend table
         detections = []
         for row in (response.data or []):
             device_info = row.pop('user_devices', {}) or {}
@@ -184,30 +159,21 @@ def get_all_detections():
 @token_required
 @admin_required
 def get_ml_analytics():
-    """
-    Returns hourly detection counts, object type distribution,
-    danger level frequency, model source ratio and summary stats
-    across ALL users for the last N days.
-    """
     try:
-        days     = request.args.get('days', 7, type=int)
-        days     = min(days, 90)  # cap
-
+        days      = min(request.args.get('days', 7, type=int), 90)
         supabase  = get_admin_client()
         end_dt    = now_ph()
         start_dt  = end_dt - timedelta(days=days)
         start_iso = start_dt.isoformat()
 
-        # ── Total detections in window ────────────────────────────────────────
+        # Total detections
         total_res = supabase.table('detection_logs')\
             .select('*', count='exact', head=True)\
             .gte('detected_at', start_iso)\
             .execute()
         total_detections = total_res.count or 0
 
-        # ── Hourly detections — fetch rows and bucket in Python ───────────────
-        # Supabase Python SDK doesn't support GROUP BY directly;
-        # we fetch enough rows and aggregate.
+        # Hourly buckets
         hourly_raw = supabase.table('detection_logs')\
             .select('detected_at')\
             .gte('detected_at', start_iso)\
@@ -222,7 +188,6 @@ def get_ml_analytics():
             try:
                 from datetime import datetime
                 dt = datetime.fromisoformat(ts.replace('Z', '+00:00'))
-                # Bucket key = "YYYY-MM-DD HH:00"
                 bucket = dt.strftime('%Y-%m-%d %H:00')
                 hourly_buckets[bucket] = hourly_buckets.get(bucket, 0) + 1
             except Exception:
@@ -233,7 +198,7 @@ def get_ml_analytics():
             for k, v in sorted(hourly_buckets.items())
         ]
 
-        # ── Object type distribution ──────────────────────────────────────────
+        # Object distribution
         obj_raw = supabase.table('detection_logs')\
             .select('object_detected')\
             .gte('detected_at', start_iso)\
@@ -249,7 +214,7 @@ def get_ml_analytics():
             for k, v in sorted(obj_counts.items(), key=lambda x: -x[1])
         ]
 
-        # ── Danger level frequency ────────────────────────────────────────────
+        # Danger frequency
         danger_raw = supabase.table('detection_logs')\
             .select('danger_level')\
             .gte('detected_at', start_iso)\
@@ -265,9 +230,7 @@ def get_ml_analytics():
             for k, v in sorted(danger_counts.items(), key=lambda x: -x[1])
         ]
 
-        # ── Model source ratio: ml_model vs fallback ──────────────────────────
-        # detection_source field stores 'camera' (YOLO), 'ultrasonic', etc.
-        # ml_predictions table has model_source to indicate real model vs rules
+        # Model source ratio — uses model_source column
         ml_source_raw = supabase.table('ml_predictions')\
             .select('model_source')\
             .gte('created_at', start_iso)\
@@ -282,7 +245,7 @@ def get_ml_analytics():
             else:
                 ml_model_count += 1
 
-        # ── Avg confidence ────────────────────────────────────────────────────
+        # Avg confidence
         conf_raw = supabase.table('detection_logs')\
             .select('detection_confidence')\
             .gte('detected_at', start_iso)\
@@ -322,14 +285,9 @@ def get_ml_analytics():
 @token_required
 @admin_required
 def get_all_users():
-    """
-    Return all users with their registered devices.
-    Shape: [{ id, username, email, role, devices: [...] }]
-    """
     try:
         supabase = get_admin_client()
 
-        # Fetch all users (exclude sensitive fields)
         users_res = supabase.table('users')\
             .select('id, username, email, role, created_at, last_login, email_verified')\
             .order('created_at', desc=True)\
@@ -338,19 +296,16 @@ def get_all_users():
         if not users_res.data:
             return jsonify({'users': [], 'total': 0}), 200
 
-        # Fetch all devices in one query (avoid N+1)
         devices_res = supabase.table('user_devices')\
             .select('id, user_id, device_name, device_model, status, last_seen, created_at')\
             .order('created_at', desc=True)\
             .execute()
 
-        # Group devices by user_id
         devices_by_user = {}
         for d in (devices_res.data or []):
             uid = d['user_id']
             devices_by_user.setdefault(uid, []).append(d)
 
-        # Attach devices to users
         users = []
         for u in users_res.data:
             u['devices'] = devices_by_user.get(u['id'], [])
@@ -368,15 +323,10 @@ def get_all_users():
 @token_required
 @admin_required
 def get_user_detections(user_id):
-    """
-    Get the last N detections for a specific user (shown in history drawer).
-    """
     try:
-        limit    = request.args.get('limit', 20, type=int)
-        limit    = min(limit, 100)
+        limit    = min(request.args.get('limit', 20, type=int), 100)
         supabase = get_admin_client()
 
-        # Get this user's device IDs first
         devices_res = supabase.table('user_devices')\
             .select('id')\
             .eq('user_id', user_id)\
@@ -409,10 +359,6 @@ def get_user_detections(user_id):
 @token_required
 @admin_required
 def toggle_device_status(device_id):
-    """
-    Toggle a device between active / inactive.
-    Body: { "status": "active" | "inactive" }
-    """
     try:
         data       = request.get_json()
         new_status = data.get('status', '').lower()
@@ -422,7 +368,6 @@ def toggle_device_status(device_id):
 
         supabase = get_admin_client()
 
-        # Verify device exists
         device_res = supabase.table('user_devices')\
             .select('id, device_name')\
             .eq('id', device_id)\
@@ -432,7 +377,6 @@ def toggle_device_status(device_id):
         if not device_res.data:
             return jsonify({'error': 'Device not found'}), 404
 
-        # Update status
         supabase.table('user_devices')\
             .update({'status': new_status, 'updated_at': now_ph_iso()})\
             .eq('id', device_id)\
@@ -458,14 +402,8 @@ def toggle_device_status(device_id):
 @token_required
 @admin_required
 def get_live_feed():
-    """
-    Returns the N most recent detections across ALL devices.
-    Lightweight — used for 3s polling in the live feed tab.
-    Joins user_devices for device_name.
-    """
     try:
-        limit    = request.args.get('limit', 30, type=int)
-        limit    = min(limit, 100)
+        limit    = min(request.args.get('limit', 30, type=int), 100)
         supabase = get_admin_client()
 
         response = supabase.table('detection_logs')\
@@ -476,7 +414,6 @@ def get_live_feed():
             .limit(limit)\
             .execute()
 
-        # Flatten device_name
         detections = []
         for row in (response.data or []):
             device_info = row.pop('user_devices', {}) or {}
