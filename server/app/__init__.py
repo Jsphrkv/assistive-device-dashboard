@@ -1,4 +1,4 @@
-from flask import Flask, request
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 from app.config import config
 import os
@@ -20,7 +20,7 @@ def create_app(config_name=None):
              "http://localhost:3000",
              "http://localhost:5173"
          ],
-         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
          allow_headers=["Content-Type", "Authorization", "X-Device-Token"],
          supports_credentials=True,
          max_age=3600)
@@ -58,7 +58,7 @@ def create_app(config_name=None):
         if request.method == "OPTIONS":
             response = app.make_default_options_response()
             response.headers['Access-Control-Allow-Origin'] = request.headers.get('Origin', '*')
-            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
             response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Device-Token'
             response.headers['Access-Control-Allow-Credentials'] = 'true'
             return response
@@ -72,7 +72,7 @@ def create_app(config_name=None):
             "http://localhost:5173"
         ]:
             response.headers['Access-Control-Allow-Origin'] = origin
-            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
             response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Device-Token'
             response.headers['Access-Control-Allow-Credentials'] = 'true'
         return response
@@ -94,7 +94,66 @@ def create_app(config_name=None):
     
     @app.route('/health')
     def health_check():
+        """Basic health check - no auth required"""
         return {'status': 'healthy', 'message': 'Assistive Device API is running'}, 200
+    
+    # ✅ NEW: Detailed health endpoint for admin dashboard
+    @app.route('/api/health')
+    def api_health():
+        """
+        Detailed health check for admin dashboard.
+        Returns status of HF Space, Render backend, and ML models.
+        Public endpoint - no auth required.
+        """
+        import requests as http_requests
+        import time
+        
+        ML_URL = os.getenv('HF_URL', 'https://Josephrkv-capstone2_proj.hf.space')
+        
+        # Check HF Space
+        hf_online = False
+        hf_latency = None
+        try:
+            start = time.time()
+            hf_resp = http_requests.get(f"{ML_URL}/health", timeout=3)
+            hf_latency = int((time.time() - start) * 1000)
+            hf_online = hf_resp.status_code == 200
+        except Exception as e:
+            print(f"⚠️ HF Space health check failed: {e}")
+        
+        # Check ML Models
+        ml_models = {
+            'yolo': {'status': 'unknown', 'source': 'yolo_onnx'},
+            'danger': {'status': 'unknown', 'source': 'ml_model'},
+            'anomaly': {'status': 'unknown', 'source': 'ml_model'},
+            'object': {'status': 'unknown', 'source': 'ml_model'}
+        }
+        
+        try:
+            model_resp = http_requests.get(f"{ML_URL}/model-status", timeout=3)
+            if model_resp.status_code == 200:
+                model_data = model_resp.json()
+                for name in ('yolo', 'danger', 'anomaly', 'object'):
+                    m = model_data.get(name, {})
+                    ml_models[name] = {
+                        'status': 'ok' if m.get('loaded') else 'error',
+                        'source': m.get('source', 'unknown')
+                    }
+        except Exception as e:
+            print(f"⚠️ Failed to fetch model status: {e}")
+        
+        return jsonify({
+            'status': 'online',
+            'hfSpace': {
+                'status': 'ok' if hf_online else 'error',
+                'latencyMs': hf_latency
+            },
+            'renderBackend': {
+                'status': 'ok',  # If this runs, backend is online
+                'latencyMs': 0
+            },
+            'mlModels': ml_models
+        }), 200
     
     @app.errorhandler(404)
     def not_found(error):

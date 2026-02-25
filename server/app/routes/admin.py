@@ -1,16 +1,3 @@
-"""
-Admin Routes - Backend endpoints for admin-only dashboard tabs
-All routes require JWT auth + admin role check via @admin_required
-
-Endpoints:
-  GET  /api/admin/health                          → AdminSystemHealth tab
-  GET  /api/admin/detections                      → AdminDetectionLogs tab
-  GET  /api/admin/analytics                       → AdminMLAnalytics tab
-  GET  /api/admin/users                           → AdminUserManagement tab
-  GET  /api/admin/users/<user_id>/detections      → User history drawer
-  PATCH /api/admin/devices/<device_id>/status     → Toggle device active/inactive
-  GET  /api/admin/live-feed                       → AdminLiveFeed tab
-"""
 
 import os
 import time
@@ -24,7 +11,7 @@ from datetime import timedelta
 admin_bp = Blueprint('admin', __name__, url_prefix='/api/admin')
 
 # ── External service URLs (set these in your .env) ───────────────────────────
-HF_SPACE_URL    = os.getenv('ML_URL', 'https://your-username-assistive-device-ml.hf.space')
+HF_SPACE_URL    = os.getenv('HF_URL', 'https://Josephrkv-capstone2_proj.hf.space')
 RENDER_BASE_URL = os.getenv('RENDER_URL', 'https://assistive-device-dashboard.onrender.com')
 
 
