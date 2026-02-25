@@ -11,8 +11,7 @@ from datetime import timedelta
 admin_bp = Blueprint('admin', __name__, url_prefix='/api/admin')
 
 # ── External service URLs ─────────────────────────────────────────────────────
-HF_URL       = os.getenv('HF_URL',       'https://josephrkv-capstone2-proj.hf.space')
-VITE_API_URL = os.getenv('VITE_API_URL', 'https://assistive-device-dashboard.onrender.com')
+HF_URL = os.getenv('HF_URL',       'https://josephrkv-capstone2-proj.hf.space')
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -23,21 +22,16 @@ VITE_API_URL = os.getenv('VITE_API_URL', 'https://assistive-device-dashboard.onr
 @token_required
 @admin_required
 def get_system_health():
-    """
-    Ping HF Space and Render backend IN PARALLEL, check ML model status.
-    Uses ThreadPoolExecutor so the two pings don't block each other.
-    Total max wait = max(HF_timeout, Render_timeout) = 20s, not 20+10=30s.
-    """
     try:
-        # Run all three network calls in parallel
-        with ThreadPoolExecutor(max_workers=3) as pool:
-            hf_future     = pool.submit(_ping_service, f"{HF_URL}/health",            20, False)
-            render_future = pool.submit(_ping_service, f"{VITE_API_URL}/api/auth/me", 10, True)
-            ml_future     = pool.submit(_fetch_ml_model_status)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            hf_future = pool.submit(_ping_service, f"{HF_URL}/health", 15, False)
+            ml_future = pool.submit(_fetch_ml_model_status)
 
-        hf_status     = hf_future.result()
-        render_status = render_future.result()
-        ml_models     = ml_future.result()
+        hf_status = hf_future.result()
+        ml_models = ml_future.result()
+
+        # Render = always ok — if this code is executing, backend is up
+        render_status = {'status': 'ok', 'latencyMs': 0, 'code': 200}
 
         return jsonify({
             'hfSpace':       hf_status,
