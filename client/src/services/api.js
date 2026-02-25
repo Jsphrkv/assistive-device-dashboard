@@ -210,4 +210,34 @@ export const mlAPI = {
     api.get(`/ml-history/daily-summary?days=${days}`),
 };
 
+export const adminAPI = {
+  // ── System Health ──────────────────────────────────────────────────────────
+  getHealth: () => api.get("/admin/health"),
+
+  // ── All Detections (cross-user) ────────────────────────────────────────────
+  getAllDetections: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.limit) q.append("limit", params.limit);
+    if (params.offset) q.append("offset", params.offset);
+    if (params.search) q.append("search", params.search);
+    if (params.danger) q.append("danger_level", params.danger);
+    if (params.start_date) q.append("start_date", params.start_date);
+    if (params.end_date) q.append("end_date", params.end_date);
+    return api.get(`/admin/detections?${q.toString()}`);
+  },
+
+  // ── ML Analytics ───────────────────────────────────────────────────────────
+  getMLAnalytics: (days = 7) => api.get(`/admin/analytics?days=${days}`),
+
+  // ── User & Device Management ───────────────────────────────────────────────
+  getAllUsers: () => api.get("/admin/users"),
+  getUserDetections: (userId, limit = 20) =>
+    api.get(`/admin/users/${userId}/detections?limit=${limit}`),
+  toggleDeviceStatus: (deviceId, status) =>
+    api.patch(`/admin/devices/${deviceId}/status`, { status }),
+
+  // ── Live Feed ──────────────────────────────────────────────────────────────
+  getLiveFeed: (limit = 30) => api.get(`/admin/live-feed?limit=${limit}`),
+}; // ← this line was already there, don't duplicate it
+
 export default api;
