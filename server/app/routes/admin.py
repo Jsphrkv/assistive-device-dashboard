@@ -11,7 +11,7 @@ from datetime import timedelta
 admin_bp = Blueprint('admin', __name__, url_prefix='/api/admin')
 
 # ── External service URLs (set these in your .env) ───────────────────────────
-HF_URL    = os.getenv('HF_URL', 'https://Josephrkv-capstone2_proj.hf.space')
+HF_URL = os.getenv('HF_URL', 'https://josephrkv-capstone2-proj.hf.space')
 VITE_API_URL = os.getenv('VITE_API_URL', 'https://assistive-device-dashboard.onrender.com')
 
 
