@@ -1,111 +1,109 @@
-import React, { useState } from "react";
-import { LogOut, Menu, X } from "lucide-react";
+import React from "react";
+import { Camera, Moon, Sun, Menu } from "lucide-react";
 
-const Header = ({ currentUser, onLogout }) => {
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
-  const toggleMobileMenu = () => {
-    setIsMobileMenuOpen(!isMobileMenuOpen);
-  };
-
-  const handleLogout = () => {
-    setIsMobileMenuOpen(false);
-    onLogout();
-  };
+const Header = ({ theme, onToggleDark, isMobile, onOpenMobileMenu }) => {
+  const { dark, headerBg, headerBorder, headerText, headerSub } = theme;
 
   return (
-    <>
-      <style>{`
-        @keyframes fadeInDown {
-          from {
-            opacity: 0;
-            transform: translateY(-10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
+    <header
+      style={{
+        background: headerBg,
+        borderBottom: `1px solid ${headerBorder}`,
+        height: 64,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "0 1.5rem",
+        width: "100%",
+        boxSizing: "border-box",
+        transition: "background .2s, border-color .2s",
+      }}
+    >
+      {/* Left: burger (mobile only) + logo icon + title */}
+      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+        {isMobile && (
+          <button
+            onClick={onOpenMobileMenu}
+            aria-label="Open menu"
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 8,
+              background: "linear-gradient(135deg,#7c3aed,#a855f7)",
+              border: "none",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+              boxShadow: "0 2px 8px rgba(124,58,237,0.35)",
+            }}
+          >
+            <Menu size={18} color="#fff" />
+          </button>
+        )}
 
-        .mobile-menu-dropdown {
-          animation: fadeInDown 0.2s ease-out;
-        }
-      `}</style>
+        <div
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            flexShrink: 0,
+            background: "linear-gradient(135deg,#7c3aed,#a855f7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Camera size={16} color="#fff" />
+        </div>
 
-      <header className="bg-white sticky top-0 z-50 border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 py-3 sm:py-4">
-          <div className="flex justify-between items-center">
-            {/* Logo/Title Section */}
-            <div className="flex-1 min-w-0">
-              <h1 className="text-lg md:text-xl font-bold text-gray-900 truncate">
-                Assistive Device Dashboard
-              </h1>
-              <p className="text-xs md:text-sm text-gray-600 hidden sm:block">
-                Computer Vision Obstacle Detection System
-              </p>
-            </div>
-
-            {/* Desktop User Info & Logout */}
-            <div className="hidden md:flex items-center gap-4">
-              <div className="text-right">
-                <p className="text-sm font-medium text-gray-900">
-                  {currentUser.username}
-                </p>
-                <p className="text-xs text-gray-500 capitalize">
-                  {currentUser.role}
-                </p>
-              </div>
-              <button
-                onClick={onLogout}
-                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-              >
-                <LogOut className="w-4 h-4" />
-                Logout
-              </button>
-            </div>
-
-            {/* Mobile Burger Menu Button */}
-            <button
-              onClick={toggleMobileMenu}
-              className="md:hidden p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-              aria-label="Toggle menu"
-            >
-              {isMobileMenuOpen ? (
-                <X className="w-6 h-6" />
-              ) : (
-                <Menu className="w-6 h-6" />
-              )}
-            </button>
-          </div>
-
-          {/* Mobile Menu Dropdown */}
-          {isMobileMenuOpen && (
-            <div className="md:hidden mt-4 pt-4 border-t border-gray-200 mobile-menu-dropdown">
-              <div className="space-y-3">
-                {/* User Info */}
-                <div className="px-3 py-2 bg-gray-50 rounded-lg">
-                  <p className="text-sm font-medium text-gray-900">
-                    {currentUser.username}
-                  </p>
-                  <p className="text-xs text-gray-500 capitalize">
-                    {currentUser.role}
-                  </p>
-                </div>
-
-                {/* Logout Button */}
-                <button
-                  onClick={handleLogout}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                >
-                  <LogOut className="w-4 h-4" />
-                  Logout
-                </button>
-              </div>
-            </div>
+        <div>
+          <h1
+            style={{
+              fontWeight: 700,
+              fontSize: "1rem",
+              color: headerText,
+              margin: 0,
+              lineHeight: 1.25,
+              whiteSpace: "nowrap",
+            }}
+          >
+            Assistive Device Dashboard
+          </h1>
+          {!isMobile && (
+            <p style={{ fontSize: "0.7rem", color: headerSub, margin: 0 }}>
+              Wearable Computer Vision System
+            </p>
           )}
         </div>
-      </header>
-    </>
+      </div>
+
+      {/* Right: dark mode toggle */}
+      <button
+        onClick={onToggleDark}
+        title={dark ? "Switch to light mode" : "Switch to dark mode"}
+        style={{
+          width: 38,
+          height: 38,
+          borderRadius: "50%",
+          border: `1px solid ${dark ? "#3a3a3a" : "#e5e7eb"}`,
+          background: dark ? "#2a2a2a" : "#f9fafb",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "pointer",
+          transition: "background .2s, border-color .2s",
+          flexShrink: 0,
+        }}
+      >
+        {dark ? (
+          <Sun size={16} color="#fbbf24" />
+        ) : (
+          <Moon size={16} color="#6b7280" />
+        )}
+      </button>
+    </header>
   );
 };
 
