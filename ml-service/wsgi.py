@@ -10,10 +10,6 @@ def create_app():
     app = Flask(__name__)
     CORS(app)
 
-    # Download all models from Supabase Storage on startup
-    from ml_models.model_loader import download_all_models
-    download_all_models()
-
     # Register blueprints
     from app.routes.ml import ml_bp
     app.register_blueprint(ml_bp)

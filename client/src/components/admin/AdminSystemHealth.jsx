@@ -181,7 +181,7 @@ const AdminSystemHealth = () => {
             value: loading
               ? "—"
               : ml
-                ? `${Object.values(ml).filter((m) => m.status === "ok").length}/4`
+                ? `${Object.values(ml).filter((m) => m.status === "ok").length}/${Object.keys(ml).length}`
                 : "—",
             color: "blue",
           },
@@ -274,6 +274,16 @@ const AdminSystemHealth = () => {
                 }
                 status={ml.object?.status === "ok" ? "ok" : "error"}
                 sub={`Source: ${ml.object?.source ?? "ml_model"}`}
+              />
+              <StatusRow
+                label="Environment Classifier"
+                value={
+                  ml.environment?.status === "ok"
+                    ? "Loaded"
+                    : (ml.environment?.status ?? "Unknown")
+                }
+                status={ml.environment?.status === "ok" ? "ok" : "error"}
+                sub={`Source: ${ml.environment?.source ?? "ml_model"}`}
               />
             </>
           ) : (

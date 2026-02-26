@@ -1,12 +1,3 @@
-"""
-Add this route to your HF Space ml-service Flask app.
-It lets the Render backend health-check which models are actually loaded.
-
-Drop this file in your ml-service and register it in app.py:
-    from model_status_route import model_status_bp
-    app.register_blueprint(model_status_bp)
-"""
-
 from flask import Blueprint, jsonify
 from ml_models.model_loader import load_model, get_yolo_model_path
 
@@ -38,12 +29,14 @@ def model_status():
     danger_ok,  danger_src  = check_model('danger_predictor')
     anomaly_ok, anomaly_src = check_model('anomaly_detector')
     object_ok,  object_src  = check_model('object_detector')
+    env_ok, env_src = check_model('environment_classifier')
 
     return jsonify({
         'yolo':    {'loaded': yolo_ok,    'source': 'yolo_onnx' if yolo_ok else 'fallback'},
         'danger':  {'loaded': danger_ok,  'source': danger_src},
         'anomaly': {'loaded': anomaly_ok, 'source': anomaly_src},
         'object':  {'loaded': object_ok,  'source': object_src},
+        'environment': {'loaded': env_ok, 'source': env_src},
     }), 200
 
 

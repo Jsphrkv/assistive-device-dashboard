@@ -76,7 +76,7 @@ def _fetch_ml_model_status():
         if resp.status_code == 200:
             data = resp.json()
             result = {}
-            for name in ('yolo', 'danger', 'anomaly', 'object'):
+            for name in ('yolo', 'danger', 'anomaly', 'object', 'environment'):
                 m = data.get(name, {})
                 result[name] = {
                     'status': 'ok' if m.get('loaded') else 'error',
@@ -87,10 +87,11 @@ def _fetch_ml_model_status():
         print(f"[Admin Health] model-status fetch failed: {e}")
 
     return {
-        'yolo':    {'status': 'unknown', 'source': 'yolo_onnx'},
-        'danger':  {'status': 'unknown', 'source': 'ml_model'},
-        'anomaly': {'status': 'unknown', 'source': 'ml_model'},
-        'object':  {'status': 'unknown', 'source': 'ml_model'},
+        'yolo':        {'status': 'unknown', 'source': 'yolo_onnx'},
+        'danger':      {'status': 'unknown', 'source': 'ml_model'},
+        'anomaly':     {'status': 'unknown', 'source': 'ml_model'},
+        'object':      {'status': 'unknown', 'source': 'ml_model'},
+        'environment': {'status': 'unknown', 'source': 'ml_model'},
     }
 
 
