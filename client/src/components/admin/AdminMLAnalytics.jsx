@@ -173,7 +173,7 @@ const AdminMLAnalytics = () => {
             label: "Avg Confidence",
             value:
               data?.avgConfidence != null
-                ? `${(data.avgConfidence * 100).toFixed(1)}%`
+                ? `${data.avgConfidence.toFixed(1)}%`
                 : "—",
           },
           {

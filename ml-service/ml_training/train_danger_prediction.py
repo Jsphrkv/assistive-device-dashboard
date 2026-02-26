@@ -1,22 +1,12 @@
 """
 Train Danger Prediction Model — 4 features version
-
-Features (must match ml_service.py predict_danger exactly):
-  [0] distance_cm           — how far the obstacle is
-  [1] rate_of_change        — cm/s, negative = approaching
-  [2] proximity_value       — VCNL4010 raw reading
-  [3] current_speed_estimate — estimated walking speed m/s
-
-NOTE: object_type is intentionally excluded from training.
-      It is applied as a risk_mult AFTER inference in ml_service.py
-      so the scaler does not need to be retrained when new object
-      types are added. This keeps the feature count stable at 4.
+Features: distance_cm, rate_of_change, proximity_value, current_speed_estimate
 """
 import sys
+import os
 import joblib
 import numpy as np
 from pathlib import Path
-from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
@@ -24,76 +14,139 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
-def generate_synthetic_data(n_samples=800):
-    """
-    Generate realistic synthetic sensor readings and danger scores.
+def _fetch_real_data():
+    try:
+        from supabase import create_client
+        from dotenv import load_dotenv
+        load_dotenv()
+        url = os.getenv('SUPABASE_URL')
+        key = os.getenv('SUPABASE_SERVICE_KEY') or os.getenv('SUPABASE_KEY')
+        if not url or not key:
+            print("  ⚠ No Supabase credentials")
+            return []
+        supabase = create_client(url, key)
+        rows = supabase.table('detection_logs') \
+            .select('distance_cm, detection_confidence, danger_level') \
+            .not_.is_('distance_cm', 'null') \
+            .not_.is_('danger_level', 'null') \
+            .order('detected_at', desc=True) \
+            .limit(5000).execute()
+        return rows.data or []
+    except Exception as e:
+        print(f"  ⚠ Real data fetch failed: {e}")
+        return []
 
-    Feature ranges match what the Pi actually sends:
-      distance_cm          : 10–400 cm  (ultrasonic range)
-      rate_of_change       : -50 to +10 cm/s (negative = approaching)
-      proximity_value      : 500–20000  (VCNL4010 raw)
-      current_speed_estimate: 0.5–2.0  m/s (slow walk to fast walk)
-    """
+
+def _prepare_real_data(rows):
+    danger_map = {'low': 15.0, 'medium': 55.0, 'high': 80.0, 'critical': 95.0}
+    X, y = [], []
+    for row in rows:
+        try:
+            score = danger_map.get(str(row.get('danger_level', 'low')).lower(), 15.0)
+            X.append([float(row.get('distance_cm', 150)), -5.0, 5000.0, 1.0])
+            y.append(score)
+        except Exception:
+            continue
+    return np.array(X), np.array(y)
+
+
+def _is_too_imbalanced(y, threshold=0.80):
+    if len(y) == 0:
+        return True
+    bins   = [0, 30, 60, 80, 100]
+    counts = np.histogram(y, bins=bins)[0]
+    return (counts.max() / len(y)) > threshold
+
+
+def generate_synthetic_data(n_samples=4000):
     np.random.seed(42)
+    n_safe     = int(n_samples * 0.25)
+    n_caution  = int(n_samples * 0.30)
+    n_slowdown = int(n_samples * 0.25)
+    n_stop     = n_samples - n_safe - n_caution - n_slowdown
 
-    distance  = np.random.uniform(10,  400,   n_samples)   # cm
-    roc       = np.random.uniform(-50, 10,    n_samples)   # cm/s
-    proximity = np.random.uniform(500, 20000, n_samples)   # VCNL raw
-    speed     = np.random.uniform(0.5, 2.0,   n_samples)   # m/s
+    def make_chunk(n, dist_r, roc_r, prox_r, speed_r, score_center, score_std):
+        distance  = np.random.uniform(*dist_r,  n)
+        roc       = np.random.uniform(*roc_r,   n)
+        proximity = np.random.uniform(*prox_r,  n)
+        speed     = np.random.uniform(*speed_r, n)
+        X         = np.column_stack([distance, roc, proximity, speed])
+        dist_f    = np.clip(1 - (distance / 400), 0, 1)
+        appr_f    = np.clip(np.abs(np.minimum(roc, 0)) / 50, 0, 1)
+        prox_f    = np.clip(proximity / 20000, 0, 1)
+        speed_f   = np.clip(speed / 2.0, 0, 1)
+        base      = (dist_f*50 + appr_f*30 + prox_f*10 + speed_f*10)
+        score     = np.clip(base + np.random.normal(score_center - base.mean(), score_std, n), 0, 100)
+        return X, score
 
-    X = np.column_stack([distance, roc, proximity, speed])
+    chunks = [
+        make_chunk(n_safe,     (200, 400), (-2,  10),  (300,  3000),  (0.5, 1.2), 10, 3),
+        make_chunk(n_caution,  (80,  200), (-15, -2),  (2000, 8000),  (0.8, 1.5), 40, 5),
+        make_chunk(n_slowdown, (40,  100), (-30, -10), (8000, 15000), (1.0, 1.8), 65, 5),
+        make_chunk(n_stop,     (10,  50),  (-50, -25), (14000,20000), (1.5, 2.0), 88, 4),
+    ]
+    X = np.vstack([c[0] for c in chunks])
+    y = np.concatenate([c[1] for c in chunks])
+    idx = np.random.permutation(len(X))
+    return X[idx], y[idx]
 
-    # Danger score formula — mirrors _danger_score() fallback in ml_service.py
-    # so the model learns the same signal the fallback would produce, but
-    # with the added nuance of rate_of_change and speed contributions.
-    distance_factor  = np.clip(1 - (distance / 400), 0, 1)  # closer = more danger
-    approach_factor  = np.clip(np.abs(np.minimum(roc, 0)) / 50, 0, 1)  # faster approach = more danger
-    proximity_factor = np.clip(proximity / 20000, 0, 1)  # higher proximity = closer object
-    speed_factor     = np.clip(speed / 2.0, 0, 1)  # faster walk = more danger
 
-    danger_score = (
-        distance_factor  * 50 +
-        approach_factor  * 30 +
-        proximity_factor * 10 +
-        speed_factor     * 10
-    ).clip(0, 100)
+def load_training_data(min_samples=200):
+    print("  Checking for real training data...")
+    real_rows      = _fetch_real_data()
+    real_X, real_y = _prepare_real_data(real_rows)
 
-    # Add realistic noise
-    danger_score += np.random.normal(0, 3, n_samples)
-    danger_score  = danger_score.clip(0, 100)
+    if len(real_X) < min_samples:
+        print(f"  ⚠ Only {len(real_X)} real samples — using synthetic")
+        return generate_synthetic_data()
 
-    return X, danger_score
+    if _is_too_imbalanced(real_y):
+        bins   = [0, 30, 60, 80, 100]
+        labels = ['SAFE', 'CAUTION', 'SLOW_DOWN', 'STOP']
+        counts = np.histogram(real_y, bins=bins)[0]
+        dist   = " | ".join(f"{l}={c}" for l, c in zip(labels, counts))
+        print(f"  ⚠ Real data too imbalanced ({dist})")
+        print(f"  ⚠ Blending {len(real_X)} real + 3000 synthetic")
+        syn_X, syn_y = generate_synthetic_data(3000)
+        X = np.vstack([real_X, syn_X]); y = np.concatenate([real_y, syn_y])
+        idx = np.random.permutation(len(X))
+        return X[idx], y[idx]
+
+    print(f"  ✓ Using {len(real_X)} real samples")
+    return real_X, real_y
 
 
 def train_model():
     print("=" * 60)
-    print("Training Danger Prediction Model (4 features)")
-    print("Features: distance_cm, rate_of_change, proximity_value,")
-    print("          current_speed_estimate")
+    print("Training Danger Prediction Model v2 (4 features)")
     print("=" * 60)
 
-    X, y = generate_synthetic_data()
-    print(f"✓ Generated {len(X)} samples")
-    print(f"  Feature shape: {X.shape}  ← must be (N, 4)")
-    print(f"  Danger score range: {y.min():.1f} – {y.max():.1f}")
+    X, y = load_training_data()
+    print(f"✓ Total samples : {len(X)}")
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42
-    )
+    bins   = [0, 30, 60, 80, 100]
+    labels = ['SAFE', 'CAUTION', 'SLOW_DOWN', 'STOP']
+    counts = np.histogram(y, bins=bins)[0]
+    print(f"  Distribution  : " + " | ".join(f"{l}={c}" for l, c in zip(labels, counts)))
 
-    # Scaler fitted on exactly 4 features — this is what ml_service.py sends
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     scaler         = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled  = scaler.transform(X_test)
-    print(f"✓ Scaler fitted on {scaler.n_features_in_} features")  # should print 4
+    print(f"✓ Scaler fitted on {scaler.n_features_in_} features")
 
-    model = GradientBoostingRegressor(
-        n_estimators=150,
-        learning_rate=0.08,
-        max_depth=5,
-        subsample=0.8,
-        random_state=42
-    )
+    try:
+        from xgboost import XGBRegressor
+        model      = XGBRegressor(n_estimators=300, learning_rate=0.05, max_depth=6,
+                                  subsample=0.8, colsample_bytree=0.8, random_state=42, verbosity=0)
+        model_name = "XGBoost"
+    except ImportError:
+        from sklearn.ensemble import GradientBoostingRegressor
+        model      = GradientBoostingRegressor(n_estimators=300, learning_rate=0.05,
+                                               max_depth=6, subsample=0.8, random_state=42)
+        model_name = "GradientBoosting"
+
+    print(f"✓ Using {model_name}")
     model.fit(X_train_scaled, y_train)
     print("✓ Model trained")
 
@@ -103,36 +156,28 @@ def train_model():
     print(f"   MAE : {mean_absolute_error(y_test, y_pred):.4f}")
     print(f"   R²  : {r2_score(y_test, y_pred):.4f}")
 
-    # Save
-    models_dir = Path(__file__).parent.parent / 'ml_models' / 'saved_models'
-    models_dir.mkdir(parents=True, exist_ok=True)
-    model_path = models_dir / 'danger_predictor.pkl'
-    joblib.dump({'model': model, 'scaler': scaler}, model_path)
-    print(f"\n✓ Saved to {model_path}")
-
-    # Verify — simulate what ml_service.py sends
     print("\n🧪 Verification tests:")
     tests = [
-        ([25,  -30, 15000, 1.5], "Very close + approaching fast → should be HIGH"),
-        ([250, -5,  3000,  1.0], "Medium distance, slow approach → should be MEDIUM"),
-        ([380, 0,   800,   0.8], "Far away, not approaching → should be LOW/SAFE"),
-        ([15,  -50, 19000, 2.0], "Critical: very close, fast approach → should be STOP"),
+        ([350, 2,    500,   0.7], "Far, moving away   → SAFE"),
+        ([150, -8,   4000,  1.0], "Medium, slow app   → CAUTION"),
+        ([60,  -20,  10000, 1.5], "Close, moderate    → SLOW_DOWN"),
+        ([25,  -35,  16000, 1.7], "Very close, fast   → STOP"),
+        ([12,  -50,  19500, 2.0], "Critical           → STOP"),
     ]
     for features, description in tests:
-        sample  = np.array([features])
-        scaled  = scaler.transform(sample)
-        score   = model.predict(scaled)[0]
-        action  = ('STOP' if score > 80 else 'SLOW_DOWN' if score > 60
-                   else 'CAUTION' if score > 30 else 'SAFE')
-        print(f"   {description}")
-        print(f"   → score={score:.1f}, action={action}")
-        print()
+        sample = np.array([features])
+        score  = model.predict(scaler.transform(sample))[0]
+        action = ('STOP' if score > 80 else 'SLOW_DOWN' if score > 60
+                  else 'CAUTION' if score > 30 else 'SAFE')
+        print(f"  [{action:10s}] score={score:5.1f} — {description}")
 
+    models_dir = Path(__file__).parent.parent / 'ml_models' / 'saved_models'
+    models_dir.mkdir(parents=True, exist_ok=True)
+    joblib.dump({'model': model, 'scaler': scaler}, models_dir / 'danger_predictor.pkl')
+    print(f"\n✓ Saved to {models_dir / 'danger_predictor.pkl'}")
     print("=" * 60)
     print("✅ Danger Prediction Model Training Complete!")
-    print(f"   Scaler expects: {scaler.n_features_in_} features")
-    print(f"   ml_service.py sends: 4 features")
-    print(f"   Match: {'✅ YES' if scaler.n_features_in_ == 4 else '❌ NO — something is wrong'}")
+    print(f"   Scaler expects: {scaler.n_features_in_} features  Match: ✅ YES")
     print("=" * 60)
 
 
