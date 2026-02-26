@@ -292,10 +292,8 @@ const LoginForm = ({ onLogin, onShowRegister, onShowForgotPassword }) => {
 
   const bg = dark ? imgbgbg3 : imgbgbg1;
 
-  // ── Shared form JSX (rendered in both mobile + desktop) ──────────────────
+  // ── Shared form JSX ───────────────────────────────────────────────────────
   const renderForm = (mobile = false) => {
-    // mobile: white text on blurred bg, no card bg
-    // desktop: styled per dark/light theme inside card
     const tc = mobile ? "#ffffff" : dark ? "#f9fafb" : "#111827";
     const sc = mobile ? "rgba(255,255,255,0.75)" : dark ? "#aaaaaa" : "#6b7280";
     const lc = mobile ? "rgba(255,255,255,0.9)" : dark ? "#e0e0e0" : "#374151";
@@ -304,9 +302,10 @@ const LoginForm = ({ onLogin, onShowRegister, onShowForgotPassword }) => {
     const acc = mobile ? "#c084fc" : "#7c3aed";
 
     return (
+      // ── maxWidth bumped to 460 (was 420) — no card background/border ──────
       <div
         className="auth-fadein"
-        style={{ width: "100%", maxWidth: mobile ? 420 : 420 }}
+        style={{ width: "100%", maxWidth: mobile ? 420 : 460 }}
       >
         <h1
           style={{
@@ -556,9 +555,7 @@ const LoginForm = ({ onLogin, onShowRegister, onShowForgotPassword }) => {
     <>
       <style>{AUTH_CSS}</style>
 
-      {/* ════════════════════════════════════
-          MOBILE — full-screen bg, form floats
-          ════════════════════════════════════ */}
+      {/* ── MOBILE ── */}
       <div
         className="auth-mobile"
         style={{
@@ -570,7 +567,6 @@ const LoginForm = ({ onLogin, onShowRegister, onShowForgotPassword }) => {
           overflow: "hidden",
         }}
       >
-        {/* bg image */}
         <div
           style={{
             position: "fixed",
@@ -581,7 +577,6 @@ const LoginForm = ({ onLogin, onShowRegister, onShowForgotPassword }) => {
             zIndex: 0,
           }}
         />
-        {/* dim */}
         <div
           style={{
             position: "fixed",
@@ -645,7 +640,6 @@ const LoginForm = ({ onLogin, onShowRegister, onShowForgotPassword }) => {
           </button>
         </div>
 
-        {/* centered form — no card, just floating on bg */}
         <div
           style={{
             position: "relative",
@@ -660,7 +654,6 @@ const LoginForm = ({ onLogin, onShowRegister, onShowForgotPassword }) => {
           {renderForm(true)}
         </div>
 
-        {/* footer */}
         <div
           style={{
             position: "relative",
@@ -682,9 +675,7 @@ const LoginForm = ({ onLogin, onShowRegister, onShowForgotPassword }) => {
         </div>
       </div>
 
-      {/* ════════════════════════════════════
-          DESKTOP — 50:50 split
-          ════════════════════════════════════ */}
+      {/* ── DESKTOP ── */}
       <div
         className="auth-desktop"
         style={{
@@ -763,7 +754,7 @@ const LoginForm = ({ onLogin, onShowRegister, onShowForgotPassword }) => {
             </button>
           </div>
 
-          {/* form inside card */}
+          {/* form area — no card, form sits directly on panel background */}
           <div
             style={{
               flex: 1,
@@ -773,23 +764,7 @@ const LoginForm = ({ onLogin, onShowRegister, onShowForgotPassword }) => {
               padding: "2rem 2.5rem",
             }}
           >
-            <div
-              className="auth-fadein"
-              style={{
-                width: "100%",
-                maxWidth: 420,
-                background: dark ? "#2c2c2c" : "#f0f0f2",
-                border: `1px solid ${dark ? "#444" : "#dcdce0"}`,
-                borderRadius: 12,
-                padding: "2rem",
-                boxSizing: "border-box",
-                boxShadow: dark
-                  ? "0 8px 32px rgba(0,0,0,.6)"
-                  : "0 4px 20px rgba(0,0,0,.07)",
-              }}
-            >
-              {renderForm(false)}
-            </div>
+            {renderForm(false)}
           </div>
 
           {/* footer */}

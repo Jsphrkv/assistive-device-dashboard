@@ -257,7 +257,6 @@ const Register = ({ onShowLogin }) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
     setError("");
   };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -301,9 +300,14 @@ const Register = ({ onShowLogin }) => {
 
     if (success)
       return (
+        // maxWidth 420 mobile, 460 desktop
         <div
           className="auth-fadein"
-          style={{ width: "100%", maxWidth: 420, textAlign: "center" }}
+          style={{
+            width: "100%",
+            maxWidth: mobile ? 420 : 460,
+            textAlign: "center",
+          }}
         >
           <div
             style={{
@@ -384,7 +388,11 @@ const Register = ({ onShowLogin }) => {
       );
 
     return (
-      <div className="auth-fadein" style={{ width: "100%", maxWidth: 420 }}>
+      // maxWidth 420 mobile, 460 desktop
+      <div
+        className="auth-fadein"
+        style={{ width: "100%", maxWidth: mobile ? 420 : 460 }}
+      >
         <h1
           style={{
             fontWeight: 700,
@@ -676,6 +684,7 @@ const Register = ({ onShowLogin }) => {
           }}
         >
           <TopBar />
+          {/* form area — no card, sits directly on panel */}
           <div
             style={{
               flex: 1,
@@ -685,23 +694,7 @@ const Register = ({ onShowLogin }) => {
               padding: "2rem 2.5rem",
             }}
           >
-            <div
-              className="auth-fadein"
-              style={{
-                width: "100%",
-                maxWidth: 420,
-                background: dark ? "#2c2c2c" : "#f0f0f2",
-                border: `1px solid ${dark ? "#444" : "#dcdce0"}`,
-                borderRadius: 12,
-                padding: "2rem",
-                boxSizing: "border-box",
-                boxShadow: dark
-                  ? "0 8px 32px rgba(0,0,0,.6)"
-                  : "0 4px 20px rgba(0,0,0,.07)",
-              }}
-            >
-              {renderContent(false)}
-            </div>
+            {renderContent(false)}
           </div>
           <div
             style={{

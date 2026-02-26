@@ -163,7 +163,6 @@ const ForgotPassword = ({ onShowLogin }) => {
     setDark(n);
     localStorage.setItem("theme", n ? "dark" : "light");
   };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -196,7 +195,11 @@ const ForgotPassword = ({ onShowLogin }) => {
       return (
         <div
           className="auth-fadein"
-          style={{ width: "100%", maxWidth: 420, textAlign: "center" }}
+          style={{
+            width: "100%",
+            maxWidth: mobile ? 420 : 460,
+            textAlign: "center",
+          }}
         >
           <div
             style={{
@@ -283,7 +286,10 @@ const ForgotPassword = ({ onShowLogin }) => {
       );
 
     return (
-      <div className="auth-fadein" style={{ width: "100%", maxWidth: 420 }}>
+      <div
+        className="auth-fadein"
+        style={{ width: "100%", maxWidth: mobile ? 420 : 460 }}
+      >
         <button
           onClick={onShowLogin}
           style={{
@@ -557,6 +563,7 @@ const ForgotPassword = ({ onShowLogin }) => {
           }}
         >
           <TopBar />
+          {/* form area — no card */}
           <div
             style={{
               flex: 1,
@@ -566,23 +573,7 @@ const ForgotPassword = ({ onShowLogin }) => {
               padding: "2rem 2.5rem",
             }}
           >
-            <div
-              className="auth-fadein"
-              style={{
-                width: "100%",
-                maxWidth: 420,
-                background: dark ? "#2c2c2c" : "#f0f0f2",
-                border: `1px solid ${dark ? "#444" : "#dcdce0"}`,
-                borderRadius: 12,
-                padding: "2rem",
-                boxSizing: "border-box",
-                boxShadow: dark
-                  ? "0 8px 32px rgba(0,0,0,.6)"
-                  : "0 4px 20px rgba(0,0,0,.07)",
-              }}
-            >
-              {renderContent(false)}
-            </div>
+            {renderContent(false)}
           </div>
           <div
             style={{

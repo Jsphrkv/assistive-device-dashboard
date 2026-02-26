@@ -43,6 +43,7 @@ function App() {
     }
   }, [authUser]);
 
+  // ── Handle /reset-password and /verify-email deep links ──────────────────
   useEffect(() => {
     const path = window.location.pathname;
     const search = window.location.search;
@@ -64,12 +65,35 @@ function App() {
     console.log("=".repeat(60));
   }, []);
 
+  // ── Browser back / forward support ───────────────────────────────────────
+  // Listen for popstate (back/forward button press) and restore the tab that
+  // was stored in the history entry's state object.
+  useEffect(() => {
+    const handlePopState = (e) => {
+      const tab = e.state?.tab;
+      if (tab && currentUser) {
+        const isAdmin = currentUser.role === "admin";
+        const isAdminTab = tab.startsWith("admin-");
+        // Same role-guard as handleTabChange — never let a user land on an
+        // admin tab or vice-versa via the back/forward buttons.
+        if (isAdmin === isAdminTab) {
+          setActiveTab(tab);
+        }
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [currentUser]);
+
+  // ── Auth / navigation handlers ────────────────────────────────────────────
   const handleLogin = (user) => {
     setCurrentUser(user);
-    // Set correct default tab immediately on login
-    setActiveTab(user.role === "admin" ? "admin-health" : "dashboard");
+    const defaultTab = user.role === "admin" ? "admin-health" : "dashboard";
+    setActiveTab(defaultTab);
     setCurrentView("login");
-    window.history.pushState({}, "", "/");
+    // replaceState (not pushState) so the login page itself isn't in history —
+    // pressing back after login won't loop back to a blank auth screen.
+    window.history.replaceState({ tab: defaultTab }, "", `/?tab=${defaultTab}`);
   };
 
   const handleLogout = async () => {
@@ -83,10 +107,12 @@ function App() {
   };
 
   const handleShowRegister = () => setCurrentView("register");
+
   const handleShowLogin = () => {
     setCurrentView("login");
     window.history.pushState({}, "", "/");
   };
+
   const handleShowForgotPassword = () => setCurrentView("forgotPassword");
 
   const handleTabChange = (tabId) => {
@@ -94,9 +120,14 @@ function App() {
     const isAdmin = currentUser?.role === "admin";
     const isAdminTab = tabId.startsWith("admin-");
     if (isAdmin !== isAdminTab) return; // silently block cross-role navigation
+
     setActiveTab(tabId);
+    // Push a new history entry so the browser back/forward buttons can
+    // navigate between tabs.
+    window.history.pushState({ tab: tabId }, "", `/?tab=${tabId}`);
   };
 
+  // ── Loading state ─────────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -108,6 +139,7 @@ function App() {
     );
   }
 
+  // ── Special routes (email verification, password reset) ───────────────────
   if (currentView === "verifyEmail") {
     return <VerifyEmail onShowLogin={handleShowLogin} />;
   }
@@ -116,6 +148,7 @@ function App() {
     return <ResetPassword onShowLogin={handleShowLogin} />;
   }
 
+  // ── Auth screens ──────────────────────────────────────────────────────────
   if (!currentUser) {
     if (currentView === "register") {
       return <Register onShowLogin={handleShowLogin} />;
@@ -175,6 +208,7 @@ function App() {
     }
   };
 
+  // ── Main app shell ────────────────────────────────────────────────────────
   return (
     <Layout
       currentUser={currentUser}
