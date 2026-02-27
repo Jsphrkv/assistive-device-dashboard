@@ -423,7 +423,8 @@ def get_daily_summary():
         q = supabase.table('ml_predictions')\
             .select('created_at, prediction_type, is_anomaly')\
             .gte('created_at', start_iso)\
-            .lte('created_at', end_iso)
+            .lte('created_at', end_iso)\
+            .limit(100000)
         q = _apply_device_filter(q, device_ids)
         ml_rows = q.execute().data
 
@@ -431,7 +432,8 @@ def get_daily_summary():
         q = supabase.table('detection_logs')\
             .select('detected_at, danger_level')\
             .gte('detected_at', start_iso)\
-            .lte('detected_at', end_iso)
+            .lte('detected_at', end_iso)\
+            .limit(100000)
         q = _apply_device_filter(q, device_ids)
         det_rows = q.execute().data
 
