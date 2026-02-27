@@ -313,9 +313,9 @@ def get_ml_analytics():
         # ── Avg confidence — paginated ────────────────────────────────────────
         conf_rows = _paginate_table(
             supabase, 'detection_logs', 'detection_confidence',
-            filters=date_filter + [('not_.is_', 'detection_confidence', 'null')],
+            filters=date_filter,
         )
-
+        
         conf_values = [
             r['detection_confidence']
             for r in conf_rows
