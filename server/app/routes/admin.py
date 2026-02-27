@@ -224,6 +224,12 @@ def get_detection_stats():
 @token_required
 @admin_required
 def get_ml_analytics():
+    """
+    ALL data sourced exclusively from ml_predictions table.
+    Columns used: created_at, object_detected, danger_level,
+                  detection_confidence, model_source, prediction_type
+    detection_logs is NOT queried here at all.
+    """
     try:
         days      = min(request.args.get('days', 7, type=int), 90)
         supabase  = get_admin_client()
@@ -231,23 +237,24 @@ def get_ml_analytics():
         start_dt  = end_dt - timedelta(days=days)
         start_iso = start_dt.isoformat()
 
-        date_filter = [('gte', 'detected_at', start_iso)]
+        # Single filter used by all queries
+        ml_filter = [('gte', 'created_at', start_iso)]
 
-        # ── Total ML predictions (COUNT from ml_predictions — not detection_logs) ──
+        # ── Total ML predictions ──────────────────────────────────────────────
         ml_total_res      = supabase.table('ml_predictions')\
             .select('*', count='exact', head=True)\
             .gte('created_at', start_iso).execute()
         total_predictions = ml_total_res.count or 0
 
-        # ── Hourly buckets — paginated ────────────────────────────────────────
+        # ── Hourly buckets ────────────────────────────────────────────────────
         hourly_rows = _paginate_table(
-            supabase, 'detection_logs', 'detected_at',
-            filters=date_filter,
+            supabase, 'ml_predictions', 'created_at',
+            filters=ml_filter,
         )
 
         hourly_buckets = {}
         for row in hourly_rows:
-            ts = row.get('detected_at', '')
+            ts = row.get('created_at', '')
             if not ts:
                 continue
             try:
@@ -263,10 +270,10 @@ def get_ml_analytics():
             for k, v in sorted(hourly_buckets.items())
         ]
 
-        # ── Object distribution — paginated ───────────────────────────────────
+        # ── Object distribution ───────────────────────────────────────────────
         obj_rows = _paginate_table(
-            supabase, 'detection_logs', 'object_detected',
-            filters=date_filter,
+            supabase, 'ml_predictions', 'object_detected',
+            filters=ml_filter,
         )
 
         obj_counts = {}
@@ -279,10 +286,10 @@ def get_ml_analytics():
             for k, v in sorted(obj_counts.items(), key=lambda x: -x[1])
         ]
 
-        # ── Danger frequency — paginated ──────────────────────────────────────
+        # ── Danger level frequency ────────────────────────────────────────────
         danger_rows = _paginate_table(
-            supabase, 'detection_logs', 'danger_level',
-            filters=date_filter,
+            supabase, 'ml_predictions', 'danger_level',
+            filters=ml_filter,
         )
 
         danger_counts = {}
@@ -295,10 +302,26 @@ def get_ml_analytics():
             for k, v in sorted(danger_counts.items(), key=lambda x: -x[1])
         ]
 
-        # ── Model source ratio — paginated ────────────────────────────────────
+        # ── Prediction type breakdown ─────────────────────────────────────────
+        type_rows = _paginate_table(
+            supabase, 'ml_predictions', 'prediction_type',
+            filters=ml_filter,
+        )
+
+        type_counts = {}
+        for row in type_rows:
+            ptype = row.get('prediction_type') or 'unknown'
+            type_counts[ptype] = type_counts.get(ptype, 0) + 1
+
+        prediction_type_breakdown = [
+            {'prediction_type': k, 'count': v}
+            for k, v in sorted(type_counts.items(), key=lambda x: -x[1])
+        ]
+
+        # ── Model source ratio ────────────────────────────────────────────────
         ml_rows = _paginate_table(
             supabase, 'ml_predictions', 'model_source',
-            filters=[('gte', 'created_at', start_iso)],
+            filters=ml_filter,
         )
 
         ml_model_count = 0
@@ -310,27 +333,28 @@ def get_ml_analytics():
             else:
                 ml_model_count += 1
 
-        # ── Avg confidence — paginated ────────────────────────────────────────
+        # ── Avg detection confidence ──────────────────────────────────────────
         conf_rows = _paginate_table(
-            supabase, 'detection_logs', 'detection_confidence',
-            filters=date_filter,
+            supabase, 'ml_predictions', 'detection_confidence',
+            filters=ml_filter,
         )
-        
+
         conf_values = []
         for r in conf_rows:
             v = r.get('detection_confidence')
             if v is not None and v > 0.01:
-                if v > 1:          # stored as e.g. 87.5 instead of 0.875
+                if v > 1:   # normalize percentage-stored values (87.5 → 0.875)
                     v = v / 100
                 conf_values.append(v)
-        avg_confidence = (sum(conf_values) / len(conf_values)) if conf_values else 0.75
+        avg_confidence = (sum(conf_values) / len(conf_values)) if conf_values else 0.0
 
         return jsonify({
-            'totalPredictions':   total_predictions,
-            'avgConfidence':      round(avg_confidence, 4),
-            'hourlyDetections':   hourly_detections,
-            'objectDistribution': object_distribution,
-            'dangerFrequency':    danger_frequency,
+            'totalPredictions':        total_predictions,
+            'avgConfidence':           round(avg_confidence, 4),
+            'hourlyDetections':        hourly_detections,
+            'objectDistribution':      object_distribution,
+            'dangerFrequency':         danger_frequency,
+            'predictionTypeBreakdown': prediction_type_breakdown,
             'modelSourceRatio': {
                 'ml_model': ml_model_count,
                 'fallback': fallback_count,
