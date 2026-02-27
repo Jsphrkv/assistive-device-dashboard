@@ -1,361 +1,228 @@
 from flask import Blueprint, request, jsonify
 from app.services.supabase_client import get_supabase
-from app.middleware.auth import token_required, admin_required
-from app.middleware.auth import check_permission
+from app.middleware.auth import token_required, admin_required, check_permission
 
 statistics_bp = Blueprint('statistics', __name__, url_prefix='/api/statistics')
 
-def get_user_device_ids(user_id, user_role, supabase):
-    """Get device IDs for the current user (or all devices for admin)"""
+
+# ── Shared helper ─────────────────────────────────────────────────────────────
+
+def _device_ids(supabase, user_id, user_role):
+    """Return device UUID list for user, or None for admin."""
     if user_role == 'admin':
-        return None  # Admin sees everything
-    
-    user_devices = supabase.table('user_devices')\
-        .select('id')\
-        .eq('user_id', user_id)\
-        .execute()
-    
-    device_ids = [device['id'] for device in user_devices.data]
-    return device_ids if device_ids else ['no-devices']
-    
+        return None
+    result = supabase.table('user_devices').select('id').eq('user_id', user_id).execute()
+    ids = [d['id'] for d in result.data]
+    return ids if ids else ['no-devices']
+
+
+def _det_count(supabase, device_ids, filters=None):
+    """Count detection_logs rows, optionally filtered."""
+    q = supabase.table('detection_logs').select('*', count='exact', head=True)
+    if device_ids:
+        q = q.in_('device_id', device_ids)
+    if filters:
+        for col, val in filters.items():
+            q = q.in_(col, val) if isinstance(val, list) else q.eq(col, val)
+    return q.execute().count or 0
+
+
+# ── GET /api/statistics/daily/<days> ─────────────────────────────────────────
+
 @statistics_bp.route('/daily/<int:days>', methods=['GET'])
 @token_required
 def get_daily_stats(days):
-    """
-    Get daily statistics for current user
-    ✅ Transforms data to match frontend expectations
-    """
+    """Get daily statistics for current user."""
     try:
-        user_id = request.current_user['user_id']
+        user_id   = request.current_user['user_id']
         user_role = request.current_user.get('role', 'user')
-        
-        supabase = get_supabase()
-        
+        supabase  = get_supabase()
+
         print(f"📊 Fetching daily stats for user {user_id} (last {days} days)")
-        
-        # Query daily_statistics table
-        if user_role == 'admin':
-            response = supabase.table('daily_statistics')\
-                .select('*')\
-                .order('stat_date', desc=True)\
-                .limit(days)\
-                .execute()
-        else:
-            response = supabase.table('daily_statistics')\
-                .select('*')\
-                .eq('user_id', user_id)\
-                .order('stat_date', desc=True)\
-                .limit(days)\
-                .execute()
-        
-        print(f"📊 Found {len(response.data)} daily statistics records")
-        
-        # Transform to match chart format
-        result = []
-        for row in response.data:
-            result.append({
-                'stat_date': row['stat_date'],
-                'date': row['stat_date'],
+
+        q = supabase.table('daily_statistics').select('*').order('stat_date', desc=True).limit(days)
+        if user_role != 'admin':
+            q = q.eq('user_id', user_id)
+
+        rows = q.execute().data
+        print(f"📊 Found {len(rows)} daily statistics records")
+
+        result = sorted([
+            {
+                'stat_date':    row['stat_date'],
+                'date':         row['stat_date'],
                 'total_alerts': row.get('total_alerts', 0),
-                'alerts': row.get('total_alerts', 0),
-                'high': row.get('high_priority', 0),
-                'medium': row.get('medium_priority', 0),
-                'low': row.get('low_priority', 0)
-            })
-        
-        # Sort by date ascending for chart display
-        result.sort(key=lambda x: x['date'])
-        
+                'alerts':       row.get('total_alerts', 0),
+                'high':         row.get('high_priority', 0),
+                'medium':       row.get('medium_priority', 0),
+                'low':          row.get('low_priority', 0),
+            }
+            for row in rows
+        ], key=lambda x: x['date'])
+
         print(f"✅ Returning {len(result)} days")
         if result:
             print(f"   Sample: {result[0]}")
-        
+
         return jsonify({'data': result}), 200
-        
+
     except Exception as e:
         print(f"❌ Get daily stats error: {e}")
-        import traceback
-        traceback.print_exc()
+        import traceback; traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
+
+# ── GET /api/statistics/obstacles ────────────────────────────────────────────
 
 @statistics_bp.route('/obstacles', methods=['GET'])
 @token_required
 def get_obstacle_statistics():
-    """
-    Get obstacle statistics for current user
-    ✅ Transforms data correctly for PieChart
-    """
+    """Get obstacle statistics for current user."""
     try:
-        user_id = request.current_user['user_id']
+        user_id   = request.current_user['user_id']
         user_role = request.current_user.get('role', 'user')
-        
-        supabase = get_supabase()
-        
+        supabase  = get_supabase()
+
         print(f"📊 Fetching obstacle stats for user {user_id}")
-        
-        # Query obstacle_statistics table
-        if user_role == 'admin':
-            response = supabase.table('obstacle_statistics')\
-                .select('*')\
-                .order('total_count', desc=True)\
-                .limit(10)\
-                .execute()
-        else:
-            response = supabase.table('obstacle_statistics')\
-                .select('*')\
-                .eq('user_id', user_id)\
-                .order('total_count', desc=True)\
-                .limit(10)\
-                .execute()
-        
-        print(f"📊 Found {len(response.data)} obstacle types")
-        
-        # Transform to match PieChart format
-        result = []
-        for row in response.data:
-            result.append({
+
+        q = supabase.table('obstacle_statistics').select('*').order('total_count', desc=True).limit(10)
+        if user_role != 'admin':
+            q = q.eq('user_id', user_id)
+
+        rows = q.execute().data
+        print(f"📊 Found {len(rows)} obstacle types")
+
+        result = [
+            {
                 'obstacle_type': row['obstacle_type'],
-                'name': row['obstacle_type'],
-                'total_count': row['total_count'],
-                'value': row['total_count'],
-                'count': row['total_count'],
-                'percentage': row.get('percentage', 0)
-            })
-        
+                'name':          row['obstacle_type'],
+                'total_count':   row['total_count'],
+                'value':         row['total_count'],
+                'count':         row['total_count'],
+                'percentage':    row.get('percentage', 0),
+            }
+            for row in rows
+        ]
+
         print(f"✅ Returning obstacles:")
         for r in result[:3]:
             print(f"   {r['name']}: {r['value']}")
-        
+
         return jsonify({'data': result}), 200
-        
+
     except Exception as e:
         print(f"❌ Get obstacle statistics error: {e}")
-        import traceback
-        traceback.print_exc()
+        import traceback; traceback.print_exc()
         return jsonify({'error': 'Failed to get obstacle statistics'}), 500
 
+
+# ── GET /api/statistics/hourly ────────────────────────────────────────────────
 
 @statistics_bp.route('/hourly', methods=['GET'])
 @token_required
 def get_hourly_patterns():
-    """
-    Get hourly detection patterns
-    ✅ UPDATED: Now supports 1-hour intervals (12AM-11PM) with proper sorting
-    """
+    """Get hourly detection patterns (1-hour intervals, 12AM-11PM)."""
     try:
-        user_id = request.current_user['user_id']
+        user_id   = request.current_user['user_id']
         user_role = request.current_user.get('role', 'user')
-        
-        supabase = get_supabase()
-        
+        supabase  = get_supabase()
+
         print(f"📊 Fetching hourly patterns for user {user_id}")
-        
-        # Query hourly_patterns table
-        if user_role == 'admin':
-            response = supabase.table('hourly_patterns')\
-                .select('*')\
-                .execute()
-        else:
-            response = supabase.table('hourly_patterns')\
-                .select('*')\
-                .eq('user_id', user_id)\
-                .execute()
-        
-        print(f"📊 Found {len(response.data)} hourly records")
-        
-        # Transform to match BarChart format
-        result = []
-        for row in response.data:
-            hour_str = row['hour_range']
-            
-            result.append({
-                'hour_range': hour_str,
-                'hour': hour_str,
-                'detection_count': row.get('detection_count', 0),
-                'detections': row.get('detection_count', 0),
-                'count': row.get('detection_count', 0)
-            })
-        
-        # IMPROVED: Sort by hour (handles both 1-hour and 3-hour formats)
+
+        q = supabase.table('hourly_patterns').select('*')
+        if user_role != 'admin':
+            q = q.eq('user_id', user_id)
+
+        rows = q.execute().data
+        print(f"📊 Found {len(rows)} hourly records")
+
+        import re
         def parse_hour(hour_str):
-            """
-            Convert hour string to 24-hour format for sorting
-            Examples: '12AM' → 0, '1AM' → 1, '12PM' → 12, '1PM' → 13, '11PM' → 23
-            """
-            try:
-                # Extract number and AM/PM
-                import re
-                match = re.match(r'(\d+)(AM|PM)', hour_str)
-                if not match:
-                    return 0
-                
-                hour_num = int(match.group(1))
-                is_pm = match.group(2) == 'PM'
-                
-                # Convert to 24-hour
-                if hour_num == 12:
-                    return 0 if not is_pm else 12
-                else:
-                    return hour_num if not is_pm else hour_num + 12
-            except:
+            m = re.match(r'(\d+)(AM|PM)', str(hour_str))
+            if not m:
                 return 0
-        
-        result.sort(key=lambda x: parse_hour(x['hour']))
-        
+            h, period = int(m.group(1)), m.group(2)
+            if h == 12:
+                return 0 if period == 'AM' else 12
+            return h if period == 'AM' else h + 12
+
+        result = sorted([
+            {
+                'hour_range':      row['hour_range'],
+                'hour':            row['hour_range'],
+                'detection_count': row.get('detection_count', 0),
+                'detections':      row.get('detection_count', 0),
+                'count':           row.get('detection_count', 0),
+            }
+            for row in rows
+        ], key=lambda x: parse_hour(x['hour']))
+
         print(f"✅ Returning {len(result)} hourly data points:")
         for r in result[:5]:
             print(f"   {r['hour']}: {r['detections']} detections")
-        
+
         return jsonify({'data': result}), 200
-        
+
     except Exception as e:
         print(f"❌ Get hourly patterns error: {e}")
-        import traceback
-        traceback.print_exc()
+        import traceback; traceback.print_exc()
         return jsonify({'error': 'Failed to get hourly patterns'}), 500
 
+
+# ── GET /api/statistics/summary ──────────────────────────────────────────────
 
 @statistics_bp.route('/summary', methods=['GET'])
 @token_required
 def get_ml_statistics():
-    """Get ML statistics summary for current user"""
+    """Get ML statistics summary for current user."""
     try:
-        user_id = request.current_user['user_id']
+        user_id   = request.current_user['user_id']
         user_role = request.current_user.get('role', 'user')
-
-        supabase = get_supabase()
+        supabase  = get_supabase()
 
         print(f"📊 Fetching summary stats for user {user_id}")
 
-        # Get user's device IDs first
-        user_devices = supabase.table('user_devices')\
-            .select('id')\
-            .eq('user_id', user_id)\
-            .execute()
+        device_ids = _device_ids(supabase, user_id, user_role)
 
-        device_ids = [device['id'] for device in user_devices.data]
-
-        if not device_ids and user_role != 'admin':
+        if device_ids == ['no-devices']:
             return jsonify({
-                'totalPredictions': 0,
-                'anomalyCount': 0,
-                'anomalyRate': 0,
+                'totalPredictions': 0, 'anomalyCount': 0, 'anomalyRate': 0,
                 'avgAnomalyScore': 0,
-                'severityBreakdown': {'high': 0, 'medium': 0, 'low': 0},
-                'categoryBreakdown': {'critical': 0, 'navigation': 0, 'environmental': 0}
+                'severityBreakdown':  {'high': 0, 'medium': 0, 'low': 0},
+                'categoryBreakdown':  {'critical': 0, 'navigation': 0, 'environmental': 0},
             }), 200
 
-        # Initialize all counts to 0
-        total_predictions = 0
-        anomaly_count     = 0
-        high_count        = 0
-        medium_count      = 0
-        low_count         = 0
-        critical_count    = 0
-        navigation_count  = 0
-        environmental_count = 0
+        # All counts in one helper call, device filter applied consistently
+        total       = _det_count(supabase, device_ids)
+        anomalies   = _det_count(supabase, device_ids, {'danger_level': 'High'})
+        high_count  = _det_count(supabase, device_ids, {'danger_level': 'High'})
+        med_count   = _det_count(supabase, device_ids, {'danger_level': 'Medium'})
+        low_count   = _det_count(supabase, device_ids, {'danger_level': 'Low'})
+        crit_cat    = _det_count(supabase, device_ids, {'object_category': 'critical'})
+        nav_cat     = _det_count(supabase, device_ids, {'object_category': 'navigation'})
+        env_cat     = _det_count(supabase, device_ids, {'object_category': 'environmental'})
 
-        # Single if/else block — all queries together, no duplication
-        if user_role == 'admin':
-            total_predictions = supabase.table('detection_logs')\
-                .select('*', count='exact', head=True)\
-                .execute().count or 0
-
-            anomaly_count = supabase.table('detection_logs')\
-                .select('*', count='exact', head=True)\
-                .in_('danger_level', ['High', 'Critical'])\
-                .execute().count or 0
-
-            high_count = supabase.table('detection_logs')\
-                .select('*', count='exact', head=True)\
-                .eq('danger_level', 'High').execute().count or 0
-
-            medium_count = supabase.table('detection_logs')\
-                .select('*', count='exact', head=True)\
-                .eq('danger_level', 'Medium').execute().count or 0
-
-            low_count = supabase.table('detection_logs')\
-                .select('*', count='exact', head=True)\
-                .eq('danger_level', 'Low').execute().count or 0
-
-            critical_count = supabase.table('detection_logs')\
-                .select('*', count='exact', head=True)\
-                .eq('object_category', 'critical').execute().count or 0
-
-            navigation_count = supabase.table('detection_logs')\
-                .select('*', count='exact', head=True)\
-                .eq('object_category', 'navigation').execute().count or 0
-
-            environmental_count = supabase.table('detection_logs')\
-                .select('*', count='exact', head=True)\
-                .eq('object_category', 'environmental').execute().count or 0
-
-        else:
-            total_predictions = supabase.table('detection_logs')\
-                .select('*', count='exact', head=True)\
-                .in_('device_id', device_ids)\
-                .execute().count or 0
-
-            anomaly_count = supabase.table('detection_logs')\
-                .select('*', count='exact', head=True)\
-                .in_('device_id', device_ids)\
-                .in_('danger_level', ['High', 'Critical'])\
-                .execute().count or 0
-
-            high_count = supabase.table('detection_logs')\
-                .select('*', count='exact', head=True)\
-                .in_('device_id', device_ids)\
-                .eq('danger_level', 'High').execute().count or 0
-
-            medium_count = supabase.table('detection_logs')\
-                .select('*', count='exact', head=True)\
-                .in_('device_id', device_ids)\
-                .eq('danger_level', 'Medium').execute().count or 0
-
-            low_count = supabase.table('detection_logs')\
-                .select('*', count='exact', head=True)\
-                .in_('device_id', device_ids)\
-                .eq('danger_level', 'Low').execute().count or 0
-
-            critical_count = supabase.table('detection_logs')\
-                .select('*', count='exact', head=True)\
-                .in_('device_id', device_ids)\
-                .eq('object_category', 'critical').execute().count or 0
-
-            navigation_count = supabase.table('detection_logs')\
-                .select('*', count='exact', head=True)\
-                .in_('device_id', device_ids)\
-                .eq('object_category', 'navigation').execute().count or 0
-
-            environmental_count = supabase.table('detection_logs')\
-                .select('*', count='exact', head=True)\
-                .in_('device_id', device_ids)\
-                .eq('object_category', 'environmental').execute().count or 0
-
-        # Compute derived values
-        anomaly_rate = (anomaly_count / total_predictions * 100) if total_predictions > 0 else 0
-
-        print(f"✅ Summary: {total_predictions} total, {anomaly_count} anomalies, {anomaly_rate:.1f}% rate")
+        anom_rate = (anomalies / total * 100) if total > 0 else 0
+        print(f"✅ Summary: {total} total, {anomalies} anomalies, {anom_rate:.1f}% rate")
 
         return jsonify({
-            'totalPredictions':  total_predictions,
-            'anomalyCount':      anomaly_count,
-            'anomalyRate':       round(anomaly_rate, 2),
-            'avgAnomalyScore':   67.5,
+            'totalPredictions': total,
+            'anomalyCount':     anomalies,
+            'anomalyRate':      round(anom_rate, 2),
+            'avgAnomalyScore':  67.5,
             'severityBreakdown': {
                 'high':   high_count,
-                'medium': medium_count,
+                'medium': med_count,
                 'low':    low_count,
             },
             'categoryBreakdown': {
-                'critical':      critical_count,
-                'navigation':    navigation_count,
-                'environmental': environmental_count,
-            }
+                'critical':     crit_cat,
+                'navigation':   nav_cat,
+                'environmental': env_cat,
+            },
         }), 200
 
     except Exception as e:
         print(f"❌ Get ML statistics error: {e}")
-        import traceback
-        traceback.print_exc()
+        import traceback; traceback.print_exc()
         return jsonify({'error': 'Failed to get ML statistics'}), 500
