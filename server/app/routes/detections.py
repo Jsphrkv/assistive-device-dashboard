@@ -290,7 +290,7 @@ def log_detection():
         object_detected    = field('object_detected', 'objectDetected', default='unknown')
         raw_distance       = field('distance_cm', 'distanceCm')
         detection_source   = field('detection_source', 'detectionSource', default='ultrasonic')
-        raw_confidence     = field('detection_confidence', 'detectionConfidence', default=85.0)
+        raw_confidence = field('detection_confidence', 'detectionConfidence')
         raw_proximity      = field('proximity_value', 'proximityValue', default=0)
         raw_ambient        = field('ambient_light', 'ambientLight', default=0)
 
@@ -305,7 +305,7 @@ def log_detection():
         parsed_distance   = to_float(raw_distance)
         parsed_proximity  = to_int(raw_proximity)
         parsed_ambient    = to_int(raw_ambient)
-        parsed_confidence = to_float(raw_confidence, default=85.0)
+        parsed_confidence = to_float(raw_confidence) 
 
         obj_info    = get_detection_info(object_detected)
         danger_level = (

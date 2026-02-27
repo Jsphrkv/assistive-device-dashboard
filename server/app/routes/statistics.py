@@ -5,7 +5,7 @@ from app.middleware.auth import token_required, admin_required, check_permission
 statistics_bp = Blueprint('statistics', __name__, url_prefix='/api/statistics')
 
 
-# ── Shared helper ─────────────────────────────────────────────────────────────
+# ── Shared helpers ─────────────────────────────────────────────────────────────
 
 def _device_ids(supabase, user_id, user_role):
     """Return device UUID list for user, or None for admin."""
@@ -186,15 +186,20 @@ def get_ml_statistics():
 
         if device_ids == ['no-devices']:
             return jsonify({
-                'totalPredictions': 0, 'anomalyCount': 0, 'anomalyRate': 0,
-                'avgAnomalyScore': 0,
+                'totalPredictions': 0,
+                'anomalyCount':     0,
+                'anomalyRate':      0,
+                # FIX: removed fake 67.5 — return None so frontend shows "N/A"
+                'avgAnomalyScore':  None,
                 'severityBreakdown':  {'high': 0, 'medium': 0, 'low': 0},
                 'categoryBreakdown':  {'critical': 0, 'navigation': 0, 'environmental': 0},
             }), 200
 
-        # All counts in one helper call, device filter applied consistently
-        total       = _det_count(supabase, device_ids)
-        anomalies   = _det_count(supabase, device_ids, {'danger_level': 'High'})
+        total    = _det_count(supabase, device_ids)
+
+        # FIX: anomalies and high_count were the same query run twice.
+        # anomalyCount = High danger events (keeps existing frontend meaning).
+        # high_count   = same value, reused in severityBreakdown.
         high_count  = _det_count(supabase, device_ids, {'danger_level': 'High'})
         med_count   = _det_count(supabase, device_ids, {'danger_level': 'Medium'})
         low_count   = _det_count(supabase, device_ids, {'danger_level': 'Low'})
@@ -202,6 +207,8 @@ def get_ml_statistics():
         nav_cat     = _det_count(supabase, device_ids, {'object_category': 'navigation'})
         env_cat     = _det_count(supabase, device_ids, {'object_category': 'environmental'})
 
+        # FIX: anomalies reuses high_count — no duplicate DB query
+        anomalies = high_count
         anom_rate = (anomalies / total * 100) if total > 0 else 0
         print(f"✅ Summary: {total} total, {anomalies} anomalies, {anom_rate:.1f}% rate")
 
@@ -209,15 +216,17 @@ def get_ml_statistics():
             'totalPredictions': total,
             'anomalyCount':     anomalies,
             'anomalyRate':      round(anom_rate, 2),
-            'avgAnomalyScore':  67.5,
+            # FIX: removed hardcoded 67.5 — no real data source for this value.
+            # Frontend should show "N/A" when this is None.
+            'avgAnomalyScore':  None,
             'severityBreakdown': {
                 'high':   high_count,
                 'medium': med_count,
                 'low':    low_count,
             },
             'categoryBreakdown': {
-                'critical':     crit_cat,
-                'navigation':   nav_cat,
+                'critical':      crit_cat,
+                'navigation':    nav_cat,
                 'environmental': env_cat,
             },
         }), 200
