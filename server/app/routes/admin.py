@@ -11,7 +11,50 @@ from datetime import timedelta
 admin_bp = Blueprint('admin', __name__, url_prefix='/api/admin')
 
 # ── External service URLs ─────────────────────────────────────────────────────
-HF_URL = os.getenv('HF_URL',       'https://josephrkv-capstone2-proj.hf.space')
+HF_URL = os.getenv('HF_URL', 'https://josephrkv-capstone2-proj.hf.space')
+
+
+# ── Shared paginated fetch helpers ────────────────────────────────────────────
+
+def _paginate(query_fn, max_pages=10):
+    """
+    Execute query_fn(page) in pages of 1000 until exhausted or max_pages hit.
+    query_fn receives the page index and returns a Supabase query with
+    .range() already applied.
+    Bypasses Supabase's server-side 1000-row cap for analytics bulk fetches.
+    """
+    all_rows = []
+    for page in range(max_pages):
+        batch = query_fn(page).range(page * 1000, (page + 1) * 1000 - 1).execute().data
+        if not batch:
+            break
+        all_rows.extend(batch)
+        if len(batch) < 1000:
+            break
+    return all_rows
+
+
+def _paginate_table(supabase, table, select, filters=None, max_pages=10):
+    """
+    Convenience wrapper: paginate a single table with optional filters list.
+    filters = list of (method, *args) tuples, e.g. [('gte', 'created_at', iso)]
+    """
+    def query_fn(page):
+        q = supabase.table(table).select(select)
+        if filters:
+            for method, *args in filters:
+                q = getattr(q, method)(*args)
+        return q.range(page * 1000, (page + 1) * 1000 - 1)
+
+    all_rows = []
+    for page in range(max_pages):
+        batch = query_fn(page).execute().data
+        if not batch:
+            break
+        all_rows.extend(batch)
+        if len(batch) < 1000:
+            break
+    return all_rows
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -46,10 +89,6 @@ def get_system_health():
 
 
 def _ping_service(url, timeout=10, expect_401=False):
-    """
-    Ping a URL and return a status dict.
-    expect_401=True: treat HTTP 401 as 'ok'.
-    """
     try:
         start = time.time()
         resp  = http_requests.get(url, timeout=timeout)
@@ -67,10 +106,6 @@ def _ping_service(url, timeout=10, expect_401=False):
 
 
 def _fetch_ml_model_status():
-    """
-    GET /model-status from HF Space.
-    Falls back to unknown dict if endpoint isn't deployed yet or space is sleeping.
-    """
     try:
         resp = http_requests.get(f"{HF_URL}/model-status", timeout=20)
         if resp.status_code == 200:
@@ -97,6 +132,7 @@ def _fetch_ml_model_status():
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 2.  ALL DETECTIONS (cross-user)  →  AdminDetectionLogs.jsx
+#     Already server-side paginated at 25/page — no bulk fix needed.
 # ─────────────────────────────────────────────────────────────────────────────
 
 @admin_bp.route('/detections', methods=['GET'])
@@ -104,12 +140,12 @@ def _fetch_ml_model_status():
 @admin_required
 def get_all_detections():
     try:
-        limit      = min(request.args.get('limit',       25,  type=int), 100)
-        offset     = request.args.get('offset',      0,     type=int)
-        search     = request.args.get('search',      '').strip()
+        limit      = min(request.args.get('limit',        25,  type=int), 100)
+        offset     = request.args.get('offset',       0,     type=int)
+        search     = request.args.get('search',       '').strip()
         danger     = request.args.get('danger_level', '').strip()
-        start_date = request.args.get('start_date',  '')
-        end_date   = request.args.get('end_date',    '')
+        start_date = request.args.get('start_date',   '')
+        end_date   = request.args.get('end_date',     '')
 
         supabase = get_admin_client()
 
@@ -117,10 +153,10 @@ def get_all_detections():
             .select('*, user_devices!detection_logs_device_id_fkey(device_name, user_id)',
                     count='exact')
 
-        if danger:     query = query.eq('danger_level', danger)
-        if start_date: query = query.gte('detected_at', start_date)
-        if end_date:   query = query.lte('detected_at', end_date)
-        if search:     query = query.ilike('object_detected', f'%{search}%')
+        if danger:      query = query.eq('danger_level', danger)
+        if start_date:  query = query.gte('detected_at', start_date)
+        if end_date:    query = query.lte('detected_at', end_date)
+        if search:      query = query.ilike('object_detected', f'%{search}%')
 
         response = query\
             .order('detected_at', desc=True)\
@@ -148,6 +184,9 @@ def get_all_detections():
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 3.  ML ANALYTICS  →  AdminMLAnalytics.jsx
+#     FIX: All 5 bulk queries now paginate to bypass the 1000-row cap.
+#     Before: each query silently returned only 1000 rows → wrong chart data.
+#     After:  paginated in chunks of 1000 → correct totals for all time ranges.
 # ─────────────────────────────────────────────────────────────────────────────
 
 @admin_bp.route('/analytics', methods=['GET'])
@@ -161,28 +200,28 @@ def get_ml_analytics():
         start_dt  = end_dt - timedelta(days=days)
         start_iso = start_dt.isoformat()
 
-        # Total detections
-        total_res = supabase.table('detection_logs')\
+        date_filter = [('gte', 'detected_at', start_iso)]
+
+        # ── Total detections (COUNT — always accurate, no cap issue) ─────────
+        total_res        = supabase.table('detection_logs')\
             .select('*', count='exact', head=True)\
-            .gte('detected_at', start_iso)\
-            .execute()
+            .gte('detected_at', start_iso).execute()
         total_detections = total_res.count or 0
 
-        # Hourly buckets
-        hourly_raw = supabase.table('detection_logs')\
-            .select('detected_at')\
-            .gte('detected_at', start_iso)\
-            .order('detected_at', desc=False)\
-            .execute()
+        # ── Hourly buckets — paginated ────────────────────────────────────────
+        hourly_rows = _paginate_table(
+            supabase, 'detection_logs', 'detected_at',
+            filters=date_filter,
+        )
 
         hourly_buckets = {}
-        for row in (hourly_raw.data or []):
+        for row in hourly_rows:
             ts = row.get('detected_at', '')
             if not ts:
                 continue
             try:
                 from datetime import datetime
-                dt = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+                dt     = datetime.fromisoformat(ts.replace('Z', '+00:00'))
                 bucket = dt.strftime('%Y-%m-%d %H:00')
                 hourly_buckets[bucket] = hourly_buckets.get(bucket, 0) + 1
             except Exception:
@@ -193,14 +232,14 @@ def get_ml_analytics():
             for k, v in sorted(hourly_buckets.items())
         ]
 
-        # Object distribution
-        obj_raw = supabase.table('detection_logs')\
-            .select('object_detected')\
-            .gte('detected_at', start_iso)\
-            .execute()
+        # ── Object distribution — paginated ───────────────────────────────────
+        obj_rows = _paginate_table(
+            supabase, 'detection_logs', 'object_detected',
+            filters=date_filter,
+        )
 
         obj_counts = {}
-        for row in (obj_raw.data or []):
+        for row in obj_rows:
             obj = row.get('object_detected') or 'unknown'
             obj_counts[obj] = obj_counts.get(obj, 0) + 1
 
@@ -209,14 +248,14 @@ def get_ml_analytics():
             for k, v in sorted(obj_counts.items(), key=lambda x: -x[1])
         ]
 
-        # Danger frequency
-        danger_raw = supabase.table('detection_logs')\
-            .select('danger_level')\
-            .gte('detected_at', start_iso)\
-            .execute()
+        # ── Danger frequency — paginated ──────────────────────────────────────
+        danger_rows = _paginate_table(
+            supabase, 'detection_logs', 'danger_level',
+            filters=date_filter,
+        )
 
         danger_counts = {}
-        for row in (danger_raw.data or []):
+        for row in danger_rows:
             lvl = row.get('danger_level') or 'Unknown'
             danger_counts[lvl] = danger_counts.get(lvl, 0) + 1
 
@@ -225,31 +264,30 @@ def get_ml_analytics():
             for k, v in sorted(danger_counts.items(), key=lambda x: -x[1])
         ]
 
-        # Model source ratio — uses model_source column
-        ml_source_raw = supabase.table('ml_predictions')\
-            .select('model_source')\
-            .gte('created_at', start_iso)\
-            .execute()
+        # ── Model source ratio — paginated ────────────────────────────────────
+        ml_rows = _paginate_table(
+            supabase, 'ml_predictions', 'model_source',
+            filters=[('gte', 'created_at', start_iso)],
+        )
 
         ml_model_count = 0
         fallback_count = 0
-        for row in (ml_source_raw.data or []):
+        for row in ml_rows:
             source = row.get('model_source', '')
             if source and 'rules' in source.lower():
                 fallback_count += 1
             else:
                 ml_model_count += 1
 
-        # Avg confidence
-        conf_raw = supabase.table('detection_logs')\
-            .select('detection_confidence')\
-            .gte('detected_at', start_iso)\
-            .not_.is_('detection_confidence', 'null')\
-            .execute()
+        # ── Avg confidence — paginated ────────────────────────────────────────
+        conf_rows = _paginate_table(
+            supabase, 'detection_logs', 'detection_confidence',
+            filters=date_filter + [('not_.is_', 'detection_confidence', 'null')],
+        )
 
         conf_values = [
             r['detection_confidence']
-            for r in (conf_raw.data or [])
+            for r in conf_rows
             if r.get('detection_confidence') is not None
         ]
         avg_confidence = (sum(conf_values) / len(conf_values)) if conf_values else 0.75
@@ -274,6 +312,7 @@ def get_ml_analytics():
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 4.  USER & DEVICE MANAGEMENT  →  AdminUserManagement.jsx
+#     Already fine — users/devices are small tables, no cap issue.
 # ─────────────────────────────────────────────────────────────────────────────
 
 @admin_bp.route('/users', methods=['GET'])
@@ -323,9 +362,7 @@ def get_user_detections(user_id):
         supabase = get_admin_client()
 
         devices_res = supabase.table('user_devices')\
-            .select('id')\
-            .eq('user_id', user_id)\
-            .execute()
+            .select('id').eq('user_id', user_id).execute()
 
         device_ids = [d['id'] for d in (devices_res.data or [])]
 
@@ -364,18 +401,14 @@ def toggle_device_status(device_id):
         supabase = get_admin_client()
 
         device_res = supabase.table('user_devices')\
-            .select('id, device_name')\
-            .eq('id', device_id)\
-            .single()\
-            .execute()
+            .select('id, device_name').eq('id', device_id).single().execute()
 
         if not device_res.data:
             return jsonify({'error': 'Device not found'}), 404
 
         supabase.table('user_devices')\
             .update({'status': new_status, 'updated_at': now_ph_iso()})\
-            .eq('id', device_id)\
-            .execute()
+            .eq('id', device_id).execute()
 
         return jsonify({
             'message':    f'Device set to {new_status}',
@@ -391,6 +424,7 @@ def toggle_device_status(device_id):
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 5.  LIVE FEED  →  AdminLiveFeed.jsx  (polled every 3s)
+#     Only fetches 30 most recent — no cap issue, no change needed.
 # ─────────────────────────────────────────────────────────────────────────────
 
 @admin_bp.route('/live-feed', methods=['GET'])
