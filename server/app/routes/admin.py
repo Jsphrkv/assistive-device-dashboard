@@ -316,12 +316,13 @@ def get_ml_analytics():
             filters=date_filter,
         )
         
-        conf_values = [
-            r['detection_confidence']
-            for r in conf_rows
-            if r.get('detection_confidence') is not None
-            and r['detection_confidence'] > 0.01  # exclude zero/near-zero noise
-        ]
+        conf_values = []
+        for r in conf_rows:
+            v = r.get('detection_confidence')
+            if v is not None and v > 0.01:
+                if v > 1:          # stored as e.g. 87.5 instead of 0.875
+                    v = v / 100
+                conf_values.append(v)
         avg_confidence = (sum(conf_values) / len(conf_values)) if conf_values else 0.75
 
         return jsonify({
