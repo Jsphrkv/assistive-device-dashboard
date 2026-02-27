@@ -10,11 +10,9 @@ const cache = {
 const CACHE_DURATION = 30000; // 30 seconds
 
 export const useDetectionLogs = (options = {}) => {
-  const {
-    limit = 10000,
-    autoFetch = true,
-    cacheDuration = CACHE_DURATION,
-  } = options;
+  const { autoFetch = true, cacheDuration = CACHE_DURATION } = options;
+  // Note: `limit` is intentionally removed — the backend controls pagination
+  // and returns all sensor/camera detection_logs rows (up to 5000) in bulk.
 
   const [detections, setDetections] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -40,7 +38,8 @@ export const useDetectionLogs = (options = {}) => {
       setError(null);
 
       try {
-        const response = await detectionsAPI.getRecent(limit);
+        // No limit param — backend paginates internally (5 pages × 1000 = 5000 max)
+        const response = await detectionsAPI.getRecent();
         const data = response.data.detections || [];
 
         cache.data = data;
@@ -68,16 +67,12 @@ export const useDetectionLogs = (options = {}) => {
         }
       }
     },
-    [limit, cacheDuration],
+    [cacheDuration],
   );
 
   useEffect(() => {
     isMounted.current = true;
-
-    if (autoFetch) {
-      fetchDetections();
-    }
-
+    if (autoFetch) fetchDetections();
     return () => {
       isMounted.current = false;
     };
@@ -99,15 +94,14 @@ export const useDetectionLogs = (options = {}) => {
     return fetchDetections(true);
   }, [fetchDetections]);
 
-  // Returns only camera/ML-sourced detections from detection_logs
-  // Note: ML predictions stored in ml_predictions table won't appear here —
-  // they are fetched separately via mlAPI in the stats cards.
-  const getMLDetections = useCallback(() => {
+  // Returns camera-sourced detections only (detection_source === "camera")
+  // Note: ML model predictions live in the separate ml_predictions table
+  // and are fetched via mlAPI — they do NOT appear in this hook.
+  const getCameraDetections = useCallback(() => {
     return detections.filter((d) => d.detection_source === "camera");
   }, [detections]);
 
-  // FIX: detection_confidence is stored as decimal (0.87), not percentage (87).
-  // Threshold parameter should be 0–1. Default changed from 80 → 0.80.
+  // detection_confidence is stored as a decimal (e.g. 0.87), threshold is 0–1
   const getHighConfidenceDetections = useCallback(
     (threshold = 0.8) => {
       return detections.filter(
@@ -124,40 +118,41 @@ export const useDetectionLogs = (options = {}) => {
     [detections],
   );
 
-  // FIX: avgConfidence and highConfidence now correctly handle decimal confidence values.
-  const getMLStats = useCallback(() => {
-    const mlDetections = detections.filter(
+  // Stats scoped to camera-sourced detections only
+  const getCameraStats = useCallback(() => {
+    const cameraDetections = detections.filter(
       (d) => d.detection_source === "camera",
     );
 
     const avgConfidenceRaw =
-      mlDetections.length > 0
-        ? mlDetections.reduce(
+      cameraDetections.length > 0
+        ? cameraDetections.reduce(
             (sum, d) => sum + (d.detection_confidence || 0),
             0,
-          ) / mlDetections.length
+          ) / cameraDetections.length
         : 0;
 
-    // FIX: convert decimal to percentage for display
+    // Confidence stored as decimal (0.87) — convert to percentage for display
     const avgConfidencePct =
-      avgConfidenceRaw > 1
-        ? avgConfidenceRaw // already a percentage
-        : avgConfidenceRaw * 100;
+      avgConfidenceRaw > 1 ? avgConfidenceRaw : avgConfidenceRaw * 100;
 
-    // FIX: compare against decimal threshold (0.80), not 80
-    const highConfidenceCount = mlDetections.filter(
+    // Compare against decimal threshold (0.80)
+    const highConfidenceCount = cameraDetections.filter(
       (d) => d.detection_confidence >= 0.8,
     ).length;
 
     return {
-      total: mlDetections.length,
+      total: cameraDetections.length,
       avgConfidence: avgConfidencePct.toFixed(1),
       highConfidence: highConfidenceCount,
       uniqueObjects: [
-        ...new Set(mlDetections.map((d) => d.object_detected)),
+        ...new Set(cameraDetections.map((d) => d.object_detected)),
       ].filter(Boolean).length,
     };
   }, [detections]);
+
+  // Keep getMLStats as an alias for backward compatibility
+  const getMLStats = getCameraStats;
 
   return {
     detections,
@@ -167,9 +162,10 @@ export const useDetectionLogs = (options = {}) => {
     addDetection,
     clearDetections,
     refresh,
-    getMLDetections,
+    getCameraDetections,
     getHighConfidenceDetections,
     getDetectionsByObject,
-    getMLStats,
+    getCameraStats,
+    getMLStats, // backward-compat alias
   };
 };

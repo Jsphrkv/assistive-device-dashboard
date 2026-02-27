@@ -16,13 +16,43 @@ from io import StringIO, BytesIO
 
 detections_bp = Blueprint('detections', __name__, url_prefix='/api/detections')
 
+# Max pages × 1000 rows = 5000 — safely covers all sensor/camera logs
+_MAX_PAGES = 5
 
-# ── Shared helper ─────────────────────────────────────────────────────────────
+
+# ── Shared helpers ─────────────────────────────────────────────────────────────
 
 def _get_user_device(supabase, user_id):
     """Return first device ID for user, or None."""
     result = supabase.table('user_devices').select('id').eq('user_id', user_id).limit(1).execute()
     return result.data[0]['id'] if result.data else None
+
+
+def _paginated_fetch(supabase, device_id, select='*', order_col='detected_at', max_pages=_MAX_PAGES, extra_filters=None):
+    """
+    Paginate detection_logs in chunks of 1000 to bypass Supabase's server-side
+    row cap. Returns all rows up to max_pages * 1000.
+    """
+    all_rows = []
+    for page in range(max_pages):
+        q = supabase.table('detection_logs')\
+            .select(select)\
+            .eq('device_id', device_id)\
+            .order(order_col, desc=True)\
+            .range(page * 1000, (page + 1) * 1000 - 1)
+
+        if extra_filters:
+            for method, *args in extra_filters:
+                q = getattr(q, method)(*args)
+
+        batch = q.execute().data
+        if not batch:
+            break
+        all_rows.extend(batch)
+        if len(batch) < 1000:
+            break  # last page — no more rows
+
+    return all_rows
 
 
 # ── GET endpoints ─────────────────────────────────────────────────────────────
@@ -64,21 +94,21 @@ def get_detections():
 @token_required
 @check_permission('detections', 'read')
 def get_recent_detections():
-    """Get recent detections."""
+    """
+    Get all sensor/camera detection logs via paginated bulk fetch.
+    Bypasses Supabase's 1000-row server cap by fetching in chunks of 1000.
+    Capped at _MAX_PAGES * 1000 = 5000 rows — enough for all detection_logs.
+    """
     try:
         user_id  = request.current_user['user_id']
-        limit    = request.args.get('limit', 10, type=int)
         supabase = get_supabase()
 
         device_id = _get_user_device(supabase, user_id)
         if not device_id:
             return jsonify({'detections': []}), 200
 
-        rows = supabase.table('detection_logs')\
-            .select('*').eq('device_id', device_id)\
-            .order('detected_at', desc=True).limit(limit).execute().data
-
-        return jsonify({'detections': rows}), 200
+        all_rows = _paginated_fetch(supabase, device_id)
+        return jsonify({'detections': all_rows}), 200
 
     except Exception as e:
         print(f"Get recent detections error: {e}")
@@ -103,11 +133,13 @@ def get_detections_by_date():
         if not device_id:
             return jsonify({'data': []}), 200
 
-        rows = supabase.table('detection_logs')\
-            .select('*').eq('device_id', device_id)\
-            .gte('detected_at', start_date).lte('detected_at', end_date)\
-            .order('detected_at', desc=True).execute().data
-
+        rows = _paginated_fetch(
+            supabase, device_id,
+            extra_filters=[
+                ('gte', 'detected_at', start_date),
+                ('lte', 'detected_at', end_date),
+            ]
+        )
         return jsonify({'data': rows}), 200
 
     except Exception as e:
@@ -139,19 +171,20 @@ def get_count_by_type():
 @token_required
 @check_permission('detections', 'read')
 def get_sensor_logs():
-    """Get sensor detection logs for LogsTable.jsx."""
+    """
+    Get sensor/camera detection logs for LogsTable.jsx.
+    Paginated bulk fetch to bypass Supabase's 1000-row server cap.
+    """
     try:
         user_id  = request.current_user['user_id']
-        limit    = request.args.get('limit', 100, type=int)
         supabase = get_supabase()
 
         device_id = _get_user_device(supabase, user_id)
         if not device_id:
             return jsonify({'data': []}), 200
 
-        rows = supabase.table('detection_logs')\
-            .select('*').eq('device_id', device_id)\
-            .order('detected_at', desc=True).limit(limit).execute().data
+        select_fields = 'id,detected_at,obstacle_type,object_detected,object_category,distance_cm,danger_level,alert_type,detection_confidence'
+        all_rows = _paginated_fetch(supabase, device_id, select=select_fields)
 
         formatted = [
             {
@@ -165,7 +198,7 @@ def get_sensor_logs():
                 'alert_type':           log.get('alert_type'),
                 'detection_confidence': log.get('detection_confidence'),
             }
-            for log in rows
+            for log in all_rows
         ]
 
         return jsonify({'data': formatted}), 200
@@ -184,26 +217,28 @@ def get_detection_categories():
 @detections_bp.route('/export', methods=['GET'])
 @token_required
 def export_detections():
-    """Export detection logs in CSV, JSON, or PDF format."""
+    """
+    Export detection logs in CSV, JSON, or PDF format.
+    Uses paginated fetch to ensure all rows are included in the export.
+    """
     try:
-        user_id      = request.current_user['user_id']
-        format_type  = request.args.get('format', 'csv')
-        start_date   = request.args.get('start_date')
-        end_date     = request.args.get('end_date')
+        user_id       = request.current_user['user_id']
+        format_type   = request.args.get('format', 'csv')
+        start_date    = request.args.get('start_date')
+        end_date      = request.args.get('end_date')
         object_filter = request.args.get('object')
-        supabase     = get_supabase()
+        supabase      = get_supabase()
 
         device_id = _get_user_device(supabase, user_id)
         if not device_id:
             return jsonify({'error': 'No device found'}), 404
 
-        q = supabase.table('detection_logs')\
-            .select('*').eq('device_id', device_id).order('detected_at', desc=True)
-        if start_date:     q = q.gte('detected_at', start_date)
-        if end_date:       q = q.lte('detected_at', end_date)
-        if object_filter:  q = q.eq('object_detected', object_filter)
+        extra_filters = []
+        if start_date:     extra_filters.append(('gte', 'detected_at', start_date))
+        if end_date:       extra_filters.append(('lte', 'detected_at', end_date))
+        if object_filter:  extra_filters.append(('eq', 'object_detected', object_filter))
 
-        detections = q.execute().data
+        detections = _paginated_fetch(supabase, device_id, extra_filters=extra_filters or None)
 
         if format_type == 'json':
             return jsonify({'detections': detections}), 200
@@ -376,7 +411,6 @@ def log_detection():
 def _update_user_statistics_safe(user_id, object_detected, detected_at):
     """Update daily_statistics, obstacle_statistics, and hourly_patterns."""
     try:
-        import re
         supabase = get_admin_client()
 
         dt    = datetime.fromisoformat(detected_at.replace('Z', '+00:00'))
@@ -407,7 +441,7 @@ def _update_user_statistics_safe(user_id, object_detected, detected_at):
                 }).execute()
 
         try:
-            upsert_counter('daily_statistics',   {'user_id': user_id, 'stat_date': stat_date},    'total_alerts')
+            upsert_counter('daily_statistics',   {'user_id': user_id, 'stat_date': stat_date},       'total_alerts')
             print(f"   ✅ Daily stats updated ({stat_date})")
         except Exception as e:
             print(f"   ⚠️ Daily stats update failed: {e}")
@@ -419,7 +453,7 @@ def _update_user_statistics_safe(user_id, object_detected, detected_at):
             print(f"   ⚠️ Obstacle stats update failed: {e}")
 
         try:
-            upsert_counter('hourly_patterns',     {'user_id': user_id, 'hour_range': hour_range}, 'detection_count')
+            upsert_counter('hourly_patterns',     {'user_id': user_id, 'hour_range': hour_range},    'detection_count')
             print(f"   ✅ Hourly pattern updated ({hour_range})")
         except Exception as e:
             print(f"   ⚠️ Hourly pattern update failed: {e}")
@@ -481,11 +515,11 @@ def _generate_csv(detections):
     ])
     for d in detections:
         writer.writerow([
-            d.get('detected_at', ''),      d.get('object_detected', 'unknown'),
-            d.get('object_category', ''),  d.get('distance_cm', ''),
-            d.get('danger_level', ''),     d.get('alert_type', ''),
-            d.get('detection_confidence', ''), d.get('detection_source', ''),
-            d.get('proximity_value', ''), d.get('ambient_light', ''),
+            d.get('detected_at', ''),          d.get('object_detected', 'unknown'),
+            d.get('object_category', ''),       d.get('distance_cm', ''),
+            d.get('danger_level', ''),          d.get('alert_type', ''),
+            d.get('detection_confidence', ''),  d.get('detection_source', ''),
+            d.get('proximity_value', ''),       d.get('ambient_light', ''),
         ])
     return Response(
         output.getvalue(), mimetype='text/csv',
@@ -529,14 +563,14 @@ def _generate_pdf(detections):
 
     table = Table(rows)
     table.setStyle(TableStyle([
-        ('BACKGROUND',  (0, 0), (-1, 0), colors.grey),
-        ('TEXTCOLOR',   (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN',       (0, 0), (-1, -1), 'CENTER'),
-        ('FONTNAME',    (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE',    (0, 0), (-1, 0), 10),
+        ('BACKGROUND',    (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR',     (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN',         (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME',      (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE',      (0, 0), (-1, 0), 10),
         ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('BACKGROUND',  (0, 1), (-1, -1), colors.beige),
-        ('GRID',        (0, 0), (-1, -1), 1, colors.black),
+        ('BACKGROUND',    (0, 1), (-1, -1), colors.beige),
+        ('GRID',          (0, 0), (-1, -1), 1, colors.black),
     ]))
     elements.append(table)
     doc.build(elements)

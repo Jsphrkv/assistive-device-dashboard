@@ -5,3 +5,6 @@ __pycache__/
 .DS_Store
 venv/
 .venv/
+ml_models/saved_models/*.pkl
+ml_models/saved_models/*.joblib
+ml_models/saved_models/*.onnx

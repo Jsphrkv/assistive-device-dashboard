@@ -25,6 +25,9 @@ server/*.db
 server/*.sqlite
 server/*.sqlite3
 server/instance/
+ml-service/ml_models/saved_models/*.pkl
+ml-service/ml_models/saved_models/*.joblib
+ml-service/ml_models/saved_models/*.onnx
 
 # ============================================
 # RASPBERRY PI

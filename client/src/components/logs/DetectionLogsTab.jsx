@@ -9,7 +9,7 @@ import {
   RefreshCw,
   FileSpreadsheet,
   FileJson,
-  Brain,
+  Camera,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -38,13 +38,11 @@ const OBJECT_ICONS = {
 const ITEMS_PER_PAGE = 10;
 
 const DetectionLogsTab = () => {
-  // FIX: Removed getMLDetections — destructured but never used in JSX.
-  const { detections, loading, error, refresh, addDetection, getMLStats } =
-    useDetectionLogs({
-      limit: 1000,
-      autoFetch: true,
-      cacheDuration: 30000,
-    });
+  // Backend now paginates internally — no limit needed here
+  const { detections, loading, error, refresh, getMLStats } = useDetectionLogs({
+    autoFetch: true,
+    cacheDuration: 30000,
+  });
 
   const [dbStats, setDbStats] = useState({
     total: 0,
@@ -62,7 +60,7 @@ const DetectionLogsTab = () => {
   const [filterDanger, setFilterDanger] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [dateRange, setDateRange] = useState("7days");
-  const [showMLOnly, setShowMLOnly] = useState(false);
+  const [showCameraOnly, setShowCameraOnly] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
@@ -79,7 +77,7 @@ const DetectionLogsTab = () => {
     filterDanger,
     searchQuery,
     dateRange,
-    showMLOnly,
+    showCameraOnly,
   ]);
 
   const fetchDBStats = async () => {
@@ -102,6 +100,7 @@ const DetectionLogsTab = () => {
       });
     } catch (error) {
       console.error("Error fetching DB stats:", error);
+      // Fallback to client-side counts from loaded detections
       setDbStats({
         total: detections.length,
         critical: detections.filter((d) => d.object_category === "critical")
@@ -122,7 +121,8 @@ const DetectionLogsTab = () => {
   const applyFilters = () => {
     let filtered = [...detections];
 
-    if (showMLOnly) {
+    // Filter by camera source only
+    if (showCameraOnly) {
       filtered = filtered.filter((d) => d.detection_source === "camera");
     }
 
@@ -174,9 +174,6 @@ const DetectionLogsTab = () => {
     setFilteredDetections(filtered);
   };
 
-  // FIX: Removed handleNewDetection — it was defined but never called anywhere
-  // in the component. addDetection from the hook remains available if needed.
-
   const handleRefresh = async () => {
     try {
       await refresh();
@@ -188,7 +185,7 @@ const DetectionLogsTab = () => {
 
   const exportDetections = async (format) => {
     try {
-      let params = new URLSearchParams({ format });
+      const params = new URLSearchParams({ format });
 
       if (dateRange !== "all") {
         const now = new Date();
@@ -263,7 +260,7 @@ const DetectionLogsTab = () => {
   const currentDetections = filteredDetections.slice(startIndex, endIndex);
   const goToPage = (page) =>
     setCurrentPage(Math.max(1, Math.min(page, totalPages)));
-  const mlStats = getMLStats();
+  const cameraStats = getMLStats(); // hook alias — returns camera-sourced stats
   const uniqueObjects = [
     ...new Set(detections.map((d) => d.object_detected)),
   ].filter(Boolean);
@@ -298,14 +295,14 @@ const DetectionLogsTab = () => {
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Detection Logs</h2>
           <p className="text-sm text-gray-600 mt-1">
-            Real-time log of all ML detections and predictions •{" "}
+            Real-time log of all sensor and camera detections •{" "}
             <span className="text-blue-600 font-semibold">
               {dbStats.total.toLocaleString()} total entries
             </span>
             {detections.length < dbStats.total && (
               <span className="text-gray-500">
                 {" "}
-                (showing {detections.length.toLocaleString()} most recent)
+                (showing {detections.length.toLocaleString()} loaded)
               </span>
             )}
           </p>
@@ -399,30 +396,30 @@ const DetectionLogsTab = () => {
               ? `${dbStats.avg_confidence.toFixed(1)}%`
               : "—"}
           </p>
-          <p className="text-xs text-blue-500 mt-1">Across all predictions</p>
+          <p className="text-xs text-blue-500 mt-1">Across all detections</p>
         </div>
       </div>
 
-      {/* ML Filter Toggle */}
-      {mlStats.total > 0 && (
+      {/* Camera Source Filter Toggle */}
+      {cameraStats.total > 0 && (
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowMLOnly(!showMLOnly)}
+            onClick={() => setShowCameraOnly(!showCameraOnly)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-              showMLOnly
+              showCameraOnly
                 ? "bg-blue-600 text-white"
                 : "bg-gray-100 text-gray-700 hover:bg-gray-200"
             }`}
           >
-            <Brain className="w-4 h-4" />
+            <Camera className="w-4 h-4" />
             <span className="text-sm">
-              {showMLOnly ? "Showing ML Only" : "Show ML Only"} ({mlStats.total}
-              )
+              {showCameraOnly ? "Camera Only" : "Camera Source"} (
+              {cameraStats.total})
             </span>
           </button>
-          {showMLOnly && (
+          {showCameraOnly && (
             <button
-              onClick={() => setShowMLOnly(false)}
+              onClick={() => setShowCameraOnly(false)}
               className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
             >
               Show All
@@ -541,7 +538,7 @@ const DetectionLogsTab = () => {
                 </tr>
               ) : (
                 currentDetections.map((detection) => {
-                  // FIX: confidence stored as decimal (0.87) — multiply for display
+                  // confidence stored as decimal (0.87) — multiply for display
                   const rawConf = detection.detection_confidence || 0;
                   const confPct = rawConf > 1 ? rawConf : rawConf * 100;
 
@@ -550,11 +547,10 @@ const DetectionLogsTab = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         <div className="flex items-center gap-2">
                           <Clock className="w-4 h-4 text-gray-400" />
-                          {/* FIX: Format ISO timestamp for readability */}
                           {new Date(detection.detected_at).toLocaleString()}
                           {detection.detection_source === "camera" && (
                             <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full flex items-center gap-1">
-                              <Brain className="w-3 h-3" /> ML
+                              <Camera className="w-3 h-3" /> Camera
                             </span>
                           )}
                         </div>
@@ -582,7 +578,6 @@ const DetectionLogsTab = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {/* FIX: null guard — shows "N/A" instead of "null cm" */}
                         {detection.distance_cm
                           ? `${detection.distance_cm.toFixed(1)} cm`
                           : "N/A"}
