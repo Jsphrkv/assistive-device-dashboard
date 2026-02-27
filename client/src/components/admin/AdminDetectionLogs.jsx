@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ImageOff,
+  RefreshCw,
 } from "lucide-react";
 import { adminAPI } from "../../services/api";
 
@@ -105,6 +106,22 @@ const AdminDetectionLogs = () => {
   const [dangerFilter, setDangerFilter] = useState("");
   const [selectedRow, setSelectedRow] = useState(null);
 
+  // ── Stat cards ────────────────────────────────────────────────────────────
+  const [stats, setStats] = useState({ total: 0, high: 0, medium: 0, low: 0 });
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  const fetchStats = useCallback(async () => {
+    setStatsLoading(true);
+    try {
+      const res = await adminAPI.getDetectionStats();
+      setStats(res.data ?? { total: 0, high: 0, medium: 0, low: 0 });
+    } catch (err) {
+      console.error("Failed to load detection stats:", err);
+    } finally {
+      setStatsLoading(false);
+    }
+  }, []);
+
   const fetchDetections = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -125,23 +142,93 @@ const AdminDetectionLogs = () => {
     }
   }, [page, search, dangerFilter]);
 
-  // Reset to page 0 when filters change
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
+
   useEffect(() => {
     setPage(0);
   }, [search, dangerFilter]);
+
   useEffect(() => {
     fetchDetections();
   }, [fetchDetections]);
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
+  const STAT_CARDS = [
+    {
+      label: "Total Detections",
+      value: stats.total,
+      sub: "Across all accounts",
+      bg: "bg-white",
+      text: "text-gray-900",
+      sub_text: "text-gray-500",
+    },
+    {
+      label: "High Danger",
+      value: stats.high,
+      sub: "High danger events",
+      bg: "bg-orange-50",
+      text: "text-orange-700",
+      sub_text: "text-orange-500",
+    },
+    {
+      label: "Medium Danger",
+      value: stats.medium,
+      sub: "Medium danger events",
+      bg: "bg-amber-50",
+      text: "text-amber-700",
+      sub_text: "text-amber-500",
+    },
+    {
+      label: "Low Danger",
+      value: stats.low,
+      sub: "Low danger events",
+      bg: "bg-green-50",
+      text: "text-green-700",
+      sub_text: "text-green-500",
+    },
+  ];
+
   return (
     <div className="space-y-5 fade-in">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-gray-900">Detection Logs</h2>
-        <span className="text-sm text-gray-500">
-          {total.toLocaleString()} total records
-        </span>
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Detection Logs</h2>
+          <p className="text-sm text-gray-500 mt-0.5">
+            All sensor and camera detections across every account
+          </p>
+        </div>
+        <button
+          onClick={() => {
+            fetchStats();
+            fetchDetections();
+          }}
+          disabled={loading || statsLoading}
+          className="flex items-center gap-2 px-3 py-1.5 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors"
+        >
+          <RefreshCw
+            className={`w-4 h-4 ${loading || statsLoading ? "animate-spin" : ""}`}
+          />
+          Refresh
+        </button>
+      </div>
+
+      {/* ── 4 Stat Cards ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {STAT_CARDS.map(({ label, value, sub, bg, text, sub_text }) => (
+          <div key={label} className={`${bg} rounded-lg shadow p-4`}>
+            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
+              {label}
+            </p>
+            <p className={`text-2xl font-bold ${text}`}>
+              {statsLoading ? "—" : value.toLocaleString()}
+            </p>
+            <p className={`text-xs mt-1 ${sub_text}`}>{sub}</p>
+          </div>
+        ))}
       </div>
 
       {/* Filters */}
@@ -173,7 +260,6 @@ const AdminDetectionLogs = () => {
             className="pl-9 pr-8 py-2 border border-gray-200 rounded-lg text-sm appearance-none focus:ring-2 focus:ring-purple-400 focus:border-transparent bg-white"
           >
             <option value="">All danger levels</option>
-            <option value="Critical">Critical</option>
             <option value="High">High</option>
             <option value="Medium">Medium</option>
             <option value="Low">Low</option>

@@ -166,14 +166,14 @@ const AdminMLAnalytics = () => {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
           {
-            label: "Total Detections",
-            value: data?.totalDetections?.toLocaleString() ?? "—",
+            label: "Total ML Predictions",
+            value: data?.totalPredictions?.toLocaleString() ?? "—",
           },
           {
             label: "Avg Confidence",
             value:
               data?.avgConfidence != null
-                ? `${data.avgConfidence.toFixed(1)}%`
+                ? `${(data.avgConfidence * 100).toFixed(1)}%`
                 : "—",
           },
           {

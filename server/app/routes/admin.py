@@ -182,6 +182,37 @@ def get_all_detections():
         return jsonify({'error': 'Failed to get detections'}), 500
 
 
+# ── Detection stats (global counts for AdminDetectionLogs cards) ─────────────
+
+@admin_bp.route('/detections/stats', methods=['GET'])
+@token_required
+@admin_required
+def get_detection_stats():
+    """
+    Returns all-time global counts for the 4 stat cards in AdminDetectionLogs:
+    total, high, medium, low.  Uses COUNT queries — always accurate, never capped.
+    """
+    try:
+        supabase = get_admin_client()
+
+        total_res  = supabase.table('detection_logs').select('*', count='exact', head=True).execute()
+        high_res   = supabase.table('detection_logs').select('*', count='exact', head=True).eq('danger_level', 'High').execute()
+        medium_res = supabase.table('detection_logs').select('*', count='exact', head=True).eq('danger_level', 'Medium').execute()
+        low_res    = supabase.table('detection_logs').select('*', count='exact', head=True).eq('danger_level', 'Low').execute()
+
+        return jsonify({
+            'total':  total_res.count  or 0,
+            'high':   high_res.count   or 0,
+            'medium': medium_res.count or 0,
+            'low':    low_res.count    or 0,
+        }), 200
+
+    except Exception as e:
+        print(f"[Admin DetectionStats] Error: {e}")
+        import traceback; traceback.print_exc()
+        return jsonify({'error': 'Failed to get detection stats'}), 500
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 3.  ML ANALYTICS  →  AdminMLAnalytics.jsx
 #     FIX: All 5 bulk queries now paginate to bypass the 1000-row cap.
@@ -202,11 +233,11 @@ def get_ml_analytics():
 
         date_filter = [('gte', 'detected_at', start_iso)]
 
-        # ── Total detections (COUNT — always accurate, no cap issue) ─────────
-        total_res        = supabase.table('detection_logs')\
+        # ── Total ML predictions (COUNT from ml_predictions — not detection_logs) ──
+        ml_total_res      = supabase.table('ml_predictions')\
             .select('*', count='exact', head=True)\
-            .gte('detected_at', start_iso).execute()
-        total_detections = total_res.count or 0
+            .gte('created_at', start_iso).execute()
+        total_predictions = ml_total_res.count or 0
 
         # ── Hourly buckets — paginated ────────────────────────────────────────
         hourly_rows = _paginate_table(
@@ -282,18 +313,19 @@ def get_ml_analytics():
         # ── Avg confidence — paginated ────────────────────────────────────────
         conf_rows = _paginate_table(
             supabase, 'detection_logs', 'detection_confidence',
-            filters=date_filter,
+            filters=date_filter + [('not_.is_', 'detection_confidence', 'null')],
         )
 
         conf_values = [
             r['detection_confidence']
             for r in conf_rows
             if r.get('detection_confidence') is not None
+            and r['detection_confidence'] > 0.01  # exclude zero/near-zero noise
         ]
         avg_confidence = (sum(conf_values) / len(conf_values)) if conf_values else 0.75
 
         return jsonify({
-            'totalDetections':    total_detections,
+            'totalPredictions':   total_predictions,
             'avgConfidence':      round(avg_confidence, 4),
             'hourlyDetections':   hourly_detections,
             'objectDistribution': object_distribution,

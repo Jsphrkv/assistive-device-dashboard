@@ -238,6 +238,7 @@ export const adminAPI = {
 
   // ── Live Feed ──────────────────────────────────────────────────────────────
   getLiveFeed: (limit = 30) => api.get(`/admin/live-feed?limit=${limit}`),
+  getDetectionStats: () => api.get("/admin/detections/stats"),
 }; // ← this line was already there, don't duplicate it
 
 export default api;
