@@ -89,7 +89,7 @@ def get_ml_history():
                         'score': item.get('anomaly_score'),
                         'severity': item.get('anomaly_severity'),
                         'device_health_score': item.get('device_health_score'),
-                        'message': f"Device anomaly detected (health: {item.get('device_health_score', 0):.1f}%)"
+                        'message': f"Device anomaly detected (health: {(item.get('device_health_score') or 0):.1f}%)"
                     }
                     confidence = item.get('anomaly_score', 0)
                     
@@ -268,7 +268,7 @@ def get_anomalies():
             if pred_type == 'anomaly':
                 score = item.get('anomaly_score', 0)
                 severity = item.get('anomaly_severity', 'medium')
-                message = f"Device anomaly detected (health: {item.get('device_health_score', 0):.1f}%)"
+                message = f"Device anomaly detected (health: {(item.get('device_health_score') or 0):.1f}%)"
                 
             elif pred_type == 'danger_prediction':
                 score = item.get('danger_score', 0) / 100
