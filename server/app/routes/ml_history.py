@@ -419,23 +419,39 @@ def get_daily_summary():
         start_iso = start_dt.isoformat()
         end_iso   = end_dt.isoformat()
 
-        # ── BULK FETCH 1: ml_predictions (minimal columns) ───────────────────
-        q = supabase.table('ml_predictions')\
-            .select('created_at, prediction_type, is_anomaly')\
-            .gte('created_at', start_iso)\
-            .lte('created_at', end_iso)\
-            .limit(100000)
-        q = _apply_device_filter(q, device_ids)
-        ml_rows = q.execute().data
+        # ── BULK FETCH 1: ml_predictions (paginated) ─────────────────────────────
+        ml_rows = []
+        page = 0
+        while True:
+            q = supabase.table('ml_predictions')\
+                .select('created_at, prediction_type, is_anomaly')\
+                .gte('created_at', start_iso)\
+                .lte('created_at', end_iso)
+            q = _apply_device_filter(q, device_ids)
+            batch = q.range(page * 1000, (page + 1) * 1000 - 1).execute().data
+            if not batch:
+                break
+            ml_rows.extend(batch)
+            if len(batch) < 1000:
+                break
+            page += 1
 
-        # ── BULK FETCH 2: detection_logs (minimal columns) ───────────────────
-        q = supabase.table('detection_logs')\
-            .select('detected_at, danger_level')\
-            .gte('detected_at', start_iso)\
-            .lte('detected_at', end_iso)\
-            .limit(100000)
-        q = _apply_device_filter(q, device_ids)
-        det_rows = q.execute().data
+        # ── BULK FETCH 2: detection_logs (paginated) ─────────────────────────────
+        det_rows = []
+        page = 0
+        while True:
+            q = supabase.table('detection_logs')\
+                .select('detected_at, danger_level')\
+                .gte('detected_at', start_iso)\
+                .lte('detected_at', end_iso)
+            q = _apply_device_filter(q, device_ids)
+            batch = q.range(page * 1000, (page + 1) * 1000 - 1).execute().data
+            if not batch:
+                break
+            det_rows.extend(batch)
+            if len(batch) < 1000:
+                break
+            page += 1
 
         # ── Aggregate in Python ──────────────────────────────────────────────
         daily = defaultdict(lambda: defaultdict(int))
