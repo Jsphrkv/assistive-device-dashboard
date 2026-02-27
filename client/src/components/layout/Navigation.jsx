@@ -492,7 +492,7 @@ const SidebarPanel = ({
       {(!collapsed || isMobilePanel) && (
         <span
           style={{
-            fontSize: "0.8rem",
+            fontSize: "0.875rem",
             fontWeight: 700,
             letterSpacing: "0.12em",
             color: s.menuLabel,
@@ -590,7 +590,7 @@ const SidebarPanel = ({
               background: isActive ? s.activeBg : "transparent",
               color: isActive ? s.activeText : s.text,
               fontWeight: isActive ? 600 : 400,
-              fontSize: "0.9375rem",
+              fontSize: "1rem",
               cursor: "pointer",
               justifyContent:
                 collapsed && !isMobilePanel ? "center" : "flex-start",
@@ -822,7 +822,7 @@ const Navigation = ({
               {...sharedProps}
               isMobilePanel
               onClose={() => setMobileOpen(false)}
-              width={290}
+              width={310}
             />
           </div>
         </>

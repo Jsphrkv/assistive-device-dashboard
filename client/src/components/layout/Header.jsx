@@ -9,26 +9,26 @@ const Header = ({ theme, onToggleDark, isMobile, onOpenMobileMenu }) => {
       style={{
         background: headerBg,
         borderBottom: `1px solid ${headerBorder}`,
-        height: 64,
+        height: 72, // was 64
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        padding: "0 1.5rem",
+        padding: "0 1.75rem", // was 1.5rem
         width: "100%",
         boxSizing: "border-box",
         transition: "background .2s, border-color .2s",
       }}
     >
       {/* Left: burger (mobile only) + logo icon + title */}
-      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.875rem" }}>
         {isMobile && (
           <button
             onClick={onOpenMobileMenu}
             aria-label="Open menu"
             style={{
-              width: 36,
-              height: 36,
-              borderRadius: 8,
+              width: 40, // was 36
+              height: 40,
+              borderRadius: 9,
               background: "linear-gradient(135deg,#7c3aed,#a855f7)",
               border: "none",
               cursor: "pointer",
@@ -39,30 +39,31 @@ const Header = ({ theme, onToggleDark, isMobile, onOpenMobileMenu }) => {
               boxShadow: "0 2px 8px rgba(124,58,237,0.35)",
             }}
           >
-            <Menu size={18} color="#fff" />
+            <Menu size={20} color="#fff" /> {/* was 18 */}
           </button>
         )}
 
         <div
           style={{
-            width: 32,
-            height: 32,
-            borderRadius: 8,
+            width: 38, // was 32
+            height: 38,
+            borderRadius: 9,
             flexShrink: 0,
             background: "linear-gradient(135deg,#7c3aed,#a855f7)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
+            boxShadow: "0 2px 8px rgba(124,58,237,0.3)",
           }}
         >
-          <Camera size={16} color="#fff" />
+          <Camera size={19} color="#fff" /> {/* was 16 */}
         </div>
 
         <div>
           <h1
             style={{
               fontWeight: 700,
-              fontSize: "1rem",
+              fontSize: "1.125rem", // was 1rem
               color: headerText,
               margin: 0,
               lineHeight: 1.25,
@@ -72,7 +73,9 @@ const Header = ({ theme, onToggleDark, isMobile, onOpenMobileMenu }) => {
             Assistive Device Dashboard
           </h1>
           {!isMobile && (
-            <p style={{ fontSize: "0.7rem", color: headerSub, margin: 0 }}>
+            <p style={{ fontSize: "0.775rem", color: headerSub, margin: 0 }}>
+              {" "}
+              {/* was 0.7rem */}
               Wearable Computer Vision System
             </p>
           )}
@@ -84,8 +87,8 @@ const Header = ({ theme, onToggleDark, isMobile, onOpenMobileMenu }) => {
         onClick={onToggleDark}
         title={dark ? "Switch to light mode" : "Switch to dark mode"}
         style={{
-          width: 38,
-          height: 38,
+          width: 44, // was 38
+          height: 44,
           borderRadius: "50%",
           border: `1px solid ${dark ? "#3a3a3a" : "#e5e7eb"}`,
           background: dark ? "#2a2a2a" : "#f9fafb",
@@ -98,9 +101,9 @@ const Header = ({ theme, onToggleDark, isMobile, onOpenMobileMenu }) => {
         }}
       >
         {dark ? (
-          <Sun size={16} color="#fbbf24" />
+          <Sun size={19} color="#fbbf24" /> // was 16
         ) : (
-          <Moon size={16} color="#6b7280" />
+          <Moon size={19} color="#6b7280" /> // was 16
         )}
       </button>
     </header>

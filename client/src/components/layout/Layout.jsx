@@ -255,7 +255,7 @@ const Layout = ({
     localStorage.setItem("theme", next ? "dark" : "light");
   };
 
-  const sidebarWidth = isMobile ? 0 : collapsed ? 72 : 290;
+  const sidebarWidth = isMobile ? 0 : collapsed ? 80 : 310;
 
   const theme = {
     dark,
@@ -293,7 +293,7 @@ const Layout = ({
       </div>
 
       {/* Body */}
-      <div style={{ display: "flex", paddingTop: 64 }}>
+      <div style={{ display: "flex", paddingTop: 72 }}>
         <Navigation
           currentUser={currentUser}
           activeTab={activeTab}
