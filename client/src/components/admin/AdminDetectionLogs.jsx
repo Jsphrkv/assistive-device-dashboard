@@ -19,6 +19,19 @@ const DANGER_COLORS = {
   Low: "bg-green-100 text-green-800 border border-green-200",
 };
 
+// Normalize confidence: handles both decimal (0.875) and percentage (87.5) storage
+const normalizeConfidence = (v) => {
+  if (v == null) return null;
+  if (v > 1) return v / 100; // already stored as percentage
+  return v;
+};
+
+const formatConfidence = (v, decimals = 1) => {
+  const n = normalizeConfidence(v);
+  if (n == null) return "—";
+  return `${(n * 100).toFixed(decimals)}%`;
+};
+
 // ── Image preview modal ───────────────────────────────────────────────────────
 const ImageModal = ({ detection, onClose }) => {
   if (!detection) return null;
@@ -76,12 +89,8 @@ const ImageModal = ({ detection, onClose }) => {
                   ? `${detection.distance_cm} cm`
                   : "—",
               ],
-              [
-                "Confidence",
-                detection.detection_confidence != null
-                  ? `${(detection.detection_confidence * 100).toFixed(1)}%`
-                  : "—",
-              ],
+              // ✅ FIX: use formatConfidence helper instead of raw * 100
+              ["Confidence", formatConfidence(detection.detection_confidence)],
               ["Source", detection.detection_source ?? "—"],
             ].map(([label, value]) => (
               <div key={label} className="bg-gray-50 rounded-lg p-3">
@@ -350,10 +359,9 @@ const AdminDetectionLogs = () => {
                         "—"
                       )}
                     </td>
+                    {/* ✅ FIX: use formatConfidence helper instead of raw * 100 */}
                     <td className="px-4 py-3 text-gray-700">
-                      {d.detection_confidence != null
-                        ? `${(d.detection_confidence * 100).toFixed(1)}%`
-                        : "—"}
+                      {formatConfidence(d.detection_confidence)}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
                       {d.detection_source ?? "—"}

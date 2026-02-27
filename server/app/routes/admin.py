@@ -10,19 +10,32 @@ from datetime import timedelta
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/api/admin')
 
-# ── External service URLs ─────────────────────────────────────────────────────
 HF_URL = os.getenv('HF_URL', 'https://josephrkv-capstone2-proj.hf.space')
+
+
+# ── Confidence normalization ───────────────────────────────────────────────────
+# Some rows store confidence as a decimal (0.875) and older rows store it as a
+# percentage (87.5).  Always normalise to decimal before returning to the client
+# so the frontend can safely multiply by 100 without ever showing e.g. 8750%.
+
+def _normalize_confidence(v):
+    """Return v as a 0–1 decimal, or None if v is None / too small to be real."""
+    if v is None:
+        return None
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        return None
+    if v <= 0.01:          # treat as missing / noise
+        return None
+    if v > 1:              # stored as percentage (e.g. 87.5) → convert
+        v = v / 100
+    return round(v, 4)
 
 
 # ── Shared paginated fetch helpers ────────────────────────────────────────────
 
 def _paginate(query_fn, max_pages=10):
-    """
-    Execute query_fn(page) in pages of 1000 until exhausted or max_pages hit.
-    query_fn receives the page index and returns a Supabase query with
-    .range() already applied.
-    Bypasses Supabase's server-side 1000-row cap for analytics bulk fetches.
-    """
     all_rows = []
     for page in range(max_pages):
         batch = query_fn(page).range(page * 1000, (page + 1) * 1000 - 1).execute().data
@@ -35,10 +48,6 @@ def _paginate(query_fn, max_pages=10):
 
 
 def _paginate_table(supabase, table, select, filters=None, max_pages=10):
-    """
-    Convenience wrapper: paginate a single table with optional filters list.
-    filters = list of (method, *args) tuples, e.g. [('gte', 'created_at', iso)]
-    """
     def query_fn(page):
         q = supabase.table(table).select(select)
         if filters:
@@ -58,7 +67,7 @@ def _paginate_table(supabase, table, select, filters=None, max_pages=10):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 1.  SYSTEM HEALTH  →  AdminSystemHealth.jsx
+# 1.  SYSTEM HEALTH
 # ─────────────────────────────────────────────────────────────────────────────
 
 @admin_bp.route('/health', methods=['GET'])
@@ -70,10 +79,8 @@ def get_system_health():
             hf_future = pool.submit(_ping_service, f"{HF_URL}/health", 15, False)
             ml_future = pool.submit(_fetch_ml_model_status)
 
-        hf_status = hf_future.result()
-        ml_models = ml_future.result()
-
-        # Render = always ok — if this code is executing, backend is up
+        hf_status  = hf_future.result()
+        ml_models  = ml_future.result()
         render_status = {'status': 'ok', 'latencyMs': 0, 'code': 200}
 
         return jsonify({
@@ -94,11 +101,7 @@ def _ping_service(url, timeout=10, expect_401=False):
         resp  = http_requests.get(url, timeout=timeout)
         ms    = int((time.time() - start) * 1000)
         ok    = resp.status_code < 500 or (expect_401 and resp.status_code == 401)
-        return {
-            'status':    'ok' if ok else 'error',
-            'latencyMs': ms,
-            'code':      resp.status_code,
-        }
+        return {'status': 'ok' if ok else 'error', 'latencyMs': ms, 'code': resp.status_code}
     except http_requests.exceptions.Timeout:
         return {'status': 'error', 'latencyMs': None, 'detail': 'timeout'}
     except Exception as e:
@@ -109,7 +112,7 @@ def _fetch_ml_model_status():
     try:
         resp = http_requests.get(f"{HF_URL}/model-status", timeout=20)
         if resp.status_code == 200:
-            data = resp.json()
+            data   = resp.json()
             result = {}
             for name in ('yolo', 'danger', 'anomaly', 'object', 'environment'):
                 m = data.get(name, {})
@@ -131,8 +134,7 @@ def _fetch_ml_model_status():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 2.  ALL DETECTIONS (cross-user)  →  AdminDetectionLogs.jsx
-#     Already server-side paginated at 25/page — no bulk fix needed.
+# 2.  ALL DETECTIONS  →  AdminDetectionLogs.jsx
 # ─────────────────────────────────────────────────────────────────────────────
 
 @admin_bp.route('/detections', methods=['GET'])
@@ -167,6 +169,10 @@ def get_all_detections():
         for row in (response.data or []):
             device_info = row.pop('user_devices', {}) or {}
             row['device_name'] = device_info.get('device_name', 'Unknown')
+            # ✅ FIX: normalize confidence before sending to client
+            row['detection_confidence'] = _normalize_confidence(
+                row.get('detection_confidence')
+            )
             detections.append(row)
 
         return jsonify({
@@ -182,16 +188,10 @@ def get_all_detections():
         return jsonify({'error': 'Failed to get detections'}), 500
 
 
-# ── Detection stats (global counts for AdminDetectionLogs cards) ─────────────
-
 @admin_bp.route('/detections/stats', methods=['GET'])
 @token_required
 @admin_required
 def get_detection_stats():
-    """
-    Returns all-time global counts for the 4 stat cards in AdminDetectionLogs:
-    total, high, medium, low.  Uses COUNT queries — always accurate, never capped.
-    """
     try:
         supabase = get_admin_client()
 
@@ -215,21 +215,13 @@ def get_detection_stats():
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 3.  ML ANALYTICS  →  AdminMLAnalytics.jsx
-#     FIX: All 5 bulk queries now paginate to bypass the 1000-row cap.
-#     Before: each query silently returned only 1000 rows → wrong chart data.
-#     After:  paginated in chunks of 1000 → correct totals for all time ranges.
+#     All data sourced exclusively from ml_predictions.
 # ─────────────────────────────────────────────────────────────────────────────
 
 @admin_bp.route('/analytics', methods=['GET'])
 @token_required
 @admin_required
 def get_ml_analytics():
-    """
-    ALL data sourced exclusively from ml_predictions table.
-    Columns used: created_at, object_detected, danger_level,
-                  detection_confidence, model_source, prediction_type
-    detection_logs is NOT queried here at all.
-    """
     try:
         days      = min(request.args.get('days', 7, type=int), 90)
         supabase  = get_admin_client()
@@ -237,7 +229,6 @@ def get_ml_analytics():
         start_dt  = end_dt - timedelta(days=days)
         start_iso = start_dt.isoformat()
 
-        # Single filter used by all queries
         ml_filter = [('gte', 'created_at', start_iso)]
 
         # ── Total ML predictions ──────────────────────────────────────────────
@@ -248,10 +239,8 @@ def get_ml_analytics():
 
         # ── Hourly buckets ────────────────────────────────────────────────────
         hourly_rows = _paginate_table(
-            supabase, 'ml_predictions', 'created_at',
-            filters=ml_filter,
+            supabase, 'ml_predictions', 'created_at', filters=ml_filter,
         )
-
         hourly_buckets = {}
         for row in hourly_rows:
             ts = row.get('created_at', '')
@@ -272,10 +261,8 @@ def get_ml_analytics():
 
         # ── Object distribution ───────────────────────────────────────────────
         obj_rows = _paginate_table(
-            supabase, 'ml_predictions', 'object_detected',
-            filters=ml_filter,
+            supabase, 'ml_predictions', 'object_detected', filters=ml_filter,
         )
-
         obj_counts = {}
         for row in obj_rows:
             obj = row.get('object_detected') or 'unknown'
@@ -288,10 +275,8 @@ def get_ml_analytics():
 
         # ── Danger level frequency ────────────────────────────────────────────
         danger_rows = _paginate_table(
-            supabase, 'ml_predictions', 'danger_level',
-            filters=ml_filter,
+            supabase, 'ml_predictions', 'danger_level', filters=ml_filter,
         )
-
         danger_counts = {}
         for row in danger_rows:
             lvl = row.get('danger_level') or 'Unknown'
@@ -304,10 +289,8 @@ def get_ml_analytics():
 
         # ── Prediction type breakdown ─────────────────────────────────────────
         type_rows = _paginate_table(
-            supabase, 'ml_predictions', 'prediction_type',
-            filters=ml_filter,
+            supabase, 'ml_predictions', 'prediction_type', filters=ml_filter,
         )
-
         type_counts = {}
         for row in type_rows:
             ptype = row.get('prediction_type') or 'unknown'
@@ -320,10 +303,8 @@ def get_ml_analytics():
 
         # ── Model source ratio ────────────────────────────────────────────────
         ml_rows = _paginate_table(
-            supabase, 'ml_predictions', 'model_source',
-            filters=ml_filter,
+            supabase, 'ml_predictions', 'model_source', filters=ml_filter,
         )
-
         ml_model_count = 0
         fallback_count = 0
         for row in ml_rows:
@@ -335,16 +316,12 @@ def get_ml_analytics():
 
         # ── Avg detection confidence ──────────────────────────────────────────
         conf_rows = _paginate_table(
-            supabase, 'ml_predictions', 'detection_confidence',
-            filters=ml_filter,
+            supabase, 'ml_predictions', 'detection_confidence', filters=ml_filter,
         )
-
         conf_values = []
         for r in conf_rows:
-            v = r.get('detection_confidence')
-            if v is not None and v > 0.01:
-                if v > 1:   # normalize percentage-stored values (87.5 → 0.875)
-                    v = v / 100
+            v = _normalize_confidence(r.get('detection_confidence'))
+            if v is not None:
                 conf_values.append(v)
         avg_confidence = (sum(conf_values) / len(conf_values)) if conf_values else 0.0
 
@@ -369,7 +346,6 @@ def get_ml_analytics():
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 4.  USER & DEVICE MANAGEMENT  →  AdminUserManagement.jsx
-#     Already fine — users/devices are small tables, no cap issue.
 # ─────────────────────────────────────────────────────────────────────────────
 
 @admin_bp.route('/users', methods=['GET'])
@@ -433,9 +409,17 @@ def get_user_detections(user_id):
             .limit(limit)\
             .execute()
 
+        detections = []
+        for row in (response.data or []):
+            # ✅ FIX: normalize confidence before sending to client
+            row['detection_confidence'] = _normalize_confidence(
+                row.get('detection_confidence')
+            )
+            detections.append(row)
+
         return jsonify({
-            'detections': response.data or [],
-            'total':      len(response.data or []),
+            'detections': detections,
+            'total':      len(detections),
         }), 200
 
     except Exception as e:
@@ -480,8 +464,7 @@ def toggle_device_status(device_id):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 5.  LIVE FEED  →  AdminLiveFeed.jsx  (polled every 3s)
-#     Only fetches 30 most recent — no cap issue, no change needed.
+# 5.  LIVE FEED  →  AdminLiveFeed.jsx
 # ─────────────────────────────────────────────────────────────────────────────
 
 @admin_bp.route('/live-feed', methods=['GET'])
@@ -504,6 +487,10 @@ def get_live_feed():
         for row in (response.data or []):
             device_info = row.pop('user_devices', {}) or {}
             row['device_name'] = device_info.get('device_name', 'Unknown')
+            # ✅ FIX: normalize confidence before sending to client
+            row['detection_confidence'] = _normalize_confidence(
+                row.get('detection_confidence')
+            )
             detections.append(row)
 
         return jsonify({

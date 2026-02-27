@@ -9,6 +9,13 @@ import {
 } from "lucide-react";
 import { adminAPI } from "../../services/api";
 
+// ✅ FIX: Normalize confidence regardless of storage format
+const normalizeConfidence = (v) => {
+  if (v == null) return null;
+  if (v > 1) return v / 100; // stored as e.g. 87.5 → normalize to 0.875
+  return v;
+};
+
 // ── Per-user detection history drawer ────────────────────────────────────────
 const UserHistoryDrawer = ({ user, onClose }) => {
   const [history, setHistory] = useState([]);
@@ -66,42 +73,49 @@ const UserHistoryDrawer = ({ user, onClose }) => {
             </p>
           ) : (
             <div className="space-y-2">
-              {history.map((d, i) => (
-                <div
-                  key={d.id ?? i}
-                  className="bg-gray-50 rounded-lg p-3 text-sm"
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-medium text-gray-800">
-                      {d.object_detected ?? "Unknown"}
-                    </span>
-                    <span
-                      className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                        d.danger_level === "Critical"
-                          ? "bg-red-100 text-red-800"
-                          : d.danger_level === "High"
-                            ? "bg-orange-100 text-orange-800"
-                            : d.danger_level === "Medium"
-                              ? "bg-amber-100 text-amber-800"
-                              : "bg-green-100 text-green-800"
-                      }`}
-                    >
-                      {d.danger_level ?? "—"}
-                    </span>
+              {history.map((d, i) => {
+                // ✅ FIX: normalize before displaying
+                const confNorm = normalizeConfidence(d.detection_confidence);
+                return (
+                  <div
+                    key={d.id ?? i}
+                    className="bg-gray-50 rounded-lg p-3 text-sm"
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-medium text-gray-800">
+                        {d.object_detected ?? "Unknown"}
+                      </span>
+                      <span
+                        className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                          d.danger_level === "Critical"
+                            ? "bg-red-100 text-red-800"
+                            : d.danger_level === "High"
+                              ? "bg-orange-100 text-orange-800"
+                              : d.danger_level === "Medium"
+                                ? "bg-amber-100 text-amber-800"
+                                : "bg-green-100 text-green-800"
+                        }`}
+                      >
+                        {d.danger_level ?? "—"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-gray-500">
+                      <span>
+                        {d.detected_at
+                          ? new Date(d.detected_at).toLocaleString()
+                          : "—"}
+                      </span>
+                      {d.distance_cm != null && <span>{d.distance_cm} cm</span>}
+                      {/* ✅ FIX: use normalized value, show N/A if null */}
+                      {confNorm != null ? (
+                        <span>{(confNorm * 100).toFixed(0)}%</span>
+                      ) : (
+                        <span className="text-gray-400">N/A</span>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3 text-xs text-gray-500">
-                    <span>
-                      {d.detected_at
-                        ? new Date(d.detected_at).toLocaleString()
-                        : "—"}
-                    </span>
-                    {d.distance_cm != null && <span>{d.distance_cm} cm</span>}
-                    {d.detection_confidence != null && (
-                      <span>{(d.detection_confidence * 100).toFixed(0)}%</span>
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -150,7 +164,6 @@ const UserRow = ({ user, onViewHistory, onToggleDevice, toggling }) => {
 
   return (
     <div className="bg-white rounded-lg shadow overflow-hidden">
-      {/* User header */}
       <div className="flex items-center justify-between px-5 py-4">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
@@ -182,7 +195,6 @@ const UserRow = ({ user, onViewHistory, onToggleDevice, toggling }) => {
             History
           </button>
 
-          {/* Expand/collapse devices */}
           {user.devices?.length > 0 && (
             <button
               onClick={() => setExpanded((p) => !p)}
@@ -198,7 +210,6 @@ const UserRow = ({ user, onViewHistory, onToggleDevice, toggling }) => {
         </div>
       </div>
 
-      {/* Device list */}
       {expanded && user.devices?.length > 0 && (
         <div className="px-5 pb-4 space-y-2 border-t border-gray-100 pt-3">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
@@ -230,7 +241,7 @@ const AdminUserManagement = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [historyUser, setHistoryUser] = useState(null);
-  const [toggling, setToggling] = useState(null); // deviceId being toggled
+  const [toggling, setToggling] = useState(null);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -254,7 +265,6 @@ const AdminUserManagement = () => {
     setToggling(device.id);
     try {
       await adminAPI.toggleDeviceStatus(device.id, newStatus);
-      // Optimistically update local state
       setUsers((prev) =>
         prev.map((u) => ({
           ...u,
@@ -352,7 +362,6 @@ const AdminUserManagement = () => {
         )}
       </div>
 
-      {/* Detection history drawer */}
       {historyUser && (
         <UserHistoryDrawer
           user={historyUser}

@@ -2,10 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Radio, Pause, Play, Trash2 } from "lucide-react";
 import { adminAPI } from "../../services/api";
 
-const POLL_INTERVAL = 3_000; // 3 seconds as specified
-const MAX_FEED_ITEMS = 100; // cap local list to avoid memory growth
+const POLL_INTERVAL = 3_000;
+const MAX_FEED_ITEMS = 100;
 
-// Danger level row styling
 const DANGER_ROW = {
   Critical: "bg-red-50   border-l-4 border-red-500",
   High: "bg-orange-50 border-l-4 border-orange-400",
@@ -20,7 +19,13 @@ const DANGER_BADGE = {
   Low: "bg-green-100  text-green-800  border border-green-200",
 };
 
-// Pulse indicator for critical/high
+// ✅ FIX: Normalize confidence regardless of storage format
+const normalizeConfidence = (v) => {
+  if (v == null) return null;
+  if (v > 1) return v / 100; // stored as e.g. 87.5 → normalize to 0.875
+  return v;
+};
+
 const DangerPulse = ({ level }) => {
   if (level !== "Critical" && level !== "High") return null;
   return (
@@ -43,6 +48,9 @@ const FeedRow = ({ item, isNew }) => {
   const rowBg =
     DANGER_ROW[item.danger_level] ?? "bg-white border-l-4 border-gray-200";
   const badge = DANGER_BADGE[item.danger_level];
+
+  // ✅ FIX: normalize before displaying
+  const confNorm = normalizeConfidence(item.detection_confidence);
 
   return (
     <div
@@ -73,9 +81,8 @@ const FeedRow = ({ item, isNew }) => {
         <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-500">
           {item.device_name && <span>{item.device_name}</span>}
           {item.distance_cm != null && <span>{item.distance_cm} cm</span>}
-          {item.detection_confidence != null && (
-            <span>{(item.detection_confidence * 100).toFixed(0)}% conf</span>
-          )}
+          {/* ✅ FIX: use normalized value */}
+          {confNorm != null && <span>{(confNorm * 100).toFixed(0)}% conf</span>}
         </div>
       </div>
 
@@ -105,7 +112,6 @@ const AdminLiveFeed = () => {
       const res = await adminAPI.getLiveFeed(30);
       const items = res.data?.detections ?? res.data?.data ?? [];
 
-      // Find genuinely new items by id
       const incoming = items.filter(
         (item) => item.id && !knownIds.current.has(item.id),
       );
@@ -113,15 +119,11 @@ const AdminLiveFeed = () => {
       if (incoming.length > 0) {
         const incomingIds = new Set(incoming.map((i) => i.id));
         incoming.forEach((i) => knownIds.current.add(i.id));
-
         setFeed((prev) => [...incoming, ...prev].slice(0, MAX_FEED_ITEMS));
-
-        // Mark as new for animation then clear
         setNewIds(incomingIds);
         setTimeout(() => setNewIds(new Set()), 800);
       }
 
-      // Seed on first load
       if (knownIds.current.size === 0) {
         items.forEach((i) => {
           if (i.id) knownIds.current.add(i.id);
@@ -138,7 +140,6 @@ const AdminLiveFeed = () => {
     }
   }, [paused]);
 
-  // ✅ FIX: Recalc stats when feed changes - calculate directly, not with functions
   useEffect(() => {
     setStats({
       total: feed.length,
@@ -147,7 +148,6 @@ const AdminLiveFeed = () => {
     });
   }, [feed]);
 
-  // Initial fetch + polling
   useEffect(() => {
     fetchFeed();
   }, []); // eslint-disable-line
@@ -174,7 +174,6 @@ const AdminLiveFeed = () => {
           <h2 className="text-2xl font-bold text-gray-900">
             Live Detection Feed
           </h2>
-          {/* Live pulse indicator */}
           {!paused && (
             <span className="relative flex h-3 w-3">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
@@ -291,7 +290,6 @@ const AdminLiveFeed = () => {
         </div>
       </div>
 
-      {/* Inline keyframe for new-item fade */}
       <style>{`
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(-4px); }

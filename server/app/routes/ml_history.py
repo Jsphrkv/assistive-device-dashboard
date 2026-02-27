@@ -21,9 +21,30 @@ def _apply_device_filter(query, device_ids, col='device_id'):
         query = query.in_(col, device_ids)
     return query
 
-def _safe_float(val, default=0):
-    """Return float, treating None as default."""
-    return float(val) if val is not None else default
+def _safe_float(val, default=None):
+    """Return float or None — never fabricate a confidence value."""
+    if val is None:
+        return default
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return default
+
+def _normalize_confidence(v):
+    """
+    Normalize confidence to 0-1 range.
+    Some older rows store confidence as percentage (e.g. 87.5) instead of decimal (0.875).
+    Returns None if value is missing or effectively zero.
+    """
+    if v is None:
+        return None
+    v = float(v)
+    if v <= 0.01:
+        return None          # treat near-zero as missing, not 0%
+    if v > 1:
+        v = v / 100          # normalize percentage-stored values
+    return v
+
 
 # ── GET /api/ml-history ───────────────────────────────────────────────────────
 
@@ -72,31 +93,35 @@ def get_ml_history():
             for item in q.order('created_at', desc=True).limit(limit).execute().data:
                 pt         = item.get('prediction_type', 'unknown')
                 result     = {}
-                confidence = 0
+                confidence = None   # start as None — only set if real data exists
 
                 if pt == 'anomaly':
-                    health = _safe_float(item.get('device_health_score'))
+                    health = _safe_float(item.get('device_health_score'), 0)
+                    score  = _safe_float(item.get('anomaly_score'))
                     result = {
-                        'score':              item.get('anomaly_score'),
-                        'severity':           item.get('anomaly_severity'),
+                        'score':               score,
+                        'severity':            item.get('anomaly_severity'),
                         'device_health_score': health,
-                        'message':            f"Device anomaly detected (health: {health:.1f}%)",
+                        'message':             f"Device anomaly detected (health: {health:.1f}%)",
                     }
-                    confidence = _safe_float(item.get('anomaly_score'))
+                    # FIX: use real anomaly_score as confidence (already 0-1 range)
+                    confidence = _normalize_confidence(score)
 
                 elif pt == 'object_detection':
                     obj  = item.get('object_detected', 'object')
                     dist = item.get('distance_cm', 0)
+                    conf = item.get('detection_confidence')
                     result = {
                         'object':        obj, 'obstacle_type': obj,
                         'distance':      dist, 'distance_cm':   dist,
                         'danger_level':  item.get('danger_level'),
-                        'confidence':    item.get('detection_confidence'),
+                        'confidence':    conf,
                     }
-                    confidence = _safe_float(item.get('detection_confidence'))
+                    # FIX: use real detection_confidence from ml_predictions row
+                    confidence = _normalize_confidence(conf)
 
                 elif pt == 'danger_prediction':
-                    score  = _safe_float(item.get('danger_score'))
+                    score  = _safe_float(item.get('danger_score'), 0)
                     action = item.get('recommended_action', 'UNKNOWN')
                     result = {
                         'danger_score':       score,
@@ -104,18 +129,20 @@ def get_ml_history():
                         'time_to_collision':  item.get('time_to_collision'),
                         'message':            f"{action} - Danger score: {score:.1f}",
                     }
-                    confidence = score / 100
+                    # FIX: normalize danger_score (0-100) to 0-1
+                    confidence = _normalize_confidence(score / 100) if score > 0 else None
 
                 elif pt == 'environment_classification':
-                    env  = item.get('environment_type', 'unknown')
+                    env   = item.get('environment_type', 'unknown')
                     light = item.get('lighting_condition', 'unknown')
                     result = {
-                        'environment_type': env,
+                        'environment_type':   env,
                         'lighting_condition': light,
-                        'complexity_level': item.get('complexity_level'),
-                        'message': f"{env} - {light} lighting",
+                        'complexity_level':   item.get('complexity_level'),
+                        'message':            f"{env} - {light} lighting",
                     }
-                    confidence = 0.85
+                    # FIX: use detection_confidence if available, else None (not 0.85)
+                    confidence = _normalize_confidence(item.get('detection_confidence'))
 
                 combined.append({
                     'id':               item['id'],
@@ -123,7 +150,7 @@ def get_ml_history():
                     'device_name':      (item.get('user_devices') or {}).get('device_name', 'Unknown'),
                     'prediction_type':  pt,
                     'is_anomaly':       item.get('is_anomaly', False),
-                    'confidence_score': confidence,
+                    'confidence_score': confidence,   # real value or None — never fabricated
                     'timestamp':        item['created_at'],
                     'result':           result,
                     'source':           'ml_prediction',
@@ -146,7 +173,8 @@ def get_ml_history():
                     'device_name':      (item.get('user_devices') or {}).get('device_name', 'Unknown'),
                     'prediction_type':  'detection',
                     'is_anomaly':       item['danger_level'] == 'High',
-                    'confidence_score': 0.85,
+                    # FIX: use real detection_confidence from the row, not hardcoded 0.85
+                    'confidence_score': _normalize_confidence(item.get('detection_confidence')),
                     'timestamp':        item['detected_at'],
                     'result': {
                         'obstacle_type': item['obstacle_type'],
@@ -221,24 +249,25 @@ def get_anomalies():
 
         for item in q.execute().data:
             pt       = item.get('prediction_type', 'unknown')
-            score    = 0
+            score    = None
             severity = 'medium'
             message  = 'Anomaly detected'
 
             if pt == 'anomaly':
-                health   = _safe_float(item.get('device_health_score'))
-                score    = _safe_float(item.get('anomaly_score'))
+                health   = _safe_float(item.get('device_health_score'), 0)
+                score    = _normalize_confidence(item.get('anomaly_score'))
                 severity = item.get('anomaly_severity', 'medium')
                 message  = f"Device anomaly detected (health: {health:.1f}%)"
 
             elif pt == 'danger_prediction':
-                score    = _safe_float(item.get('danger_score')) / 100
-                action   = item.get('recommended_action', 'UNKNOWN')
-                severity = 'high' if score > 0.7 else 'medium'
-                message  = f"Danger detected - {action} recommended"
+                raw_score = _safe_float(item.get('danger_score'), 0)
+                score     = _normalize_confidence(raw_score / 100) if raw_score > 0 else None
+                action    = item.get('recommended_action', 'UNKNOWN')
+                severity  = 'high' if (raw_score or 0) > 70 else 'medium'
+                message   = f"Danger detected - {action} recommended"
 
             elif pt == 'object_detection':
-                score    = _safe_float(item.get('detection_confidence'))
+                score    = _normalize_confidence(item.get('detection_confidence'))
                 danger   = item.get('danger_level', 'low')
                 severity = danger.lower()
                 obj      = item.get('object_detected', 'object')
@@ -252,7 +281,7 @@ def get_anomalies():
                 'type':        pt,
                 'severity':    severity,
                 'message':     message,
-                'score':       score,
+                'score':       score,   # real value or None — never fabricated
                 'timestamp':   item['created_at'],
                 'source':      'ml_prediction',
             })
@@ -273,7 +302,8 @@ def get_anomalies():
                 'type':        'detection',
                 'severity':    item['danger_level'].lower(),
                 'message':     f"{item['obstacle_type']} detected at {item['distance_cm']}cm",
-                'score':       0.75,
+                # FIX: use real detection_confidence, not hardcoded 0.75
+                'score':       _normalize_confidence(item.get('detection_confidence')),
                 'timestamp':   item['detected_at'],
                 'source':      'detection_log',
             })
@@ -346,14 +376,14 @@ def get_ml_stats():
         print(f"   Combined anomalyCount: {anomalies}")
 
         by_type = {
-            'anomaly':                  ml_count({'prediction_type': 'anomaly'}),
-            'object_detection':         ml_count({'prediction_type': 'object_detection'}),
-            'danger_prediction':        ml_count({'prediction_type': 'danger_prediction'}),
+            'anomaly':                    ml_count({'prediction_type': 'anomaly'}),
+            'object_detection':           ml_count({'prediction_type': 'object_detection'}),
+            'danger_prediction':          ml_count({'prediction_type': 'danger_prediction'}),
             'environment_classification': ml_count({'prediction_type': 'environment_classification'}),
-            'detection':                det_total,
+            'detection':                  det_total,
         }
 
-        # ── avg confidence (fetch scores in one query) ─────────────────────
+        # ── avg confidence — real values only, no fabricated fallbacks ────────
         conf_scores = []
         try:
             q = supabase.table('ml_predictions')\
@@ -362,19 +392,35 @@ def get_ml_stats():
             q = _apply_device_filter(q, device_ids)
             for pred in q.execute().data:
                 pt = pred.get('prediction_type')
-                if   pt == 'anomaly'            and pred.get('anomaly_score'):
-                    conf_scores.append(pred['anomaly_score'])
-                elif pt == 'object_detection'   and pred.get('detection_confidence'):
-                    conf_scores.append(pred['detection_confidence'])
-                elif pt == 'danger_prediction'  and pred.get('danger_score'):
-                    conf_scores.append(pred['danger_score'] / 100)
+                if pt == 'anomaly' and pred.get('anomaly_score') is not None:
+                    v = _normalize_confidence(pred['anomaly_score'])
+                    if v: conf_scores.append(v)
+                elif pt == 'object_detection' and pred.get('detection_confidence') is not None:
+                    v = _normalize_confidence(pred['detection_confidence'])
+                    if v: conf_scores.append(v)
+                elif pt == 'danger_prediction' and pred.get('danger_score') is not None:
+                    v = _normalize_confidence(pred['danger_score'] / 100)
+                    if v: conf_scores.append(v)
+                # environment_classification: only add if detection_confidence is real
+                elif pt == 'environment_classification' and pred.get('detection_confidence') is not None:
+                    v = _normalize_confidence(pred['detection_confidence'])
+                    if v: conf_scores.append(v)
         except Exception as ce:
             print(f"⚠️ Confidence fetch error (non-critical): {ce}")
 
-        if det_total > 0:
-            conf_scores.extend([0.85] * det_total)
+        # FIX: detection_logs — use real detection_confidence values, not 0.85 * count
+        try:
+            q = supabase.table('detection_logs')\
+                .select('detection_confidence')\
+                .gte('detected_at', start_iso)
+            q = _apply_device_filter(q, device_ids)
+            for row in q.execute().data:
+                v = _normalize_confidence(row.get('detection_confidence'))
+                if v: conf_scores.append(v)
+        except Exception as ce:
+            print(f"⚠️ Detection confidence fetch error (non-critical): {ce}")
 
-        avg_conf = (sum(conf_scores) / len(conf_scores)) if conf_scores else 0.75
+        avg_conf = (sum(conf_scores) / len(conf_scores)) if conf_scores else 0.0
 
         return jsonify({
             'totalPredictions': total,
@@ -414,17 +460,17 @@ def get_daily_summary():
         if device_ids == []:
             return jsonify({'data': []}), 200
 
-        end_dt   = now_ph()
-        start_dt = end_dt - timedelta(days=days)
+        end_dt    = now_ph()
+        start_dt  = end_dt - timedelta(days=days)
         start_iso = start_dt.isoformat()
         end_iso   = end_dt.isoformat()
 
-        # ── BULK FETCH 1: ml_predictions (paginated) ─────────────────────────────
+        # ── BULK FETCH 1: ml_predictions (paginated) ──────────────────────────
         ml_rows = []
         page = 0
         while True:
             q = supabase.table('ml_predictions')\
-                .select('created_at, prediction_type, is_anomaly')\
+                .select('created_at, prediction_type, is_anomaly, detection_confidence, anomaly_score, danger_score')\
                 .gte('created_at', start_iso)\
                 .lte('created_at', end_iso)
             q = _apply_device_filter(q, device_ids)
@@ -436,12 +482,12 @@ def get_daily_summary():
                 break
             page += 1
 
-        # ── BULK FETCH 2: detection_logs (paginated) ─────────────────────────────
+        # ── BULK FETCH 2: detection_logs (paginated) ──────────────────────────
         det_rows = []
         page = 0
         while True:
             q = supabase.table('detection_logs')\
-                .select('detected_at, danger_level')\
+                .select('detected_at, danger_level, detection_confidence')\
                 .gte('detected_at', start_iso)\
                 .lte('detected_at', end_iso)
             q = _apply_device_filter(q, device_ids)
@@ -454,21 +500,41 @@ def get_daily_summary():
             page += 1
 
         # ── Aggregate in Python ──────────────────────────────────────────────
-        daily = defaultdict(lambda: defaultdict(int))
+        daily       = defaultdict(lambda: defaultdict(int))
+        # FIX: store real confidence values per day instead of using hardcoded 0.85
+        daily_conf  = defaultdict(list)
 
         for row in ml_rows:
             day = row['created_at'][:10]
             pt  = row.get('prediction_type', '')
-            daily[day][pt]           += 1
-            daily[day]['ml_total']   += 1
+            daily[day][pt]         += 1
+            daily[day]['ml_total'] += 1
             if row.get('is_anomaly'):
                 daily[day]['ml_anomaly'] += 1
+
+            # collect real confidence for this row
+            if pt == 'anomaly' and row.get('anomaly_score'):
+                v = _normalize_confidence(row['anomaly_score'])
+                if v: daily_conf[day].append(v)
+            elif pt == 'object_detection' and row.get('detection_confidence'):
+                v = _normalize_confidence(row['detection_confidence'])
+                if v: daily_conf[day].append(v)
+            elif pt == 'danger_prediction' and row.get('danger_score'):
+                v = _normalize_confidence(row['danger_score'] / 100)
+                if v: daily_conf[day].append(v)
+            elif pt == 'environment_classification' and row.get('detection_confidence'):
+                v = _normalize_confidence(row['detection_confidence'])
+                if v: daily_conf[day].append(v)
 
         for row in det_rows:
             day = row['detected_at'][:10]
             daily[day]['det_total'] += 1
             if row.get('danger_level') == 'High':
                 daily[day]['det_anomaly'] += 1
+            # FIX: use real detection_confidence from detection_logs
+            if row.get('detection_confidence'):
+                v = _normalize_confidence(row['detection_confidence'])
+                if v: daily_conf[day].append(v)
 
         # ── Build result list ────────────────────────────────────────────────
         result = []
@@ -479,17 +545,15 @@ def get_daily_summary():
 
             count_obj    = d['object_detection']
             count_danger = d['danger_prediction']
-            count_anom   = d['anomaly']
-            count_env    = d['environment_classification']
             count_det    = d['det_total']
             total        = d['ml_total'] + count_det
             anomalies    = d['ml_anomaly'] + d['det_anomaly']
 
+            # FIX: avg confidence from real collected values, not hardcoded 0.85
+            conf_list      = daily_conf[day_key]
             avg_confidence = round(
-                (count_obj * 0.85 + count_danger * 0.80 +
-                 count_anom * 0.85 + count_env * 0.85 +
-                 count_det * 0.85) / total * 100, 2
-            ) if total > 0 else 0.0
+                (sum(conf_list) / len(conf_list)) * 100, 2
+            ) if conf_list else 0.0
 
             result.append({
                 'date_iso':           day_key,

@@ -22,8 +22,6 @@ import {
 import { useMLHistory } from "../../hooks/ml/useMLHistory";
 
 const MLStatistics = ({ deviceId }) => {
-  // FIX: was useMLHistory(deviceId || "default", 500) — wrong positional args.
-  // Hook expects an options object, not positional arguments.
   const { history, loading, refresh } = useMLHistory({
     deviceId: deviceId || undefined,
     limit: 500,
@@ -32,20 +30,19 @@ const MLStatistics = ({ deviceId }) => {
 
   const [lastAnalysisTime, setLastAnalysisTime] = useState(null);
 
-  // Process real data into chart formats
   const stats = useMemo(() => {
     if (!history || history.length === 0) {
       return {
         anomalyHistory: [],
         activityDistribution: [],
         modelPerformance: {
-          anomalyAccuracy: 0,
-          activityAccuracy: 0,
+          anomalyAccuracy: null,
+          activityAccuracy: null,
         },
       };
     }
 
-    // 1. Anomaly History - Group by date (last 7 days)
+    // 1. Anomaly History — last 7 days
     const last7Days = Array.from({ length: 7 }, (_, i) => {
       const d = new Date();
       d.setDate(d.getDate() - (6 - i));
@@ -134,19 +131,22 @@ const MLStatistics = ({ deviceId }) => {
           ]
         : [];
 
-    // 3. Model Performance - Calculate from confidence scores
+    // 3. Model Performance — real confidence scores only, no fallback
     const anomalyLogs = history.filter((item) => item.is_anomaly === true);
     const activityLogs = history.filter(
       (item) => item.prediction_type === "activity",
     );
 
+    // FIX: removed `|| 0.85` fallback — only average real confidence_score values.
+    // If a log has no confidence_score (null/undefined), it is excluded from the average.
     const avgConfidence = (logs) => {
-      if (logs.length === 0) return 0;
-      const sum = logs.reduce(
-        (acc, item) => acc + (item.confidence_score || 0.85),
+      const withScore = logs.filter((item) => item.confidence_score != null);
+      if (withScore.length === 0) return null;
+      const sum = withScore.reduce(
+        (acc, item) => acc + item.confidence_score,
         0,
       );
-      return (sum / logs.length) * 100;
+      return (sum / withScore.length) * 100;
     };
 
     const modelPerformance = {
@@ -154,21 +154,13 @@ const MLStatistics = ({ deviceId }) => {
       activityAccuracy: avgConfidence(activityLogs),
     };
 
-    return {
-      anomalyHistory,
-      activityDistribution,
-      modelPerformance,
-    };
+    return { anomalyHistory, activityDistribution, modelPerformance };
   }, [history]);
 
-  // Log statistical analysis when data changes significantly
   useEffect(() => {
     if (history.length === 0) return;
-
     const now = Date.now();
-    if (lastAnalysisTime && now - lastAnalysisTime < 5 * 60 * 1000) {
-      return;
-    }
+    if (lastAnalysisTime && now - lastAnalysisTime < 5 * 60 * 1000) return;
 
     const anomalyCount = history.filter(
       (item) => item.is_anomaly === true,
@@ -176,11 +168,9 @@ const MLStatistics = ({ deviceId }) => {
     const activityCount = history.filter(
       (item) => item.prediction_type === "activity",
     ).length;
-
     console.log(
       `📊 Statistics Analysis: ${anomalyCount} anomalies, ${activityCount} activities`,
     );
-
     setLastAnalysisTime(now);
   }, [history.length, lastAnalysisTime]);
 
@@ -349,7 +339,10 @@ const MLStatistics = ({ deviceId }) => {
                   Anomaly Detection
                 </p>
                 <p className="text-3xl font-bold text-blue-900">
-                  {stats.modelPerformance.anomalyAccuracy.toFixed(1)}%
+                  {/* FIX: show "N/A" when no real confidence data exists */}
+                  {stats.modelPerformance.anomalyAccuracy != null
+                    ? `${stats.modelPerformance.anomalyAccuracy.toFixed(1)}%`
+                    : "N/A"}
                 </p>
                 <p className="text-xs text-blue-600 mt-1">Avg Confidence</p>
               </div>
@@ -358,7 +351,10 @@ const MLStatistics = ({ deviceId }) => {
                   Activity Recognition
                 </p>
                 <p className="text-3xl font-bold text-green-900">
-                  {stats.modelPerformance.activityAccuracy.toFixed(1)}%
+                  {/* FIX: show "N/A" when no real confidence data exists */}
+                  {stats.modelPerformance.activityAccuracy != null
+                    ? `${stats.modelPerformance.activityAccuracy.toFixed(1)}%`
+                    : "N/A"}
                 </p>
                 <p className="text-xs text-green-600 mt-1">Avg Confidence</p>
               </div>
