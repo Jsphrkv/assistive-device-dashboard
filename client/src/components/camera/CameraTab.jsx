@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { RefreshCw } from "lucide-react";
-import { cameraAPI } from "../../services/api";
+// import { cameraAPI } from "../../services/api";
 
 const POLL_INTERVAL = 5000; // 5 seconds
 const TICK_INTERVAL = 1000; // 1 second — keeps "Last: Xs ago" display fresh
