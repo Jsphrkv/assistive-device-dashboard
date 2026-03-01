@@ -255,7 +255,8 @@ const Layout = ({
     localStorage.setItem("theme", next ? "dark" : "light");
   };
 
-  const sidebarWidth = isMobile ? 0 : collapsed ? 80 : 310;
+  // CHANGED: 310→260 expanded, 80→52 collapsed (matches Claude sidebar proportions)
+  const sidebarWidth = isMobile ? 0 : collapsed ? 52 : 260;
 
   const theme = {
     dark,
@@ -292,8 +293,8 @@ const Layout = ({
         />
       </div>
 
-      {/* Body */}
-      <div style={{ display: "flex", paddingTop: 72 }}>
+      {/* Body — CHANGED: paddingTop 72→56 to match new header height */}
+      <div style={{ display: "flex", paddingTop: 56 }}>
         <Navigation
           currentUser={currentUser}
           activeTab={activeTab}
@@ -314,7 +315,7 @@ const Layout = ({
             transition: "margin-left .3s",
             padding: isMobile ? "1rem" : "1.75rem 2rem",
             minWidth: 0,
-            minHeight: "calc(100vh - 64px)",
+            minHeight: "calc(100vh - 56px)",
             boxSizing: "border-box",
             width: "100%",
           }}

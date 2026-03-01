@@ -249,8 +249,6 @@ const S = {
     collapseIcon: "#6b7280",
     menuLabel: "#9ca3af",
     overlay: "rgba(0,0,0,0.35)",
-
-    // Confirmation modal
     modalBg: "#ffffff",
     modalBorder: "#e5e7eb",
     modalShadow: "0 20px 60px rgba(0,0,0,0.18), 0 4px 16px rgba(0,0,0,0.1)",
@@ -284,8 +282,6 @@ const S = {
     collapseIcon: "#78788c",
     menuLabel: "#58586c",
     overlay: "rgba(0,0,0,0.6)",
-
-    // Confirmation modal
     modalBg: "#1e1e2e",
     modalBorder: "#3a3a50",
     modalShadow: "0 20px 60px rgba(0,0,0,0.55), 0 4px 16px rgba(0,0,0,0.4)",
@@ -318,7 +314,6 @@ const LogoutModal = ({ s, onCancel, onConfirm }) => {
   const [cancelHover, setCancelHover] = useState(false);
   const [confirmHover, setConfirmHover] = useState(false);
 
-  // Close on Escape
   useEffect(() => {
     const handler = (e) => {
       if (e.key === "Escape") onCancel();
@@ -328,7 +323,6 @@ const LogoutModal = ({ s, onCancel, onConfirm }) => {
   }, [onCancel]);
 
   return (
-    // Backdrop
     <div
       onClick={onCancel}
       style={{
@@ -344,7 +338,6 @@ const LogoutModal = ({ s, onCancel, onConfirm }) => {
     >
       <style>{`@keyframes fadeIn{from{opacity:0}to{opacity:1}} @keyframes popIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}`}</style>
 
-      {/* Card */}
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
@@ -359,7 +352,6 @@ const LogoutModal = ({ s, onCancel, onConfirm }) => {
           animation: "popIn .18s ease-out",
         }}
       >
-        {/* Icon */}
         <div
           style={{
             width: 48,
@@ -400,7 +392,6 @@ const LogoutModal = ({ s, onCancel, onConfirm }) => {
           lost.
         </p>
 
-        {/* Actions */}
         <div style={{ display: "flex", gap: ".65rem" }}>
           <button
             onClick={onCancel}
@@ -456,7 +447,7 @@ const SidebarPanel = ({
   isAdmin,
   activeTab,
   onTabChange,
-  onLogoutClick, // ← triggers confirm modal, not onLogout directly
+  onLogoutClick,
   currentUser,
   collapsed,
   onToggleCollapse,
@@ -467,7 +458,7 @@ const SidebarPanel = ({
   <div
     style={{
       width,
-      height: "calc(100vh - 64px)",
+      height: "calc(100vh - 56px)",
       background: s.bg,
       borderRight: `1px solid ${s.border}`,
       display: "flex",
@@ -492,13 +483,13 @@ const SidebarPanel = ({
       {(!collapsed || isMobilePanel) && (
         <span
           style={{
-            fontSize: "0.875rem",
+            fontSize: "0.8rem",
             fontWeight: 700,
             letterSpacing: "0.12em",
             color: s.menuLabel,
             textTransform: "uppercase",
             userSelect: "none",
-            paddingLeft: "0.25rem",
+            paddingLeft: "0.75rem",
           }}
         >
           Menu
@@ -704,7 +695,7 @@ const SidebarPanel = ({
         </div>
       )}
 
-      {/* Logout button — now calls onLogoutClick (opens confirm) */}
+      {/* Logout button */}
       <button
         onClick={onLogoutClick}
         title="Logout"
@@ -787,14 +778,12 @@ const Navigation = ({
 
   return (
     <>
-      {/* Confirmation modal — rendered above everything */}
       {showConfirm && (
         <LogoutModal s={s} onCancel={handleCancel} onConfirm={handleConfirm} />
       )}
 
       {isMobile ? (
         <>
-          {/* Mobile backdrop */}
           <div
             onClick={() => setMobileOpen(false)}
             style={{
@@ -807,12 +796,11 @@ const Navigation = ({
               transition: "opacity .28s ease",
             }}
           />
-          {/* Slide-in drawer */}
           <div
             style={{
               position: "fixed",
               left: 0,
-              top: 64,
+              top: 56,
               zIndex: 50,
               transform: mobileOpen ? "translateX(0)" : "translateX(-100%)",
               transition: "transform .28s ease",
@@ -822,12 +810,12 @@ const Navigation = ({
               {...sharedProps}
               isMobilePanel
               onClose={() => setMobileOpen(false)}
-              width={310}
+              width={260}
             />
           </div>
         </>
       ) : (
-        <div style={{ position: "fixed", left: 0, top: 64, zIndex: 40 }}>
+        <div style={{ position: "fixed", left: 0, top: 56, zIndex: 40 }}>
           <SidebarPanel
             {...sharedProps}
             isMobilePanel={false}
