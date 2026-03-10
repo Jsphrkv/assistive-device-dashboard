@@ -7,8 +7,8 @@ import traceback
 # Load environment variables at module level
 SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY')
 MAIL_DEFAULT_SENDER = os.getenv('MAIL_DEFAULT_SENDER', 'verzosaj08@gmail.com')
-MAIL_DISPLAY_NAME = os.getenv('MAIL_DISPLAY_NAME', 'Assistive Device Dashboard')
-FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://assistive-device-dashboard.vercel.app')
+MAIL_DISPLAY_NAME = os.getenv('MAIL_DISPLAY_NAME', 'iAssist Dashboard')
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://iassist-cp2.vercel.app')
 
 def send_verification_email(email, username, token):
     """Send email verification link via SendGrid"""

@@ -30,16 +30,16 @@ class Config:
 
     SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY')
     MAIL_DEFAULT_SENDER = os.getenv('MAIL_DEFAULT_SENDER', 'verzosaj08@gmail.com')
-    MAIL_DISPLAY_NAME = os.getenv('MAIL_DISPLAY_NAME', 'Assistive Device Dashboard')
+    MAIL_DISPLAY_NAME = os.getenv('MAIL_DISPLAY_NAME', 'iAssist Dashboard')
     
     # Frontend URL ✅ NEW
-    FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://assistive-device-dashboard.vercel.app')
+    FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://iassist-cp2.vercel.app')
     
     # Device
     DEVICE_API_KEY = os.getenv('DEVICE_API_KEY', 'device-api-key')
     
     # CORS
-    CORS_ORIGINS = os.getenv('CORS_ORIGINS', 'https://assistive-device-dashboard.vercel.app').split(',')
+    CORS_ORIGINS = os.getenv('CORS_ORIGINS', 'https://iassist-cp2.vercel.app').split(',')
     
     # Upload
     MAX_UPLOAD_SIZE = int(os.getenv('MAX_UPLOAD_SIZE', 10485760))

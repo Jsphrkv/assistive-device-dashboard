@@ -17,6 +17,7 @@ def create_app(config_name=None):
     CORS(app, 
          origins=[
              "https://assistive-device-dashboard.vercel.app",
+             "https://iassist-cp2.vercel.app"
              "http://localhost:3000",
              "http://localhost:5173"
          ],
@@ -68,6 +69,7 @@ def create_app(config_name=None):
         origin = request.headers.get('Origin')
         if origin in [
             "https://assistive-device-dashboard.vercel.app",
+            'https://iassist-cp2.vercel.app'
             "http://localhost:3000",
             "http://localhost:5173"
         ]:
