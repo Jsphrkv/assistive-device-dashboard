@@ -10,16 +10,13 @@ const DangerMonitor = ({
   const [dangerData, setDangerData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // ✅ OPTIMIZED: Use props if provided, otherwise fetch independently
   const usingProps = propDangerData !== undefined;
 
   useEffect(() => {
     if (usingProps) {
-      // Use data passed from parent
       processDangerData(propDangerData);
       setLoading(propLoading || false);
     } else {
-      // Fetch independently (fallback for standalone usage)
       fetchDangerData();
       const interval = setInterval(fetchDangerData, 30000);
       return () => clearInterval(interval);
@@ -40,42 +37,45 @@ const DangerMonitor = ({
     }
 
     const latest = data[0];
+
+    // API /api/ml-history wraps flat DB columns into a `result` object for danger_prediction:
+    // {
+    //   confidence_score: number | null  ← top-level, _normalize_confidence(danger_score/100)
+    //   result: {
+    //     danger_score: number,           ← 0-100
+    //     recommended_action: string,
+    //     time_to_collision: number | null,
+    //     message: string
+    //   }
+    // }
     const result = latest.result || {};
 
-    // confidence_score is at top level
-    const rawConfidence = latest.confidence_score ?? 0;
-    const confidencePct =
-      rawConfidence > 1 ? rawConfidence : rawConfidence * 100;
-
-    // danger_score is already 0–100
-    const dangerScore = result.danger_score ?? 0;
+    // confidence_score is already 0-1 normalized
+    const rawConf = latest.confidence_score ?? 0;
+    const confidencePct = rawConf > 1 ? rawConf : rawConf * 100;
 
     setDangerData({
-      dangerScore,
+      dangerScore: result.danger_score ?? 0,
       recommendedAction: result.recommended_action || "SAFE",
       timeToCollision: result.time_to_collision ?? 999,
       confidence: confidencePct,
       timestamp: latest.timestamp,
+      isEmpty: false,
     });
   };
 
   const fetchDangerData = async () => {
     try {
       setLoading(true);
-
       const response = await mlAPI.getHistory({
         type: "danger_prediction",
         limit: 10,
       });
-
       const predictions = response.data?.data || [];
-
-      // Filter by deviceId
       const filtered =
         deviceId && deviceId !== "device-001"
           ? predictions.filter((p) => p.device_id === deviceId)
           : predictions;
-
       processDangerData(filtered);
     } catch (error) {
       console.error("Error fetching danger data:", error);
@@ -86,9 +86,7 @@ const DangerMonitor = ({
   };
 
   const handleRefresh = () => {
-    if (!usingProps) {
-      fetchDangerData();
-    }
+    if (!usingProps) fetchDangerData();
   };
 
   if (loading && !dangerData) {
@@ -172,7 +170,7 @@ const DangerMonitor = ({
         </div>
       ) : (
         <div className="space-y-4">
-          {/* Danger Score Display */}
+          {/* Danger Score Circle */}
           <div className="text-center">
             <div className="relative inline-flex items-center justify-center w-32 h-32">
               <svg className="transform -rotate-90 w-32 h-32">
@@ -193,12 +191,7 @@ const DangerMonitor = ({
                   strokeWidth="8"
                   fill="transparent"
                   strokeDasharray={`${2 * Math.PI * 56}`}
-                  strokeDashoffset={`${
-                    2 *
-                    Math.PI *
-                    56 *
-                    (1 - Math.min(100, dangerData.dangerScore) / 100)
-                  }`}
+                  strokeDashoffset={`${2 * Math.PI * 56 * (1 - Math.min(100, dangerData.dangerScore) / 100)}`}
                   className={getDangerLevel(dangerData.dangerScore).barColor}
                   strokeLinecap="round"
                 />
@@ -215,10 +208,10 @@ const DangerMonitor = ({
           {/* Danger Level Badge */}
           <div className="text-center">
             <span
-              className={`inline-block px-4 py-2 rounded-full text-sm font-bold border-2 
-                ${getDangerLevel(dangerData.dangerScore).bgColor} 
-                ${getDangerLevel(dangerData.dangerScore).textColor} 
-                ${getDangerLevel(dangerData.dangerScore).borderColor}`}
+              className={`inline-block px-4 py-2 rounded-full text-sm font-bold border-2
+              ${getDangerLevel(dangerData.dangerScore).bgColor}
+              ${getDangerLevel(dangerData.dangerScore).textColor}
+              ${getDangerLevel(dangerData.dangerScore).borderColor}`}
             >
               {getDangerLevel(dangerData.dangerScore).level} DANGER
             </span>
@@ -259,12 +252,11 @@ const DangerMonitor = ({
                 <div
                   className="bg-blue-600 h-2 rounded-full transition-all"
                   style={{ width: `${Math.min(100, dangerData.confidence)}%` }}
-                ></div>
+                />
               </div>
             </div>
           )}
 
-          {/* Last Updated */}
           <div className="pt-2 border-t text-xs text-gray-500 text-center">
             Updated {new Date(dangerData.timestamp).toLocaleTimeString()}
           </div>

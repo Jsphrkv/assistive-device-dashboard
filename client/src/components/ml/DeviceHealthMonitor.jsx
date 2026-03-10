@@ -10,16 +10,13 @@ const DeviceHealthMonitor = ({
   const [healthData, setHealthData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // ✅ OPTIMIZED: Use props if provided, otherwise fetch independently
   const usingProps = propHealthData !== undefined;
 
   useEffect(() => {
     if (usingProps) {
-      // Use data passed from parent
       processHealthData(propHealthData);
       setLoading(propLoading || false);
     } else {
-      // Fetch independently (fallback for standalone usage)
       fetchHealthData();
       const interval = setInterval(fetchHealthData, 30000);
       return () => clearInterval(interval);
@@ -34,14 +31,35 @@ const DeviceHealthMonitor = ({
 
     const latest = data[0];
 
-    // ✅ FIXED: Correct field paths from backend
-    // Backend: { is_anomaly, anomaly_severity, confidence_score, result: { score, severity, device_health_score, message } }
+    // API /api/ml-history wraps flat DB columns into a `result` object for anomaly type:
+    // {
+    //   is_anomaly: bool                 ← top-level
+    //   confidence_score: number | null  ← top-level, 0-1 normalized
+    //   result: {
+    //     score: number,           ← _normalize_confidence(anomaly_score), i.e. 0-1
+    //     severity: string,        ← anomaly_severity
+    //     device_health_score: number,
+    //     message: string
+    //   }
+    // }
+    const result = latest.result || {};
+
+    // anomaly_score from result.score is already 0-1; multiply for %
+    const rawScore = result.score ?? 0;
+    const anomalyScorePct = rawScore > 1 ? rawScore : rawScore * 100;
+
+    const deviceHealthScore = result.device_health_score ?? 100;
+    const severity = result.severity || "low";
+    const isAnomaly = latest.is_anomaly ?? false;
+
     setHealthData({
-      isAnomaly: latest.is_anomaly || false,
-      anomalyScore: (latest.result?.score || latest.anomaly_score || 0) * 100, // ✅ result.score (not anomaly_score)
-      severity: latest.result?.severity || latest.anomaly_severity || "low",
-      deviceHealthScore: latest.result?.device_health_score || 100,
-      message: latest.result?.message || "Device operating normally",
+      isAnomaly,
+      anomalyScore: anomalyScorePct,
+      severity,
+      deviceHealthScore,
+      message:
+        result.message ||
+        (isAnomaly ? "Anomaly detected" : "Device operating normally"),
       timestamp: latest.timestamp,
     });
   };
@@ -49,20 +67,12 @@ const DeviceHealthMonitor = ({
   const fetchHealthData = async () => {
     try {
       setLoading(true);
-
-      const response = await mlAPI.getHistory({
-        type: "anomaly",
-        limit: 10,
-      });
-
+      const response = await mlAPI.getHistory({ type: "anomaly", limit: 10 });
       const predictions = response.data?.data || [];
-
-      // Filter by deviceId
       const filtered =
         deviceId && deviceId !== "device-001"
           ? predictions.filter((p) => p.device_id === deviceId)
           : predictions;
-
       processHealthData(filtered);
     } catch (error) {
       console.error("Error fetching health data:", error);
@@ -73,9 +83,7 @@ const DeviceHealthMonitor = ({
   };
 
   const handleRefresh = () => {
-    if (!usingProps) {
-      fetchHealthData();
-    }
+    if (!usingProps) fetchHealthData();
   };
 
   if (loading && !healthData) {
@@ -95,6 +103,7 @@ const DeviceHealthMonitor = ({
       icon: "⚠️",
     },
     high: { color: "bg-red-100 text-red-700 border-red-300", icon: "🚨" },
+    critical: { color: "bg-red-100 text-red-700 border-red-300", icon: "🚨" },
   };
 
   const getHealthStatus = (score) => {
@@ -102,6 +111,13 @@ const DeviceHealthMonitor = ({
     if (score >= 70) return { label: "Good", color: "text-blue-600" };
     if (score >= 50) return { label: "Fair", color: "text-yellow-600" };
     return { label: "Poor", color: "text-red-600" };
+  };
+
+  const getHealthBarColor = (score) => {
+    if (score >= 90) return "text-green-600";
+    if (score >= 70) return "text-blue-600";
+    if (score >= 50) return "text-yellow-600";
+    return "text-red-600";
   };
 
   return (
@@ -154,15 +170,7 @@ const DeviceHealthMonitor = ({
                   fill="transparent"
                   strokeDasharray={`${2 * Math.PI * 56}`}
                   strokeDashoffset={`${2 * Math.PI * 56 * (1 - healthData.deviceHealthScore / 100)}`}
-                  className={`${
-                    healthData.deviceHealthScore >= 90
-                      ? "text-green-600"
-                      : healthData.deviceHealthScore >= 70
-                        ? "text-blue-600"
-                        : healthData.deviceHealthScore >= 50
-                          ? "text-yellow-600"
-                          : "text-red-600"
-                  }`}
+                  className={getHealthBarColor(healthData.deviceHealthScore)}
                   strokeLinecap="round"
                 />
               </svg>
@@ -195,17 +203,13 @@ const DeviceHealthMonitor = ({
                 {healthData.isAnomaly ? "⚠️" : "✓"}
               </span>
               <h4
-                className={`font-semibold ${
-                  healthData.isAnomaly ? "text-red-900" : "text-green-900"
-                }`}
+                className={`font-semibold ${healthData.isAnomaly ? "text-red-900" : "text-green-900"}`}
               >
                 {healthData.isAnomaly ? "Anomaly Detected" : "Normal Operation"}
               </h4>
             </div>
             <p
-              className={`text-sm ${
-                healthData.isAnomaly ? "text-red-700" : "text-green-700"
-              }`}
+              className={`text-sm ${healthData.isAnomaly ? "text-red-700" : "text-green-700"}`}
             >
               {healthData.message}
             </p>
@@ -215,7 +219,10 @@ const DeviceHealthMonitor = ({
           <div className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
             <span className="text-sm text-gray-600">Severity Level</span>
             <span
-              className={`px-3 py-1 rounded-full text-xs font-semibold border ${severityConfig[healthData.severity]?.color || "bg-gray-100 text-gray-700 border-gray-300"}`}
+              className={`px-3 py-1 rounded-full text-xs font-semibold border ${
+                severityConfig[healthData.severity]?.color ||
+                severityConfig.low.color
+              }`}
             >
               {severityConfig[healthData.severity]?.icon}{" "}
               {healthData.severity.toUpperCase()}
@@ -237,12 +244,11 @@ const DeviceHealthMonitor = ({
                   style={{
                     width: `${Math.min(100, healthData.anomalyScore)}%`,
                   }}
-                ></div>
+                />
               </div>
             </div>
           )}
 
-          {/* Last Updated */}
           <div className="pt-2 border-t text-xs text-gray-500 text-center">
             Updated {new Date(healthData.timestamp).toLocaleTimeString()}
           </div>

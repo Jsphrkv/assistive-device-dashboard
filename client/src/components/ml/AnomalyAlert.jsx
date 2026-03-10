@@ -11,16 +11,13 @@ const AnomalyAlert = ({
   const [recentAnomalies, setRecentAnomalies] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // ✅ OPTIMIZED: Use props if provided, otherwise fetch independently
   const usingProps = propAnomaliesData !== undefined;
 
   useEffect(() => {
     if (usingProps) {
-      // Use data passed from parent
       processAnomalyData(propAnomaliesData);
       setLoading(propLoading || false);
     } else {
-      // Fetch independently (fallback for standalone usage)
       fetchAnomalyData();
       const interval = setInterval(fetchAnomalyData, 30000);
       return () => clearInterval(interval);
@@ -28,21 +25,39 @@ const AnomalyAlert = ({
   }, [deviceId, propAnomaliesData, propLoading, usingProps]);
 
   const processAnomalyData = (anomalies) => {
-    setRecentAnomalies(anomalies);
+    // /api/ml-history/anomalies returns flat items (different shape from /api/ml-history):
+    // {
+    //   id, device_id, type, severity, message,
+    //   score: number | null    ← already 0-1 normalized by backend
+    //   timestamp, source
+    // }
+    // Note: no nested `result` object — anomalies endpoint is flat by design.
 
-    if (anomalies.length > 0) {
-      const latest = anomalies[0];
+    const normalised = (anomalies || []).map((item) => {
+      const rawScore = item.score ?? 0;
+      const scorePct = rawScore > 1 ? rawScore : rawScore * 100;
+      return {
+        id: item.id,
+        isAnomaly: true,
+        severity: item.severity || "low",
+        score: scorePct,
+        message: item.message || "Anomaly detected",
+        type: item.type || "anomaly",
+        timestamp: item.timestamp,
+      };
+    });
 
-      const rawScore = latest.score || 0;
-      const scorePercent = rawScore > 1 ? rawScore : rawScore * 100;
+    setRecentAnomalies(normalised);
 
+    if (normalised.length > 0) {
+      const latest = normalised[0];
       setAnomalyData({
         isAnomaly: true,
-        severity: latest.severity || "medium",
-        message: latest.message || "Anomaly detected",
-        score: scorePercent,
+        severity: latest.severity,
+        message: latest.message,
+        score: latest.score,
         timestamp: latest.timestamp,
-        type: latest.type || "anomaly",
+        type: latest.type,
       });
     } else {
       setAnomalyData({
@@ -59,16 +74,12 @@ const AnomalyAlert = ({
   const fetchAnomalyData = async () => {
     try {
       setLoading(true);
-
       const response = await mlAPI.getAnomalies(10);
       const allAnomalies = response.data?.data || [];
-
-      // Filter to current device
       const anomalies =
         deviceId && deviceId !== "device-001"
           ? allAnomalies.filter((a) => a.device_id === deviceId)
           : allAnomalies;
-
       processAnomalyData(anomalies);
     } catch (error) {
       console.error("Error fetching anomaly data:", error);
@@ -86,9 +97,7 @@ const AnomalyAlert = ({
   };
 
   const handleRefresh = () => {
-    if (!usingProps) {
-      fetchAnomalyData();
-    }
+    if (!usingProps) fetchAnomalyData();
   };
 
   if (loading && !anomalyData) {
@@ -103,9 +112,9 @@ const AnomalyAlert = ({
 
   const severityColors = {
     high: "bg-red-100 text-red-700 border-red-300",
+    critical: "bg-red-100 text-red-700 border-red-300",
     medium: "bg-yellow-100 text-yellow-700 border-yellow-300",
     low: "bg-green-100 text-green-700 border-green-300",
-    critical: "bg-red-100 text-red-700 border-red-300",
   };
 
   return (
@@ -148,16 +157,12 @@ const AnomalyAlert = ({
               )}
               <div>
                 <h4
-                  className={`font-semibold ${
-                    anomalyData.isAnomaly ? "text-red-900" : "text-green-900"
-                  }`}
+                  className={`font-semibold ${anomalyData.isAnomaly ? "text-red-900" : "text-green-900"}`}
                 >
                   {anomalyData.isAnomaly ? "Anomaly Detected" : "No Anomalies"}
                 </h4>
                 <p
-                  className={`text-sm mt-1 ${
-                    anomalyData.isAnomaly ? "text-red-700" : "text-green-700"
-                  }`}
+                  className={`text-sm mt-1 ${anomalyData.isAnomaly ? "text-red-700" : "text-green-700"}`}
                 >
                   {anomalyData.message}
                 </p>
@@ -178,14 +183,14 @@ const AnomalyAlert = ({
           </div>
 
           {/* Anomaly Score */}
-          {anomalyData.isAnomaly && (
+          {anomalyData.isAnomaly && anomalyData.score > 0 && (
             <div>
               <p className="text-sm text-gray-600 mb-2">Anomaly Score</p>
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
                   className="bg-red-600 h-2 rounded-full transition-all"
                   style={{ width: `${Math.min(100, anomalyData.score)}%` }}
-                ></div>
+                />
               </div>
               <p className="text-sm text-gray-600 mt-1">
                 {anomalyData.score.toFixed(1)}%
@@ -200,7 +205,7 @@ const AnomalyAlert = ({
               <div className="space-y-2">
                 {recentAnomalies.slice(0, 3).map((anomaly, index) => (
                   <div
-                    key={index}
+                    key={anomaly.id || index}
                     className="flex items-center justify-between text-xs p-2 bg-gray-50 rounded"
                   >
                     <div>
@@ -216,7 +221,7 @@ const AnomalyAlert = ({
                         severityColors[anomaly.severity] || severityColors.low
                       }`}
                     >
-                      {anomaly.severity || "low"}
+                      {anomaly.severity}
                     </span>
                   </div>
                 ))}

@@ -10,16 +10,13 @@ const EnvironmentMonitor = ({
   const [environmentData, setEnvironmentData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // ✅ OPTIMIZED: Use props if provided, otherwise fetch independently
   const usingProps = propEnvironmentData !== undefined;
 
   useEffect(() => {
     if (usingProps) {
-      // Use data passed from parent
       processEnvironmentData(propEnvironmentData);
       setLoading(propLoading || false);
     } else {
-      // Fetch independently (fallback for standalone usage)
       fetchEnvironmentData();
       const interval = setInterval(fetchEnvironmentData, 30000);
       return () => clearInterval(interval);
@@ -34,17 +31,24 @@ const EnvironmentMonitor = ({
 
     const latest = data[0];
 
-    // ✅ FIXED: confidence_score is at top level, not in result
-    // Backend: { confidence_score, result: { environment_type, lighting_condition, complexity_level, message } }
-    const rawConfidence = latest.confidence_score || 0;
-    const confidencePct =
-      rawConfidence > 1 ? rawConfidence : rawConfidence * 100;
+    // API /api/ml-history wraps flat DB columns into a `result` object:
+    // {
+    //   confidence_score: number | null   ← top-level, 0-1 normalized by backend
+    //   result: {
+    //     environment_type, lighting_condition, complexity_level, message
+    //   }
+    // }
+    const result = latest.result || {};
+
+    // confidence_score is already 0-1 from _normalize_confidence() in backend
+    const rawConf = latest.confidence_score ?? 0;
+    const confidencePct = rawConf > 1 ? rawConf : rawConf * 100;
 
     setEnvironmentData({
-      environmentType: latest.result?.environment_type || "unknown",
-      lightingCondition: latest.result?.lighting_condition || "unknown",
-      complexityLevel: latest.result?.complexity_level || "unknown",
-      confidence: confidencePct, // ✅ From top level, not result
+      environmentType: result.environment_type || "unknown",
+      lightingCondition: result.lighting_condition || "unknown",
+      complexityLevel: result.complexity_level || "unknown",
+      confidence: confidencePct,
       timestamp: latest.timestamp,
     });
   };
@@ -52,20 +56,15 @@ const EnvironmentMonitor = ({
   const fetchEnvironmentData = async () => {
     try {
       setLoading(true);
-
       const response = await mlAPI.getHistory({
         type: "environment_classification",
         limit: 10,
       });
-
       const predictions = response.data?.data || [];
-
-      // Filter by deviceId
       const filtered =
         deviceId && deviceId !== "device-001"
           ? predictions.filter((p) => p.device_id === deviceId)
           : predictions;
-
       processEnvironmentData(filtered);
     } catch (error) {
       console.error("Error fetching environment data:", error);
@@ -76,9 +75,7 @@ const EnvironmentMonitor = ({
   };
 
   const handleRefresh = () => {
-    if (!usingProps) {
-      fetchEnvironmentData();
-    }
+    if (!usingProps) fetchEnvironmentData();
   };
 
   if (loading && !environmentData) {
@@ -119,14 +116,12 @@ const EnvironmentMonitor = ({
       label: "Unknown",
     },
   };
-
   const lightingConfig = {
     bright: { icon: "☀️", color: "text-yellow-600" },
     dim: { icon: "🌥️", color: "text-gray-600" },
     dark: { icon: "🌙", color: "text-indigo-600" },
     unknown: { icon: "💡", color: "text-gray-400" },
   };
-
   const complexityConfig = {
     simple: {
       color: "bg-green-100 text-green-700 border-green-300",
@@ -145,6 +140,16 @@ const EnvironmentMonitor = ({
       label: "Unknown",
     },
   };
+
+  const envCfg =
+    environmentConfig[environmentData?.environmentType] ||
+    environmentConfig.unknown;
+  const lightCfg =
+    lightingConfig[environmentData?.lightingCondition] ||
+    lightingConfig.unknown;
+  const cmpxCfg =
+    complexityConfig[environmentData?.complexityLevel] ||
+    complexityConfig.unknown;
 
   return (
     <div className="bg-white rounded-lg shadow p-6">
@@ -174,56 +179,41 @@ const EnvironmentMonitor = ({
         </div>
       ) : (
         <div className="space-y-4">
-          {/* Environment Type */}
           <div className="text-center">
-            <div className="text-6xl mb-2">
-              {environmentConfig[environmentData.environmentType]?.icon || "❓"}
-            </div>
+            <div className="text-6xl mb-2">{envCfg.icon}</div>
             <div
-              className={`inline-block px-4 py-2 rounded-full font-semibold ${environmentConfig[environmentData.environmentType]?.color || "bg-gray-100 text-gray-700"}`}
+              className={`inline-block px-4 py-2 rounded-full font-semibold ${envCfg.color}`}
             >
-              {environmentConfig[environmentData.environmentType]?.label ||
-                "Unknown"}
+              {envCfg.label}
             </div>
           </div>
 
-          {/* Lighting & Complexity Grid */}
           <div className="grid grid-cols-2 gap-4">
-            {/* Lighting */}
             <div className="bg-gray-50 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Sun className="w-4 h-4 text-gray-600" />
                 <p className="text-xs text-gray-600 font-medium">Lighting</p>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-2xl">
-                  {lightingConfig[environmentData.lightingCondition]?.icon ||
-                    "💡"}
-                </span>
-                <span
-                  className={`font-semibold capitalize ${lightingConfig[environmentData.lightingCondition]?.color || "text-gray-600"}`}
-                >
+                <span className="text-2xl">{lightCfg.icon}</span>
+                <span className={`font-semibold capitalize ${lightCfg.color}`}>
                   {environmentData.lightingCondition}
                 </span>
               </div>
             </div>
-
-            {/* Complexity */}
             <div className="bg-gray-50 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Layers className="w-4 h-4 text-gray-600" />
                 <p className="text-xs text-gray-600 font-medium">Complexity</p>
               </div>
               <div
-                className={`px-3 py-1 rounded-lg border font-semibold text-sm ${complexityConfig[environmentData.complexityLevel]?.color || "bg-gray-100 text-gray-700 border-gray-300"}`}
+                className={`px-3 py-1 rounded-lg border font-semibold text-sm ${cmpxCfg.color}`}
               >
-                {complexityConfig[environmentData.complexityLevel]?.label ||
-                  "Unknown"}
+                {cmpxCfg.label}
               </div>
             </div>
           </div>
 
-          {/* Recommendations */}
           <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
             <p className="text-xs text-blue-600 font-medium mb-2">
               💡 Recommendations
@@ -244,28 +234,37 @@ const EnvironmentMonitor = ({
               {environmentData.environmentType === "open_space" && (
                 <li>• Open area - safe for normal navigation</li>
               )}
+              {environmentData.environmentType !== "crowded" &&
+                environmentData.environmentType !== "narrow_corridor" &&
+                environmentData.environmentType !== "open_space" &&
+                environmentData.lightingCondition !== "dark" &&
+                environmentData.complexityLevel !== "complex" && (
+                  <li>• Conditions are normal — proceed as usual</li>
+                )}
             </ul>
           </div>
 
-          {/* Confidence Bar */}
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <p className="text-xs text-gray-600">Classification Confidence</p>
-              <p className="text-xs text-gray-600">
-                {environmentData.confidence.toFixed(0)}%
-              </p>
+          {environmentData.confidence > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs text-gray-600">
+                  Classification Confidence
+                </p>
+                <p className="text-xs text-gray-600">
+                  {environmentData.confidence.toFixed(0)}%
+                </p>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div
+                  className="bg-purple-600 h-2 rounded-full transition-all"
+                  style={{
+                    width: `${Math.min(100, environmentData.confidence)}%`,
+                  }}
+                />
+              </div>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div
-                className="bg-purple-600 h-2 rounded-full transition-all"
-                style={{
-                  width: `${Math.min(100, environmentData.confidence)}%`,
-                }}
-              ></div>
-            </div>
-          </div>
+          )}
 
-          {/* Last Updated */}
           <div className="pt-2 border-t text-xs text-gray-500 text-center">
             Updated {new Date(environmentData.timestamp).toLocaleTimeString()}
           </div>
