@@ -7,7 +7,7 @@ export const config = {
         : "https://assistive-device-dashboard.onrender.com/api"),
   },
   app: {
-    name: import.meta.env.VITE_APP_NAME || "Assistive Device Dashboard",
+    name: import.meta.env.VITE_APP_NAME || "iAssist Dashboard",
     version: import.meta.env.VITE_APP_VERSION || "1.0.0",
   },
   camera: {
