@@ -615,7 +615,7 @@ const LoginForm = ({ onLogin, onShowRegister, onShowForgotPassword }) => {
             <span
               style={{ fontWeight: 700, fontSize: ".95rem", color: "#fff" }}
             >
-              Assistive Device
+              iAssist
             </span>
           </div>
           <button
@@ -670,7 +670,7 @@ const LoginForm = ({ onLogin, onShowRegister, onShowForgotPassword }) => {
               margin: 0,
             }}
           >
-            Assistive Device Dashboard · Wearable Computer Vision System
+            iAssist · Wearable Computer Vision System
           </p>
         </div>
       </div>
@@ -729,7 +729,7 @@ const LoginForm = ({ onLogin, onShowRegister, onShowForgotPassword }) => {
                   color: dark ? "#f9fafb" : "#111827",
                 }}
               >
-                Assistive Device
+                iAssist
               </span>
             </div>
             <button
@@ -782,7 +782,7 @@ const LoginForm = ({ onLogin, onShowRegister, onShowForgotPassword }) => {
                 margin: 0,
               }}
             >
-              Assistive Device Dashboard · Wearable Computer Vision System
+              iAssist · Wearable Computer Vision System
             </p>
           </div>
         </div>

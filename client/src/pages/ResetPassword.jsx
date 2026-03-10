@@ -696,7 +696,7 @@ const ResetPassword = ({ onShowLogin }) => {
             color: mobile ? "#fff" : dark ? "#f9fafb" : "#111827",
           }}
         >
-          Assistive Device
+          iAssist
         </span>
       </div>
       <button
@@ -788,7 +788,7 @@ const ResetPassword = ({ onShowLogin }) => {
               margin: 0,
             }}
           >
-            Assistive Device Dashboard · Wearable Computer Vision System
+            iAssist · Wearable Computer Vision System
           </p>
         </div>
       </div>
@@ -840,7 +840,7 @@ const ResetPassword = ({ onShowLogin }) => {
                 margin: 0,
               }}
             >
-              Assistive Device Dashboard · Wearable Computer Vision System
+              iAssist · Wearable Computer Vision System
             </p>
           </div>
         </div>

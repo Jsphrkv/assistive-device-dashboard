@@ -69,7 +69,7 @@ const Header = ({ theme, onToggleDark, isMobile, onOpenMobileMenu }) => {
               whiteSpace: "nowrap",
             }}
           >
-            Assistive Device Dashboard
+            iAssist
           </h1>
           {!isMobile && (
             <p style={{ fontSize: "0.7rem", color: headerSub, margin: 0 }}>
