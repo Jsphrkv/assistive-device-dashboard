@@ -308,15 +308,13 @@ def log_detection():
         parsed_confidence = to_float(raw_confidence) 
 
         obj_info    = get_detection_info(object_detected)
-        danger_level = (
+        danger_level = field('danger_level', 'dangerLevel') or (
             get_danger_level_from_object(object_detected, parsed_distance)
-            if parsed_distance else
-            field('danger_level', 'dangerLevel', default='Low')
+            if parsed_distance else 'Low'
         )
-        alert_type = (
+        alert_type = field('alert_type', 'alertType') or (
             get_alert_type_from_object(object_detected, parsed_distance)
-            if parsed_distance else
-            field('alert_type', 'alertType', default='Audio')
+            if parsed_distance else 'Audio'
         )
 
         # ── Image upload ──────────────────────────────────────────────────────
