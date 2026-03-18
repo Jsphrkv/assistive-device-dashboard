@@ -490,9 +490,11 @@ const DetectionLogsTab = () => {
             className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="all">All Danger Levels</option>
+            <option value="critical">Critical</option>
             <option value="high">High</option>
             <option value="medium">Medium</option>
             <option value="low">Low</option>
+            <option value="none">None</option>
           </select>
           <select
             value={dateRange}
