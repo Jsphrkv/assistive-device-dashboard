@@ -335,9 +335,9 @@ def log_detection():
         detection_log = {
             'user_id':          str(user_id),
             'device_id':        str(device_id),
-            'obstacle_type':    str(field('obstacle_type', 'obstacleType', default=object_detected) or obj_info.get('description') or 'unknown')[:255],
+            'obstacle_type': str(object_detected)[:255],
             'object_detected':  str(object_detected)[:255],
-            'object_category':  str(obj_info.get('category') or 'unknown')[:255],
+            'object_category': str(field('object_category', 'objectCategory') or obj_info.get('category') or 'navigation')[:255],
             'danger_level':     str(danger_level or 'Low')[:255],
             'alert_type':       str(alert_type or 'Audio')[:255],
             'detection_source': str(detection_source or 'ultrasonic')[:255],
