@@ -3,33 +3,31 @@ from flask import request, jsonify
 from app.utils.jwt_handler import decode_token
 
 def token_required(f):
-    """Decorator to require valid JWT token"""
     @wraps(f)
     def decorated(*args, **kwargs):
+
+        # ── Let CORS preflight through without auth check ──────────────────
+        if request.method == 'OPTIONS':
+            return jsonify({}), 200
+
         token = None
-        
-        # Get token from header
         if 'Authorization' in request.headers:
             auth_header = request.headers['Authorization']
             try:
-                token = auth_header.split(' ')[1]  # Bearer <token>
+                token = auth_header.split(' ')[1]
             except IndexError:
                 return jsonify({'error': 'Invalid token format'}), 401
-        
+
         if not token:
             return jsonify({'error': 'Token is missing'}), 401
-        
-        # Decode token
+
         payload = decode_token(token)
-        
         if not payload:
             return jsonify({'error': 'Token is invalid or expired'}), 401
-        
-        # Add user info to request context
+
         request.current_user = payload
-        
         return f(*args, **kwargs)
-    
+
     return decorated
 
 def device_token_required(f):
@@ -160,6 +158,9 @@ def check_permission(resource, action):
     def decorator(f):
         @wraps(f)
         def decorated(*args, **kwargs):
+            if request.method == 'OPTIONS':
+                return jsonify({}), 200
+
             if not hasattr(request, 'current_user'):
                 return jsonify({'error': 'Authentication required'}), 401
             
