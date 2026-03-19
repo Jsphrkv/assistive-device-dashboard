@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from app.services.supabase_client import get_supabase
 from app.middleware.auth import token_required
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 from app.utils.timezone_helper import now_ph, now_ph_iso, PH_TIMEZONE, utc_to_ph
 
@@ -43,6 +43,38 @@ def _normalize_confidence(v):
     if v > 1:
         v = v / 100
     return v
+
+
+def _to_ph_iso(ts_str):
+    """
+    FIX: Convert a UTC ISO timestamp string (from Supabase ml_predictions)
+    to Philippine Time (UTC+8) ISO string.
+
+    Supabase stores ml_predictions.created_at in UTC by default, while
+    detection_logs.detected_at is already stored in PH time via now_ph_iso().
+    This mismatch caused anomaly timestamps to appear ~8 hours behind
+    detection timestamps on the dashboard.
+
+    Returns the original string unchanged on any parse failure so the UI
+    still gets a value rather than crashing.
+    """
+    if not ts_str:
+        return ts_str
+    try:
+        # Normalize to a timezone-aware UTC datetime
+        s = ts_str.strip()
+        if s.endswith('Z'):
+            s = s[:-1] + '+00:00'
+        elif '+' not in s and len(s) == 19:
+            # No timezone info — assume UTC
+            s = s + '+00:00'
+        dt_utc = datetime.fromisoformat(s)
+        if dt_utc.tzinfo is None:
+            dt_utc = dt_utc.replace(tzinfo=timezone.utc)
+        return utc_to_ph(dt_utc).isoformat()
+    except Exception as e:
+        print(f"[ml_history] _to_ph_iso failed for '{ts_str}': {e}")
+        return ts_str  # safe fallback — never crash on timestamp conversion
 
 
 # ── GET /api/ml-history ───────────────────────────────────────────────────────
@@ -99,8 +131,6 @@ def get_ml_history():
                     score       = _safe_float(item.get('anomaly_score'))
                     is_anomaly  = item.get('is_anomaly', False)
 
-                    # FIX: message now reflects actual is_anomaly state
-                    # Previously always said "anomaly detected" even when is_anomaly=False
                     message = (
                         f"Device anomaly detected (health: {health:.1f}%)"
                         if is_anomaly
@@ -156,7 +186,9 @@ def get_ml_history():
                     'prediction_type':  pt,
                     'is_anomaly':       item.get('is_anomaly', False),
                     'confidence_score': confidence,
-                    'timestamp':        item['created_at'],
+                    # FIX: ml_predictions.created_at is stored UTC by Supabase.
+                    # Convert to PH time so timestamps align with detection_logs.
+                    'timestamp':        _to_ph_iso(item['created_at']),
                     'result':           result,
                     'source':           'ml_prediction',
                 })
@@ -180,6 +212,7 @@ def get_ml_history():
                     'prediction_type':  'detection',
                     'is_anomaly':       item['danger_level'] == 'High',
                     'confidence_score': _normalize_confidence(item.get('detection_confidence')),
+                    # detection_logs.detected_at is already PH time — no conversion needed
                     'timestamp':        item['detected_at'],
                     'result': {
                         'obstacle_type': item['obstacle_type'],
@@ -251,10 +284,6 @@ def get_anomalies():
 
         combined = []
 
-        # ── ml_predictions anomalies ONLY ─────────────────────────────────────
-        # FIX: removed detection_logs block — obstacle detections are NOT
-        # device anomalies and were polluting the anomaly detection widget
-        # with messages like "Obstacle_close detected at 8.4cm"
         q = supabase.table('ml_predictions')\
             .select('*, user_devices(device_name)')\
             .eq('is_anomaly', True)\
@@ -272,7 +301,6 @@ def get_anomalies():
                 health   = _safe_float(item.get('device_health_score'), 0)
                 score    = _normalize_confidence(item.get('anomaly_score'))
                 severity = item.get('anomaly_severity', 'medium')
-                # FIX: message now correctly reflects is_anomaly=True state
                 message  = f"Device anomaly detected (health: {health:.1f}%)"
 
             elif pt == 'danger_prediction':
@@ -298,7 +326,8 @@ def get_anomalies():
                 'severity':    severity,
                 'message':     message,
                 'score':       score,
-                'timestamp':   item['created_at'],
+                # FIX: Convert UTC created_at to PH time for correct display
+                'timestamp':   _to_ph_iso(item['created_at']),
                 'source':      'ml_prediction',
             })
 
@@ -484,8 +513,11 @@ def get_daily_summary():
         daily_conf = defaultdict(list)
 
         for row in ml_rows:
-            day = row['created_at'][:10]
-            pt  = row.get('prediction_type', '')
+            # FIX: Convert UTC created_at to PH time before extracting the date,
+            # so daily buckets align with PH calendar days not UTC days.
+            ph_ts = _to_ph_iso(row['created_at'])
+            day   = ph_ts[:10]
+            pt    = row.get('prediction_type', '')
             daily[day][pt]         += 1
             daily[day]['ml_total'] += 1
             if row.get('is_anomaly'):
@@ -505,6 +537,7 @@ def get_daily_summary():
                 if v: daily_conf[day].append(v)
 
         for row in det_rows:
+            # detection_logs.detected_at is already PH time
             day = row['detected_at'][:10]
             daily[day]['det_total'] += 1
             if row.get('danger_level') == 'High':
