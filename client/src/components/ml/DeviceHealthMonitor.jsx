@@ -1,262 +1,245 @@
-import React, { useState, useEffect } from "react";
-import { Heart, Activity, RefreshCw } from "lucide-react";
+import React, { useState, useEffect, useCallback } from "react";
+import { Activity, RefreshCw, Wifi, Clock, Shield } from "lucide-react";
 import { mlAPI } from "../../services/api";
+
+// ── helpers ──────────────────────────────────────────────────────────────────
+
+const getHealthColor = (score) => {
+  if (score >= 80)
+    return {
+      text: "text-green-600",
+      bg: "bg-green-600",
+      ring: "text-green-600",
+    };
+  if (score >= 60)
+    return { text: "text-blue-600", bg: "bg-blue-600", ring: "text-blue-600" };
+  if (score >= 40)
+    return {
+      text: "text-yellow-600",
+      bg: "bg-yellow-600",
+      ring: "text-yellow-600",
+    };
+  return { text: "text-red-600", bg: "bg-red-600", ring: "text-red-600" };
+};
+
+const getStatusBadge = (color) => {
+  const map = {
+    green: "bg-green-100  text-green-800  border-green-300",
+    yellow: "bg-yellow-100 text-yellow-800 border-yellow-300",
+    orange: "bg-orange-100 text-orange-800 border-orange-300",
+    red: "bg-red-100    text-red-800    border-red-300",
+  };
+  return map[color] || map.green;
+};
+
+const formatLastSeen = (ts) => {
+  if (!ts) return "Unknown";
+  try {
+    const d = new Date(ts);
+    const diff = Math.floor((Date.now() - d.getTime()) / 1000);
+    if (diff < 60) return `${diff}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    return d.toLocaleTimeString("en-PH", { timeZone: "Asia/Manila" });
+  } catch {
+    return "Unknown";
+  }
+};
+
+// ── component ─────────────────────────────────────────────────────────────────
 
 const DeviceHealthMonitor = ({
   deviceId,
-  healthData: propHealthData,
+  healthData: _ignored,
   loading: propLoading,
 }) => {
-  const [healthData, setHealthData] = useState(null);
+  // NOTE: propHealthData (anomaly-based) is intentionally ignored.
+  // This component now fetches detection-pattern health from /device-health.
+  // The powerbank-based battery health was always 0% / "Poor" on the Pi
+  // because powerbank battery level is unreadable via software.
+
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const usingProps = propHealthData !== undefined;
-
-  useEffect(() => {
-    if (usingProps) {
-      processHealthData(propHealthData);
-      setLoading(propLoading || false);
-    } else {
-      fetchHealthData();
-      const interval = setInterval(fetchHealthData, 30000);
-      return () => clearInterval(interval);
-    }
-  }, [deviceId, propHealthData, propLoading, usingProps]);
-
-  const processHealthData = (data) => {
-    if (!data || data.length === 0) {
-      setHealthData(null);
-      return;
-    }
-
-    const latest = data[0];
-    const result = latest.result || {};
-
-    const rawScore = result.score ?? 0;
-    const anomalyScorePct = rawScore > 1 ? rawScore : rawScore * 100;
-
-    const deviceHealthScore = result.device_health_score ?? 100;
-    const severity = result.severity || "low";
-
-    // FIX: The anomaly model sometimes returns is_anomaly=False but
-    // device_health_score=0 and severity='critical' — contradictory.
-    // Derive isAnomaly from health score as a fallback so the widget
-    // shows a consistent state instead of "Normal Operation" with score=0.
-    const isAnomalyFromModel = latest.is_anomaly ?? false;
-    const isAnomaly = isAnomalyFromModel || deviceHealthScore < 30;
-
-    // FIX: Use message from result if available, otherwise derive from state
-    const message =
-      result.message &&
-      result.message !== `Device anomaly detected (health: 0.0%)`
-        ? result.message
-        : isAnomaly
-          ? `Device health is low (${deviceHealthScore.toFixed(0)}%)`
-          : "Device operating normally";
-
-    setHealthData({
-      isAnomaly,
-      anomalyScore: anomalyScorePct,
-      severity,
-      deviceHealthScore,
-      message,
-      timestamp: latest.timestamp,
-    });
-  };
-
-  const fetchHealthData = async () => {
+  const fetchHealth = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
-      setLoading(true);
-      const response = await mlAPI.getHistory({ type: "anomaly", limit: 10 });
-      const predictions = response.data?.data || [];
-      const filtered =
-        deviceId && deviceId !== "device-001"
-          ? predictions.filter((p) => p.device_id === deviceId)
-          : predictions;
-      processHealthData(filtered);
-    } catch (error) {
-      console.error("Error fetching health data:", error);
-      setHealthData(null);
+      const res = await mlAPI.getDeviceHealth(); // GET /api/ml-history/device-health
+      setData(res.data);
+    } catch (err) {
+      console.error("DeviceHealthMonitor fetch error:", err);
+      setError("Could not load device health");
     } finally {
       setLoading(false);
     }
-  };
+  }, [deviceId]);
 
-  const handleRefresh = () => {
-    if (!usingProps) fetchHealthData();
-  };
+  useEffect(() => {
+    fetchHealth();
+    const id = setInterval(fetchHealth, 30000);
+    return () => clearInterval(id);
+  }, [fetchHealth]);
 
-  if (loading && !healthData) {
+  // ── loading ────────────────────────────────────────────────────────────────
+  if (loading && !data) {
     return (
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex items-center justify-center h-40">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600" />
         </div>
       </div>
     );
   }
 
-  const severityConfig = {
-    low: { color: "bg-green-100 text-green-700 border-green-300", icon: "✓" },
-    medium: {
-      color: "bg-yellow-100 text-yellow-700 border-yellow-300",
-      icon: "⚠️",
-    },
-    high: { color: "bg-red-100 text-red-700 border-red-300", icon: "🚨" },
-    critical: { color: "bg-red-100 text-red-700 border-red-300", icon: "🚨" },
-  };
+  // ── error ──────────────────────────────────────────────────────────────────
+  if (error && !data) {
+    return (
+      <div className="bg-white rounded-lg shadow p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Activity className="w-5 h-5 text-green-600" />
+          <h3 className="text-lg font-semibold text-gray-900">Device Health</h3>
+        </div>
+        <div className="text-center py-8">
+          <p className="text-red-500 text-sm">{error}</p>
+          <button
+            onClick={fetchHealth}
+            className="mt-3 text-sm text-blue-600 underline"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-  const getHealthStatus = (score) => {
-    if (score >= 90) return { label: "Excellent", color: "text-green-600" };
-    if (score >= 70) return { label: "Good", color: "text-blue-600" };
-    if (score >= 50) return { label: "Fair", color: "text-yellow-600" };
-    return { label: "Poor", color: "text-red-600" };
-  };
+  const score = data?.health_score ?? 85;
+  const status = data?.status ?? "Idle";
+  const color = data?.status_color ?? "green";
+  const details = data?.details ?? {};
+  const lastSeen = data?.last_seen;
 
-  const getHealthBarColor = (score) => {
-    if (score >= 90) return "text-green-600";
-    if (score >= 70) return "text-blue-600";
-    if (score >= 50) return "text-yellow-600";
-    return "text-red-600";
-  };
+  const { text: scoreText, ring: ringColor } = getHealthColor(score);
+  const circumference = 2 * Math.PI * 56;
+  const dashOffset = circumference * (1 - score / 100);
 
   return (
     <div className="bg-white rounded-lg shadow p-6">
+      {/* header */}
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-          <Heart className="w-5 h-5 text-green-600" />
+          <Activity className="w-5 h-5 text-green-600" />
           Device Health
         </h3>
-        {!usingProps && (
-          <button
-            onClick={handleRefresh}
-            disabled={loading}
-            className="text-sm text-green-600 hover:text-green-700"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-          </button>
-        )}
+        <button
+          onClick={fetchHealth}
+          disabled={loading}
+          className="text-gray-400 hover:text-gray-600"
+          title="Refresh"
+        >
+          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+        </button>
       </div>
 
-      {!healthData ? (
-        <div className="text-center py-8">
-          <Activity className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-          <p className="text-gray-500 text-sm">No health data yet</p>
-          <p className="text-gray-400 text-xs mt-1">
-            Monitoring device status...
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {/* Health Score Circle */}
-          <div className="text-center">
-            <div className="relative inline-flex items-center justify-center w-32 h-32">
-              <svg className="transform -rotate-90 w-32 h-32">
-                <circle
-                  cx="64"
-                  cy="64"
-                  r="56"
-                  stroke="currentColor"
-                  strokeWidth="8"
-                  fill="transparent"
-                  className="text-gray-200"
-                />
-                <circle
-                  cx="64"
-                  cy="64"
-                  r="56"
-                  stroke="currentColor"
-                  strokeWidth="8"
-                  fill="transparent"
-                  strokeDasharray={`${2 * Math.PI * 56}`}
-                  strokeDashoffset={`${2 * Math.PI * 56 * (1 - healthData.deviceHealthScore / 100)}`}
-                  className={getHealthBarColor(healthData.deviceHealthScore)}
-                  strokeLinecap="round"
-                />
-              </svg>
-              <div className="absolute">
-                <div
-                  className={`text-3xl font-bold ${getHealthStatus(healthData.deviceHealthScore).color}`}
-                >
-                  {healthData.deviceHealthScore.toFixed(0)}
-                </div>
-                <div className="text-xs text-gray-500">Health Score</div>
+      <div className="space-y-4">
+        {/* circular score */}
+        <div className="text-center">
+          <div className="relative inline-flex items-center justify-center w-32 h-32">
+            <svg className="transform -rotate-90 w-32 h-32">
+              <circle
+                cx="64"
+                cy="64"
+                r="56"
+                stroke="currentColor"
+                strokeWidth="8"
+                fill="transparent"
+                className="text-gray-200"
+              />
+              <circle
+                cx="64"
+                cy="64"
+                r="56"
+                stroke="currentColor"
+                strokeWidth="8"
+                fill="transparent"
+                strokeDasharray={circumference}
+                strokeDashoffset={dashOffset}
+                className={ringColor}
+                strokeLinecap="round"
+              />
+            </svg>
+            <div className="absolute text-center">
+              <div className={`text-3xl font-bold ${scoreText}`}>
+                {Math.round(score)}
               </div>
+              <div className="text-xs text-gray-500">Health</div>
             </div>
-            <p
-              className={`mt-2 font-semibold ${getHealthStatus(healthData.deviceHealthScore).color}`}
-            >
-              {getHealthStatus(healthData.deviceHealthScore).label}
-            </p>
           </div>
 
-          {/* Anomaly Status — now consistent with health score */}
-          <div
-            className={`p-4 rounded-lg border-2 ${
-              healthData.isAnomaly
-                ? "bg-red-50 border-red-300"
-                : "bg-green-50 border-green-300"
-            }`}
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-xl">
-                {healthData.isAnomaly ? "⚠️" : "✓"}
-              </span>
-              <h4
-                className={`font-semibold ${healthData.isAnomaly ? "text-red-900" : "text-green-900"}`}
-              >
-                {healthData.isAnomaly ? "Anomaly Detected" : "Normal Operation"}
-              </h4>
-            </div>
-            <p
-              className={`text-sm ${healthData.isAnomaly ? "text-red-700" : "text-green-700"}`}
-            >
-              {healthData.message}
-            </p>
-          </div>
-
-          {/* Severity Badge */}
-          <div className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
-            <span className="text-sm text-gray-600">Severity Level</span>
+          {/* status badge */}
+          <div className="mt-2">
             <span
-              className={`px-3 py-1 rounded-full text-xs font-semibold border ${
-                severityConfig[healthData.severity]?.color ||
-                severityConfig.low.color
-              }`}
+              className={`inline-block px-3 py-1 rounded-full text-xs font-semibold border ${getStatusBadge(color)}`}
             >
-              {severityConfig[healthData.severity]?.icon}{" "}
-              {healthData.severity.toUpperCase()}
+              {status}
             </span>
           </div>
+        </div>
 
-          {/* Anomaly Score */}
-          {healthData.isAnomaly && (
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-xs text-gray-600">Anomaly Score</p>
-                <p className="text-xs text-gray-600">
-                  {healthData.anomalyScore.toFixed(0)}%
-                </p>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div
-                  className="bg-red-600 h-2 rounded-full transition-all"
-                  style={{
-                    width: `${Math.min(100, healthData.anomalyScore)}%`,
-                  }}
-                />
-              </div>
+        {/* stats grid */}
+        {details.total_detections_24h !== undefined && (
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-gray-50 rounded-lg p-3 text-center">
+              <p className="text-xs text-gray-500 mb-1">Detections (24h)</p>
+              <p className="text-xl font-bold text-gray-900">
+                {details.total_detections_24h.toLocaleString()}
+              </p>
             </div>
-          )}
+            <div className="bg-gray-50 rounded-lg p-3 text-center">
+              <p className="text-xs text-gray-500 mb-1">Avg Confidence</p>
+              <p className="text-xl font-bold text-gray-900">
+                {details.avg_confidence_pct > 0
+                  ? `${details.avg_confidence_pct.toFixed(0)}%`
+                  : "—"}
+              </p>
+            </div>
+            <div className="bg-red-50 rounded-lg p-3 text-center">
+              <p className="text-xs text-red-500 mb-1">Critical</p>
+              <p className="text-xl font-bold text-red-600">
+                {details.critical_count ?? 0}
+              </p>
+            </div>
+            <div className="bg-yellow-50 rounded-lg p-3 text-center">
+              <p className="text-xs text-yellow-500 mb-1">High</p>
+              <p className="text-xl font-bold text-yellow-600">
+                {details.high_count ?? 0}
+              </p>
+            </div>
+          </div>
+        )}
 
-          <div className="pt-2 border-t text-xs text-gray-500 text-center">
-            Updated{" "}
-            {new Date(healthData.timestamp).toLocaleTimeString("en-PH", {
+        {/* message */}
+        {details.message && (
+          <div className="flex items-start gap-2 bg-blue-50 rounded-lg p-3">
+            <Shield className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-blue-700">{details.message}</p>
+          </div>
+        )}
+
+        {/* last seen */}
+        <div className="flex items-center justify-between pt-2 border-t text-xs text-gray-500">
+          <span className="flex items-center gap-1">
+            <Wifi className="w-3 h-3" />
+            Last active: {formatLastSeen(lastSeen)}
+          </span>
+          <span className="flex items-center gap-1">
+            <Clock className="w-3 h-3" />
+            {new Date().toLocaleTimeString("en-PH", {
               timeZone: "Asia/Manila",
             })}
-          </div>
+          </span>
         </div>
-      )}
+      </div>
     </div>
   );
 };

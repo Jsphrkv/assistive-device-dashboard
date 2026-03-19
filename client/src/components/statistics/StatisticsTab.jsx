@@ -8,6 +8,7 @@ import AnomalyAlert from "../ml/AnomalyAlert";
 import DeviceHealthMonitor from "../ml/DeviceHealthMonitor";
 import DangerMonitor from "../ml/DangerMonitor";
 import EnvironmentMonitor from "../ml/EnvironmentMonitor";
+import ObjectDetectionWidget from "../ml/ObjectDetectionWidget";
 
 const StatisticsTab = ({ deviceId }) => {
   const [dailyStats, setDailyStats] = useState([]);
@@ -15,10 +16,12 @@ const StatisticsTab = ({ deviceId }) => {
   const [hourlyStats, setHourlyStats] = useState([]);
   const [mlSummary, setMlSummary] = useState(null);
 
-  // ✅ NEW: Centralized ML data state
+  // Centralized ML data state
+  // NOTE: anomaliesData is no longer passed as prop to AnomalyAlert —
+  // AnomalyAlert now fetches /detection-anomalies directly.
+  // dangerData and environmentData are still passed as props to avoid
+  // duplicate fetches for those two widgets.
   const [mlData, setMlData] = useState({
-    anomalies: [],
-    healthData: [],
     dangerData: [],
     environmentData: [],
   });
@@ -32,10 +35,7 @@ const StatisticsTab = ({ deviceId }) => {
     fetchStatistics();
     fetchMLData();
 
-    // Refresh statistics every 60s
     const statsInterval = setInterval(fetchStatistics, 60000);
-
-    // ✅ OPTIMIZATION: Single ML data fetch every 30s instead of 4 separate calls
     const mlInterval = setInterval(fetchMLData, 30000);
 
     return () => {
@@ -51,22 +51,10 @@ const StatisticsTab = ({ deviceId }) => {
     try {
       const [dailyRes, obstaclesRes, hourlyRes, summaryRes] = await Promise.all(
         [
-          statisticsAPI.getDaily(7).catch((err) => {
-            console.error("Daily stats error:", err);
-            return { data: { data: [] } };
-          }),
-          statisticsAPI.getObstacles().catch((err) => {
-            console.error("Obstacles stats error:", err);
-            return { data: { data: [] } };
-          }),
-          statisticsAPI.getHourly().catch((err) => {
-            console.error("Hourly stats error:", err);
-            return { data: { data: [] } };
-          }),
-          statisticsAPI.getSummary().catch((err) => {
-            console.error("Summary stats error:", err);
-            return { data: null };
-          }),
+          statisticsAPI.getDaily(7).catch(() => ({ data: { data: [] } })),
+          statisticsAPI.getObstacles().catch(() => ({ data: { data: [] } })),
+          statisticsAPI.getHourly().catch(() => ({ data: { data: [] } })),
+          statisticsAPI.getSummary().catch(() => ({ data: null })),
         ],
       );
 
@@ -75,19 +63,16 @@ const StatisticsTab = ({ deviceId }) => {
       const hourlyRaw = hourlyRes.data?.data || [];
       const summary = summaryRes.data || null;
 
-      // Transform daily data
       const transformedDaily = dailyRaw.map((item) => ({
         date: item.stat_date || item.date,
         alerts: item.total_alerts || item.alerts || 0,
       }));
 
-      // Transform hourly data
       const transformedHourly = hourlyRaw.map((item) => ({
         hour: item.hour_range || item.hour,
         detections: item.detection_count || item.detections || 0,
       }));
 
-      // Transform obstacles data
       const transformedObstacles = obstaclesRaw.map((item) => ({
         name:
           item.obstacle_type || item.object_detected || item.name || "unknown",
@@ -113,35 +98,27 @@ const StatisticsTab = ({ deviceId }) => {
     }
   };
 
-  // ✅ NEW: Centralized ML data fetching (replaces 4 separate API calls)
+  // Only fetch danger + environment here.
+  // AnomalyAlert fetches /detection-anomalies itself.
+  // DeviceHealthMonitor fetches /device-health itself.
   const fetchMLData = async () => {
     setMlLoading(true);
-
     try {
-      // Fetch all ML data types in parallel
-      const [anomaliesRes, healthRes, dangerRes, environmentRes] =
-        await Promise.all([
-          mlAPI.getAnomalies(10).catch(() => ({ data: { data: [] } })),
-          mlAPI
-            .getHistory({ type: "anomaly", limit: 10 })
-            .catch(() => ({ data: { data: [] } })),
-          mlAPI
-            .getHistory({ type: "danger_prediction", limit: 10 })
-            .catch(() => ({ data: { data: [] } })),
-          mlAPI
-            .getHistory({ type: "environment_classification", limit: 10 })
-            .catch(() => ({ data: { data: [] } })),
-        ]);
+      const [dangerRes, environmentRes] = await Promise.all([
+        mlAPI
+          .getHistory({ type: "danger_prediction", limit: 10 })
+          .catch(() => ({ data: { data: [] } })),
+        mlAPI
+          .getHistory({ type: "environment_classification", limit: 10 })
+          .catch(() => ({ data: { data: [] } })),
+      ]);
 
-      // Filter by deviceId if provided
       const filterByDevice = (items) => {
         if (!deviceId || deviceId === "device-001") return items;
         return items.filter((item) => item.device_id === deviceId);
       };
 
       setMlData({
-        anomalies: filterByDevice(anomaliesRes.data?.data || []),
-        healthData: filterByDevice(healthRes.data?.data || []),
         dangerData: filterByDevice(dangerRes.data?.data || []),
         environmentData: filterByDevice(environmentRes.data?.data || []),
       });
@@ -152,7 +129,6 @@ const StatisticsTab = ({ deviceId }) => {
     }
   };
 
-  // ✅ NEW: Refresh both statistics and ML data
   const handleRefresh = () => {
     fetchStatistics();
     fetchMLData();
@@ -161,7 +137,7 @@ const StatisticsTab = ({ deviceId }) => {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
       </div>
     );
   }
@@ -233,7 +209,7 @@ const StatisticsTab = ({ deviceId }) => {
         </div>
       )}
 
-      {/* Summary Statistics Cards */}
+      {/* Summary Cards */}
       {mlSummary && (
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="bg-white rounded-lg shadow p-6">
@@ -245,7 +221,6 @@ const StatisticsTab = ({ deviceId }) => {
               All-time sensor records
             </p>
           </div>
-
           <div className="bg-red-50 rounded-lg shadow p-6">
             <p className="text-sm text-red-600 mb-1">High Danger</p>
             <p className="text-3xl font-bold text-red-600">
@@ -255,7 +230,6 @@ const StatisticsTab = ({ deviceId }) => {
               Immediate attention needed
             </p>
           </div>
-
           <div className="bg-yellow-50 rounded-lg shadow p-6">
             <p className="text-sm text-yellow-600 mb-1">Medium Danger</p>
             <p className="text-3xl font-bold text-yellow-600">
@@ -263,7 +237,6 @@ const StatisticsTab = ({ deviceId }) => {
             </p>
             <p className="text-xs text-yellow-500 mt-1">Caution recommended</p>
           </div>
-
           <div className="bg-blue-50 rounded-lg shadow p-6">
             <p className="text-sm text-blue-600 mb-1">Low Danger</p>
             <p className="text-3xl font-bold text-blue-600">
@@ -271,7 +244,6 @@ const StatisticsTab = ({ deviceId }) => {
             </p>
             <p className="text-xs text-blue-500 mt-1">Normal operation range</p>
           </div>
-
           <div className="bg-purple-50 rounded-lg shadow p-6">
             <p className="text-sm text-purple-600 mb-1">Anomaly Rate</p>
             <p className="text-3xl font-bold text-purple-600">
@@ -286,42 +258,33 @@ const StatisticsTab = ({ deviceId }) => {
         </div>
       )}
 
-      {/* Charts Grid - Detection Analytics */}
+      {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <AlertsChart data={dailyStats} loading={loading} />
         <ObstaclesChart data={obstacleStats} loading={loading} />
       </div>
-
-      {/* Peak Times Chart - Full Width */}
       <div className="grid grid-cols-1 gap-6">
         <PeakTimesChart data={hourlyStats} loading={loading} />
       </div>
 
-      {/* ML Statistics Section - 2+2 Grid Layout */}
+      {/* ── ML Statistics Section ── */}
       <div className="mt-8">
         <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
           <BarChart3 className="w-5 h-5 text-blue-600" />
           ML Statistics
         </h3>
 
-        {/* First Row: 2 columns */}
+        {/* Row 1: Anomaly (self-fetches) + Device Health (self-fetches) */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* ✅ OPTIMIZED: Pass pre-fetched data as props */}
-          <AnomalyAlert
-            deviceId={deviceId}
-            anomaliesData={mlData.anomalies}
-            loading={mlLoading}
-          />
-          <DeviceHealthMonitor
-            deviceId={deviceId}
-            healthData={mlData.healthData}
-            loading={mlLoading}
-          />
+          {/* AnomalyAlert fetches /detection-anomalies itself — no props needed */}
+          <AnomalyAlert deviceId={deviceId} />
+
+          {/* DeviceHealthMonitor fetches /device-health itself — no props needed */}
+          <DeviceHealthMonitor deviceId={deviceId} />
         </div>
 
-        {/* Second Row: 2 columns */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* ✅ OPTIMIZED: Pass pre-fetched data as props */}
+        {/* Row 2: Danger Monitor + Environment Monitor */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           <DangerMonitor
             deviceId={deviceId}
             dangerData={mlData.dangerData}
@@ -332,6 +295,11 @@ const StatisticsTab = ({ deviceId }) => {
             environmentData={mlData.environmentData}
             loading={mlLoading}
           />
+        </div>
+
+        {/* Row 3: Object Detection + YOLO Stats — full width */}
+        <div className="grid grid-cols-1 gap-6">
+          <ObjectDetectionWidget deviceId={deviceId} />
         </div>
       </div>
     </div>

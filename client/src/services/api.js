@@ -208,6 +208,9 @@ export const mlAPI = {
   getStats: (days = 7) => api.get(`/ml-history/stats?days=${days}`),
   getDailySummary: (days = 7) =>
     api.get(`/ml-history/daily-summary?days=${days}`),
+
+  getDetectionAnomalies: () => api.get("/ml-history/detection-anomalies"),
+  getDeviceHealth: () => api.get("/ml-history/device-health"),
 };
 
 export const adminAPI = {

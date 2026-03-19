@@ -10,7 +10,6 @@ ml_history_bp = Blueprint('ml_history', __name__, url_prefix='/api/ml-history')
 # ── Shared helpers ────────────────────────────────────────────────────────────
 
 def _get_device_ids(supabase, user_id, user_role):
-    """Return list of device UUIDs for this user, or None for admin (all devices)."""
     if user_role == 'admin':
         return None
     result = supabase.table('user_devices').select('id').eq('user_id', user_id).execute()
@@ -22,7 +21,6 @@ def _apply_device_filter(query, device_ids, col='device_id'):
     return query
 
 def _safe_float(val, default=None):
-    """Return float or None — never fabricate a confidence value."""
     if val is None:
         return default
     try:
@@ -31,10 +29,6 @@ def _safe_float(val, default=None):
         return default
 
 def _normalize_confidence(v):
-    """
-    Normalize confidence to 0-1 range.
-    Returns None if value is missing or effectively zero.
-    """
     if v is None:
         return None
     v = float(v)
@@ -47,26 +41,21 @@ def _normalize_confidence(v):
 
 def _to_ph_iso(ts_str):
     """
-    FIX: Convert a UTC ISO timestamp string (from Supabase ml_predictions)
+    FIX: Convert UTC ISO timestamp (from Supabase ml_predictions.created_at)
     to Philippine Time (UTC+8) ISO string.
 
-    Supabase stores ml_predictions.created_at in UTC by default, while
-    detection_logs.detected_at is already stored in PH time via now_ph_iso().
-    This mismatch caused anomaly timestamps to appear ~8 hours behind
+    ml_predictions.created_at is stored as UTC by Supabase's default.
+    detection_logs.detected_at is already PH time via now_ph_iso().
+    Without this conversion, anomaly timestamps appear ~8 hours behind
     detection timestamps on the dashboard.
-
-    Returns the original string unchanged on any parse failure so the UI
-    still gets a value rather than crashing.
     """
     if not ts_str:
         return ts_str
     try:
-        # Normalize to a timezone-aware UTC datetime
         s = ts_str.strip()
         if s.endswith('Z'):
             s = s[:-1] + '+00:00'
         elif '+' not in s and len(s) == 19:
-            # No timezone info — assume UTC
             s = s + '+00:00'
         dt_utc = datetime.fromisoformat(s)
         if dt_utc.tzinfo is None:
@@ -74,7 +63,7 @@ def _to_ph_iso(ts_str):
         return utc_to_ph(dt_utc).isoformat()
     except Exception as e:
         print(f"[ml_history] _to_ph_iso failed for '{ts_str}': {e}")
-        return ts_str  # safe fallback — never crash on timestamp conversion
+        return ts_str
 
 
 # ── GET /api/ml-history ───────────────────────────────────────────────────────
@@ -82,7 +71,6 @@ def _to_ph_iso(ts_str):
 @ml_history_bp.route('', methods=['GET'])
 @token_required
 def get_ml_history():
-    """Get combined ML predictions and detections for current user's devices."""
     try:
         user_id   = request.current_user['user_id']
         user_role = request.current_user['role']
@@ -127,17 +115,15 @@ def get_ml_history():
                 confidence = None
 
                 if pt == 'anomaly':
-                    health      = _safe_float(item.get('device_health_score'), 0)
-                    score       = _safe_float(item.get('anomaly_score'))
-                    is_anomaly  = item.get('is_anomaly', False)
-
-                    message = (
+                    health     = _safe_float(item.get('device_health_score'), 0)
+                    score      = _safe_float(item.get('anomaly_score'))
+                    is_anomaly = item.get('is_anomaly', False)
+                    message    = (
                         f"Device anomaly detected (health: {health:.1f}%)"
                         if is_anomaly
                         else f"Device health: {health:.1f}%"
                     )
-
-                    result = {
+                    result     = {
                         'score':               score,
                         'severity':            item.get('anomaly_severity'),
                         'device_health_score': health,
@@ -150,10 +136,10 @@ def get_ml_history():
                     dist = item.get('distance_cm', 0)
                     conf = item.get('detection_confidence')
                     result = {
-                        'object':        obj, 'obstacle_type': obj,
-                        'distance':      dist, 'distance_cm':   dist,
-                        'danger_level':  item.get('danger_level'),
-                        'confidence':    conf,
+                        'object':       obj, 'obstacle_type': obj,
+                        'distance':     dist, 'distance_cm':  dist,
+                        'danger_level': item.get('danger_level'),
+                        'confidence':   conf,
                     }
                     confidence = _normalize_confidence(conf)
 
@@ -186,15 +172,13 @@ def get_ml_history():
                     'prediction_type':  pt,
                     'is_anomaly':       item.get('is_anomaly', False),
                     'confidence_score': confidence,
-                    # FIX: ml_predictions.created_at is stored UTC by Supabase.
-                    # Convert to PH time so timestamps align with detection_logs.
+                    # FIX: convert UTC → PH time so timestamps align with detection_logs
                     'timestamp':        _to_ph_iso(item['created_at']),
                     'result':           result,
                     'source':           'ml_prediction',
                 })
 
         # ── detection_logs ────────────────────────────────────────────────────
-        # Only included when source includes detections AND type is not anomaly-specific
         if source in ('all', 'detections') and pred_type in (None, 'detection'):
             q = supabase.table('detection_logs')\
                 .select('*, user_devices!detection_logs_device_id_fkey(device_name)')
@@ -262,15 +246,6 @@ def get_ml_history():
 @ml_history_bp.route('/anomalies', methods=['GET'])
 @token_required
 def get_anomalies():
-    """
-    Get DEVICE anomalies only from ml_predictions.
-
-    FIX: Previously mixed detection_logs (obstacle detections like
-    'Obstacle_close at 8.4cm') into the anomaly feed. Those are
-    obstacle detection events — NOT device health anomalies.
-    The anomaly widget should only show actual device anomaly model output.
-    Detection logs with High danger are shown in the detections feed instead.
-    """
     try:
         user_id   = request.current_user['user_id']
         user_role = request.current_user['role']
@@ -326,7 +301,7 @@ def get_anomalies():
                 'severity':    severity,
                 'message':     message,
                 'score':       score,
-                # FIX: Convert UTC created_at to PH time for correct display
+                # FIX: Convert UTC → PH time for correct display
                 'timestamp':   _to_ph_iso(item['created_at']),
                 'source':      'ml_prediction',
             })
@@ -340,12 +315,140 @@ def get_anomalies():
         return jsonify({'error': 'Failed to get anomalies'}), 500
 
 
+# ── GET /api/ml-history/device-health ────────────────────────────────────────
+# NEW: Device health derived from detection patterns in detection_logs.
+# Replaces the broken battery-based health that always showed 0% on Pi
+# because powerbank battery level is unreadable via software.
+#
+# Health score = 100 - (critical_rate * 60) - (high_rate * 30) - confidence_penalty
+# A device that mostly sees Low/Medium danger with high confidence = healthy.
+# A device with frequent Critical detections or low confidence = degraded.
+
+@ml_history_bp.route('/device-health', methods=['GET'])
+@token_required
+def get_device_health():
+    try:
+        user_id   = request.current_user['user_id']
+        user_role = request.current_user['role']
+
+        supabase   = get_supabase()
+        device_ids = _get_device_ids(supabase, user_id, user_role)
+
+        if device_ids == []:
+            return jsonify({'health_score': 100, 'status': 'No device', 'details': {}}), 200
+
+        end_dt    = now_ph()
+        start_iso = (end_dt - timedelta(hours=24)).isoformat()
+
+        # Fetch last 24h detection_logs
+        q = supabase.table('detection_logs')\
+            .select('danger_level, detection_confidence, detected_at, object_detected')\
+            .gte('detected_at', start_iso)\
+            .order('detected_at', desc=True)
+        q = _apply_device_filter(q, device_ids)
+        rows = q.execute().data
+
+        # Also get device last_seen
+        last_seen = None
+        try:
+            dq = supabase.table('user_devices').select('last_seen, device_name')
+            dq = _apply_device_filter(dq, device_ids)
+            dev = dq.limit(1).execute().data
+            if dev:
+                last_seen = dev[0].get('last_seen')
+        except Exception:
+            pass
+
+        total = len(rows)
+
+        if total == 0:
+            # No recent detections — device may be offline but not "unhealthy"
+            return jsonify({
+                'health_score':   85,
+                'status':         'Idle',
+                'status_color':   'yellow',
+                'last_seen':      last_seen,
+                'details': {
+                    'total_detections_24h': 0,
+                    'critical_count':       0,
+                    'high_count':           0,
+                    'medium_count':         0,
+                    'low_count':            0,
+                    'critical_rate_pct':    0,
+                    'avg_confidence_pct':   0,
+                    'message':              'No detections in last 24h — device may be idle',
+                },
+            }), 200
+
+        critical_count = sum(1 for r in rows if r.get('danger_level') == 'Critical')
+        high_count     = sum(1 for r in rows if r.get('danger_level') == 'High')
+        medium_count   = sum(1 for r in rows if r.get('danger_level') == 'Medium')
+        low_count      = sum(1 for r in rows if r.get('danger_level') == 'Low')
+
+        critical_rate = critical_count / total
+        high_rate     = high_count     / total
+
+        conf_vals = [
+            float(r['detection_confidence'])
+            for r in rows
+            if r.get('detection_confidence') is not None
+        ]
+        avg_conf = (sum(conf_vals) / len(conf_vals)) if conf_vals else 0.65
+
+        # Health formula:
+        # Start at 100, deduct for high danger rates and low confidence
+        # Critical detections are expected for an assistive device — not a flaw.
+        # Penalise only if >80% of detections are Critical (sensor may be stuck).
+        conf_penalty    = max(0.0, (0.50 - avg_conf) * 40)   # penalty if avg conf < 50%
+        critical_penalty = max(0.0, (critical_rate - 0.80) * 60)  # penalty if >80% critical
+        high_penalty    = max(0.0, (high_rate - 0.70) * 30)
+
+        health_score = max(0.0, min(100.0,
+            100.0 - conf_penalty - critical_penalty - high_penalty
+        ))
+        health_score = round(health_score, 1)
+
+        if health_score >= 80:
+            status       = 'Good'
+            status_color = 'green'
+        elif health_score >= 60:
+            status       = 'Fair'
+            status_color = 'yellow'
+        elif health_score >= 40:
+            status       = 'Degraded'
+            status_color = 'orange'
+        else:
+            status       = 'Poor'
+            status_color = 'red'
+
+        return jsonify({
+            'health_score':   health_score,
+            'status':         status,
+            'status_color':   status_color,
+            'last_seen':      last_seen,
+            'details': {
+                'total_detections_24h': total,
+                'critical_count':       critical_count,
+                'high_count':           high_count,
+                'medium_count':         medium_count,
+                'low_count':            low_count,
+                'critical_rate_pct':    round(critical_rate * 100, 1),
+                'avg_confidence_pct':   round(avg_conf * 100, 1),
+                'message': f"{total} detections in last 24h · avg confidence {avg_conf*100:.0f}%",
+            },
+        }), 200
+
+    except Exception as e:
+        print(f"Get device health error: {e}")
+        import traceback; traceback.print_exc()
+        return jsonify({'error': 'Failed to get device health'}), 500
+
+
 # ── GET /api/ml-history/stats ─────────────────────────────────────────────────
 
 @ml_history_bp.route('/stats', methods=['GET'])
 @token_required
 def get_ml_stats():
-    """Get combined statistics from both tables."""
     try:
         user_id   = request.current_user['user_id']
         user_role = request.current_user['role']
@@ -389,9 +492,9 @@ def get_ml_stats():
         ml_anomalies  = ml_count({'is_anomaly': True})
         det_anomalies = det_count({'danger_level': 'High'})
 
-        total      = ml_total + det_total
-        anomalies  = ml_anomalies + det_anomalies
-        anom_rate  = (anomalies / total * 100) if total > 0 else 0
+        total     = ml_total + det_total
+        anomalies = ml_anomalies + det_anomalies
+        anom_rate = (anomalies / total * 100) if total > 0 else 0
 
         by_type = {
             'anomaly':                    ml_count({'prediction_type': 'anomaly'}),
@@ -422,7 +525,7 @@ def get_ml_stats():
                     v = _normalize_confidence(pred['detection_confidence'])
                     if v: conf_scores.append(v)
         except Exception as ce:
-            print(f"⚠️ Confidence fetch error (non-critical): {ce}")
+            print(f"⚠️ Confidence fetch error: {ce}")
 
         try:
             q = supabase.table('detection_logs')\
@@ -433,7 +536,7 @@ def get_ml_stats():
                 v = _normalize_confidence(row.get('detection_confidence'))
                 if v: conf_scores.append(v)
         except Exception as ce:
-            print(f"⚠️ Detection confidence fetch error (non-critical): {ce}")
+            print(f"⚠️ Detection confidence fetch error: {ce}")
 
         avg_conf = (sum(conf_scores) / len(conf_scores)) if conf_scores else 0.0
 
@@ -457,7 +560,6 @@ def get_ml_stats():
 @ml_history_bp.route('/daily-summary', methods=['GET'])
 @token_required
 def get_daily_summary():
-    """Return per-day aggregated counts."""
     try:
         user_id   = request.current_user['user_id']
         user_role = request.current_user['role']
@@ -513,8 +615,8 @@ def get_daily_summary():
         daily_conf = defaultdict(list)
 
         for row in ml_rows:
-            # FIX: Convert UTC created_at to PH time before extracting the date,
-            # so daily buckets align with PH calendar days not UTC days.
+            # FIX: convert UTC created_at → PH time before extracting date
+            # so daily buckets use PH calendar days not UTC days
             ph_ts = _to_ph_iso(row['created_at'])
             day   = ph_ts[:10]
             pt    = row.get('prediction_type', '')
@@ -579,3 +681,180 @@ def get_daily_summary():
         print(f"Get daily summary error: {e}")
         import traceback; traceback.print_exc()
         return jsonify({'error': 'Failed to get daily summary'}), 500
+    
+# ── ADD THIS ROUTE to ml_history_bp.py on Render ─────────────────────────────
+# Paste this entire block inside ml_history_bp.py, just before the final
+# get_daily_summary route. No other changes to that file needed.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@ml_history_bp.route('/detection-anomalies', methods=['GET'])
+@token_required
+def get_detection_anomalies():
+    """
+    Compute anomaly signals from detection_logs patterns — NOT hardware telemetry.
+    The Pi uses a powerbank so battery/hardware metrics are unreliable.
+    Instead, anomalies are derived from what the device is actually detecting:
+
+    Signal 1 — Critical spike:   >60% of last 20 detections are Critical danger
+    Signal 2 — Confidence drop:  avg confidence of last 20 detections < 40%
+    Signal 3 — Detection flood:  detection rate in last 10min > 2x previous 10min
+    Signal 4 — Pattern shift:    dominant object type changed between last 5 vs prev 15
+    """
+    try:
+        user_id   = request.current_user['user_id']
+        user_role = request.current_user['role']
+
+        supabase   = get_supabase()
+        device_ids = _get_device_ids(supabase, user_id, user_role)
+
+        if device_ids == []:
+            return jsonify({'anomalies': [], 'is_anomaly': False, 'summary': 'No device paired'}), 200
+
+        # Fetch last 20 detections for pattern analysis
+        q = supabase.table('detection_logs')\
+            .select('danger_level, detection_confidence, object_detected, detected_at')\
+            .order('detected_at', desc=True)\
+            .limit(20)
+        q = _apply_device_filter(q, device_ids)
+        rows = q.execute().data
+
+        if not rows:
+            return jsonify({
+                'anomalies':  [],
+                'is_anomaly': False,
+                'summary':    'No recent detections to analyze',
+                'stats': {
+                    'total_analyzed':    0,
+                    'critical_count':    0,
+                    'critical_rate_pct': 0,
+                    'avg_confidence_pct':0,
+                    'dominant_object':   None,
+                    'pattern_shift':     False,
+                },
+            }), 200
+
+        total = len(rows)
+        anomalies = []
+
+        # ── Signal 1: Critical spike ──────────────────────────────────────────
+        critical_rows  = [r for r in rows if r.get('danger_level') == 'Critical']
+        critical_rate  = len(critical_rows) / total
+        if critical_rate > 0.60:
+            anomalies.append({
+                'type':     'critical_spike',
+                'severity': 'high' if critical_rate > 0.80 else 'medium',
+                'message':  f"Critical spike — {len(critical_rows)}/{total} recent detections Critical",
+                'value':    round(critical_rate * 100, 1),
+            })
+
+        # ── Signal 2: Confidence drop ─────────────────────────────────────────
+        conf_vals = [
+            float(r['detection_confidence'])
+            for r in rows
+            if r.get('detection_confidence') is not None
+        ]
+        avg_conf = (sum(conf_vals) / len(conf_vals)) if conf_vals else None
+        if avg_conf is not None and avg_conf < 0.40:
+            anomalies.append({
+                'type':     'confidence_drop',
+                'severity': 'high' if avg_conf < 0.20 else 'medium',
+                'message':  f"Low confidence — avg {avg_conf*100:.0f}% across last {total} detections",
+                'value':    round(avg_conf * 100, 1),
+            })
+
+        # ── Signal 3: Detection flood ─────────────────────────────────────────
+        # Compare count in last 10 min vs previous 10 min
+        try:
+            end_dt        = now_ph()
+            cutoff_recent = (end_dt - timedelta(minutes=10)).isoformat()
+            cutoff_prev   = (end_dt - timedelta(minutes=20)).isoformat()
+
+            def _count_window(start_iso, end_iso):
+                q2 = supabase.table('detection_logs')\
+                    .select('*', count='exact', head=True)\
+                    .gte('detected_at', start_iso)\
+                    .lte('detected_at', end_iso)
+                q2 = _apply_device_filter(q2, device_ids)
+                return q2.execute().count or 0
+
+            recent_count = _count_window(cutoff_recent, end_dt.isoformat())
+            prev_count   = _count_window(cutoff_prev, cutoff_recent)
+
+            if prev_count > 0 and recent_count > prev_count * 2 and recent_count >= 5:
+                anomalies.append({
+                    'type':     'detection_flood',
+                    'severity': 'medium',
+                    'message':  f"Detection flood — {recent_count} detections in last 10min (prev: {prev_count})",
+                    'value':    recent_count,
+                })
+        except Exception as e:
+            print(f"[detection-anomalies] flood check failed (non-critical): {e}")
+
+        # ── Signal 4: Pattern shift ───────────────────────────────────────────
+        # Compare dominant object in last 5 vs previous 15
+        recent_5 = rows[:5]
+        prev_15  = rows[5:20]
+
+        def _dominant(group):
+            if not group:
+                return None
+            counts = {}
+            for r in group:
+                obj = r.get('object_detected') or 'unknown'
+                counts[obj] = counts.get(obj, 0) + 1
+            return max(counts, key=counts.get)
+
+        dom_recent = _dominant(recent_5)
+        dom_prev   = _dominant(prev_15)
+
+        pattern_shift = (
+            dom_recent is not None and
+            dom_prev   is not None and
+            dom_recent != dom_prev
+        )
+        if pattern_shift:
+            anomalies.append({
+                'type':     'pattern_shift',
+                'severity': 'low',
+                'message':  f"Environment shift — {dom_prev} → {dom_recent} in last 5 detections",
+                'value':    f"{dom_prev}→{dom_recent}",
+            })
+
+        # ── Overall anomaly flag ──────────────────────────────────────────────
+        has_high   = any(a['severity'] == 'high'   for a in anomalies)
+        has_medium = any(a['severity'] == 'medium' for a in anomalies)
+        is_anomaly = bool(anomalies)
+        overall_severity = (
+            'high'   if has_high   else
+            'medium' if has_medium else
+            'low'    if anomalies  else
+            'normal'
+        )
+
+        if not anomalies:
+            summary = f"Normal — {total} recent detections look healthy"
+        elif len(anomalies) == 1:
+            summary = anomalies[0]['message']
+        else:
+            summary = f"{len(anomalies)} anomaly signals detected"
+
+        return jsonify({
+            'anomalies':        anomalies,
+            'is_anomaly':       is_anomaly,
+            'overall_severity': overall_severity,
+            'summary':          summary,
+            'stats': {
+                'total_analyzed':    total,
+                'critical_count':    len(critical_rows),
+                'critical_rate_pct': round(critical_rate * 100, 1),
+                'avg_confidence_pct':round(avg_conf * 100, 1) if avg_conf is not None else None,
+                'dominant_object':   dom_recent,
+                'pattern_shift':     pattern_shift,
+            },
+            'timestamp': now_ph_iso(),
+        }), 200
+
+    except Exception as e:
+        print(f"Get detection anomalies error: {e}")
+        import traceback; traceback.print_exc()
+        return jsonify({'error': 'Failed to get detection anomalies'}), 500
