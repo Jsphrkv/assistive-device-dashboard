@@ -213,12 +213,7 @@ const AnomalyAlert = ({
                         {anomaly.type?.replace(/_/g, " ") || "anomaly"}
                       </p>
                       <p className="text-gray-600 text-xs">
-                        {new Date(anomaly.timestamp).toLocaleTimeString(
-                          "en-PH",
-                          {
-                            timeZone: "Asia/Manila",
-                          },
-                        )}
+                        {new Date(anomaly.timestamp).toLocaleTimeString()}
                       </p>
                     </div>
                     <span

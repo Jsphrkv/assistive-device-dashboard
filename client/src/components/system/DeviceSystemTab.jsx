@@ -762,9 +762,7 @@ const DeviceSystemTab = () => {
             <div className="text-sm">
               <span className="text-gray-600">Last Seen:</span>
               <p className="text-gray-900 font-medium">
-                {new Date(device.last_seen).toLocaleString("en-PH", {
-                  timeZone: "Asia/Manila",
-                })}
+                {new Date(device.last_seen).toLocaleString()}
               </p>
             </div>
           )}

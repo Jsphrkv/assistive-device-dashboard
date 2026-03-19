@@ -266,10 +266,7 @@ const EnvironmentMonitor = ({
           )}
 
           <div className="pt-2 border-t text-xs text-gray-500 text-center">
-            Updated{" "}
-            {new Date(environmentData.timestamp).toLocaleTimeString("en-PH", {
-              timeZone: "Asia/Manila",
-            })}
+            Updated {new Date(environmentData.timestamp).toLocaleTimeString()}
           </div>
         </div>
       )}
