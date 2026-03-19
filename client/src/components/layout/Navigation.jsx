@@ -216,7 +216,7 @@ const USER_TABS = [
   { id: "logs", label: "Detection Logs", icon: AlertTriangle },
   { id: "statistics", label: "Statistics", icon: Activity },
   { id: "mlhistory", label: "ML History", icon: Clock },
-  { id: "camera", label: "Live Camera", icon: Camera },
+  { id: "camera", label: "Camera Snapshot", icon: Camera },
   { id: "settings", label: "Settings", icon: Settings },
   { id: "device", label: "My Device", icon: Info },
 ];
