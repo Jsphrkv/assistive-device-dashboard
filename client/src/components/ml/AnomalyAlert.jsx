@@ -56,37 +56,42 @@ const SEVERITY_BADGE = {
 
 // ── component ─────────────────────────────────────────────────────────────────
 
-const AnomalyAlert = ({
-  deviceId,
-  anomaliesData: _ignored,
-  loading: _propLoading,
-}) => {
-  // NOTE: prop anomaliesData (hardware-based) intentionally ignored.
-  // Anomaly is now derived from detection patterns — not device telemetry.
+const AnomalyAlert = ({ deviceId, data: propData, loading: propLoading }) => {
+  // When propData is provided by StatisticsTab (centralized fetch) we use it
+  // directly and skip the self-fetch. This ensures the widget renders at the
+  // same time as all other ML widgets instead of appearing late.
+  const usingProps = propData !== undefined;
 
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [selfData, setSelfData] = useState(null);
+  const [selfLoading, setSelfLoading] = useState(!usingProps);
   const [error, setError] = useState(null);
 
-  const fetchAnomalies = useCallback(async () => {
-    setLoading(true);
+  const fetchSelf = useCallback(async () => {
+    if (usingProps) return; // parent is managing data
+    setSelfLoading(true);
     setError(null);
     try {
       const res = await mlAPI.getDetectionAnomalies();
-      setData(res.data);
+      setSelfData(res.data);
     } catch (err) {
       console.error("AnomalyAlert fetch error:", err);
       setError("Could not load anomaly data");
     } finally {
-      setLoading(false);
+      setSelfLoading(false);
     }
-  }, [deviceId]);
+  }, [deviceId, usingProps]);
 
   useEffect(() => {
-    fetchAnomalies();
-    const id = setInterval(fetchAnomalies, 30000);
-    return () => clearInterval(id);
-  }, [fetchAnomalies]);
+    if (!usingProps) {
+      fetchSelf();
+      const id = setInterval(fetchSelf, 30000);
+      return () => clearInterval(id);
+    }
+  }, [fetchSelf, usingProps]);
+
+  // Resolve which data + loading state to use
+  const data = usingProps ? propData : selfData;
+  const loading = usingProps ? propLoading : selfLoading;
 
   // ── loading ────────────────────────────────────────────────────────────────
   if (loading && !data) {
@@ -99,7 +104,7 @@ const AnomalyAlert = ({
     );
   }
 
-  // ── error ──────────────────────────────────────────────────────────────────
+  // ── error (self-fetch only) ────────────────────────────────────────────────
   if (error && !data) {
     return (
       <div className="bg-white rounded-lg shadow p-6">
@@ -112,7 +117,7 @@ const AnomalyAlert = ({
         <div className="text-center py-8">
           <p className="text-red-500 text-sm">{error}</p>
           <button
-            onClick={fetchAnomalies}
+            onClick={fetchSelf}
             className="mt-3 text-sm text-blue-600 underline"
           >
             Retry
@@ -146,13 +151,18 @@ const AnomalyAlert = ({
           >
             {severity.toUpperCase()}
           </span>
-          <button
-            onClick={fetchAnomalies}
-            disabled={loading}
-            className="text-gray-400 hover:text-gray-600"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-          </button>
+          {/* only show refresh button when self-fetching */}
+          {!usingProps && (
+            <button
+              onClick={fetchSelf}
+              disabled={loading}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <RefreshCw
+                className={`w-4 h-4 ${loading ? "animate-spin" : ""}`}
+              />
+            </button>
+          )}
         </div>
       </div>
 
@@ -212,7 +222,7 @@ const AnomalyAlert = ({
           </div>
         )}
 
-        {/* active anomaly signals */}
+        {/* active signals */}
         {anomalies.length > 0 && (
           <div className="space-y-2">
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
@@ -252,7 +262,7 @@ const AnomalyAlert = ({
           </div>
         )}
 
-        {/* dominant object context */}
+        {/* dominant object */}
         {stats.dominant_object && (
           <div className="flex items-center justify-between text-xs text-gray-500 pt-2 border-t">
             <span>Most detected recently</span>
