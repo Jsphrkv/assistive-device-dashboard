@@ -23,13 +23,6 @@ const MODALS = {
   REGENERATE: "regenerate",
 };
 
-// FIX: Online/offline threshold — if last_seen is older than this the
-// Pi is considered offline regardless of its registration `status` field.
-// `device.status` = "active/pending/inactive" is purely a registration
-// state stored in the DB. It does NOT reflect whether the Pi is currently
-// powered on and connected. We derive real-time connection state from how
-// recently the device last communicated with the backend.
-// 2 minutes = 4 missed heartbeat cycles at a typical 30s ping interval.
 const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
 
 const DeviceSystemTab = () => {
@@ -52,9 +45,6 @@ const DeviceSystemTab = () => {
   const [copiedToken, setCopiedToken] = useState(false);
   const [notify, setNotify] = useState(null);
 
-  // FIX: Single isSubmitting flag for all destructive async actions.
-  // Since modals are mutually exclusive (one activeModal at a time),
-  // one flag covers delete, regenerate, and pair without conflicts.
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const showNotify = (type, text, autoDismissMs = 5000) => {
@@ -73,11 +63,6 @@ const DeviceSystemTab = () => {
     refreshAll();
   }, []);
 
-  // FIX: Split into two functions so callers only trigger the API calls
-  // they actually need, instead of always chaining both fetches together.
-
-  // refreshAll — used on mount and after pairing completes, where we
-  // need both device data and fresh system info simultaneously.
   const refreshAll = async () => {
     setLoading(true);
     try {
@@ -100,8 +85,6 @@ const DeviceSystemTab = () => {
     }
   };
 
-  // refreshDeviceOnly — used after token regeneration and cancel pairing,
-  // where system info hasn't changed and a second call would be wasteful.
   const refreshDeviceOnly = async () => {
     try {
       const response = await deviceAPI.getAll();
@@ -126,11 +109,16 @@ const DeviceSystemTab = () => {
     }
   };
 
-  // FIX: Derive online/offline from last_seen freshness, NOT device.status.
-  // Returns true only if the Pi has communicated within ONLINE_THRESHOLD_MS.
+  // FIX: Use Math.abs() so the comparison works correctly regardless of
+  // whether last_seen is stored as UTC or Philippine time (+08:00).
+  // Both Date.now() and new Date(last_seen).getTime() return milliseconds
+  // since Unix epoch — Math.abs of their difference gives true elapsed time
+  // without being thrown off by the +8h offset in PH-stored timestamps.
   const getIsOnline = (dev) => {
     if (!dev?.last_seen) return false;
-    return Date.now() - new Date(dev.last_seen).getTime() < ONLINE_THRESHOLD_MS;
+    const lastSeenMs = new Date(dev.last_seen).getTime();
+    const nowMs = Date.now();
+    return Math.abs(nowMs - lastSeenMs) < ONLINE_THRESHOLD_MS;
   };
 
   const handleAddDevice = async () => {
@@ -203,9 +191,6 @@ const DeviceSystemTab = () => {
       const response = await deviceAPI.regenerateToken(device.id);
       const token = response.data.token;
       closeModal();
-
-      // FIX: Update device_token locally — no need for a network round-trip
-      // since we already have the new token value from the response.
       setDevice((prev) => ({ ...prev, device_token: token }));
       setNewToken(token);
     } catch (error) {
@@ -259,7 +244,6 @@ const DeviceSystemTab = () => {
         setCurrentDeviceId(null);
         setUserInputCode("");
         setPairingError("");
-        // After successful pairing we need fresh device + system info
         await refreshAll();
         showNotify(
           "success",
@@ -283,9 +267,6 @@ const DeviceSystemTab = () => {
     setCurrentDeviceId(null);
     setUserInputCode("");
     setPairingError("");
-    // FIX: Was calling refreshAll() (2 API calls) just to check device
-    // state. Only the device row needs checking here — system info hasn't
-    // changed during a cancelled pairing flow.
     refreshDeviceOnly();
   };
 
@@ -310,7 +291,6 @@ const DeviceSystemTab = () => {
     );
   }
 
-  // ── Shared inline notification banner ─────────────────────────────────────
   const NotifyBanner = () =>
     notify ? (
       <div
@@ -327,8 +307,6 @@ const DeviceSystemTab = () => {
       </div>
     ) : null;
 
-  // ── Pairing modals — rendered outside the !device branch to avoid the
-  // race condition where fetchDevice() completing mid-flow collapses them ──
   const PairingModals = () => (
     <>
       {activeModal === MODALS.PAIRING_CODE && pairingCode && (
@@ -504,7 +482,6 @@ const DeviceSystemTab = () => {
     </>
   );
 
-  // ── Empty state — no device registered ────────────────────────────────────
   if (!device) {
     return (
       <div className="space-y-6 fade-in">
@@ -561,7 +538,6 @@ const DeviceSystemTab = () => {
           </div>
         </div>
 
-        {/* Add Device Modal */}
         {activeModal === MODALS.ADD && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-md">
@@ -638,21 +614,13 @@ const DeviceSystemTab = () => {
     );
   }
 
-  // ── Device registered — show device info + system info ───────────────────
-
-  // FIX: Compute real-time online/offline separately from device.status.
-  // device.status ("active") = registration state — it does NOT change
-  // when the Pi powers off. isOnline = whether the Pi is currently live.
   const isOnline = getIsOnline(device);
 
   return (
     <div className="space-y-6 fade-in">
-      {/* Header — registration status badge + live connection indicator */}
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-900">My Device</h2>
         <div className="flex items-center gap-2">
-          {/* FIX: Separate online/offline pill based on last_seen freshness.
-              This is what actually tells you if the Pi is powered on now. */}
           <span
             className={`inline-flex items-center gap-1.5 px-3 py-1 text-sm font-semibold rounded-full ${
               isOnline
@@ -668,8 +636,6 @@ const DeviceSystemTab = () => {
             {isOnline ? "Online" : "Offline"}
           </span>
 
-          {/* Registration status badge — unchanged, still useful to show
-              whether the device is active/pending/inactive in the DB */}
           <span
             className={`px-3 py-1 text-sm font-semibold rounded-full ${getStatusColor(device.status)}`}
           >
@@ -680,7 +646,6 @@ const DeviceSystemTab = () => {
 
       <NotifyBanner />
 
-      {/* System Information */}
       <div className="bg-white rounded-lg shadow p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">
           System Information
@@ -775,7 +740,6 @@ const DeviceSystemTab = () => {
         )}
       </div>
 
-      {/* Device Information Card */}
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex items-start justify-between mb-6">
           <div>
@@ -804,7 +768,6 @@ const DeviceSystemTab = () => {
           )}
         </div>
 
-        {/* Device Token */}
         <div className="bg-gray-50 p-4 rounded-lg mb-4">
           <label
             htmlFor="deviceToken"
@@ -841,7 +804,6 @@ const DeviceSystemTab = () => {
           </div>
         </div>
 
-        {/* New token reveal — shown after successful regeneration */}
         {newToken && (
           <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
             <p className="text-xs font-medium text-green-800 mb-2">
@@ -875,7 +837,6 @@ const DeviceSystemTab = () => {
           </div>
         )}
 
-        {/* Action Buttons */}
         <div className="flex gap-3">
           <button
             onClick={() => setActiveModal(MODALS.REGENERATE)}
@@ -894,7 +855,6 @@ const DeviceSystemTab = () => {
         </div>
       </div>
 
-      {/* Delete Confirmation Modal */}
       {activeModal === MODALS.DELETE && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fadeIn">
           <div className="bg-white rounded-lg w-full max-w-md shadow-xl animate-slideIn overflow-hidden">
@@ -942,8 +902,6 @@ const DeviceSystemTab = () => {
                 >
                   Cancel
                 </button>
-                {/* FIX: Button disabled + shows feedback while request is in flight
-                    — prevents double-clicks from firing duplicate delete requests */}
                 <button
                   onClick={handleDeleteDevice}
                   disabled={isSubmitting}
@@ -957,7 +915,6 @@ const DeviceSystemTab = () => {
         </div>
       )}
 
-      {/* Regenerate Token Confirmation Modal */}
       {activeModal === MODALS.REGENERATE && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fadeIn">
           <div className="bg-white rounded-lg w-full max-w-md shadow-xl animate-slideIn overflow-hidden">
@@ -1003,7 +960,6 @@ const DeviceSystemTab = () => {
                 >
                   Cancel
                 </button>
-                {/* FIX: Disabled + spinner during request */}
                 <button
                   onClick={handleRegenerateToken}
                   disabled={isSubmitting}

@@ -134,7 +134,6 @@ def receive_telemetry():
 
         print(f"\n✅ Telemetry processed successfully for device {device_id}\n")
 
-        # ✅ FIXED: Use Philippine time
         return jsonify({
             'success':     True,
             'message':     'Telemetry received and processed',
@@ -157,7 +156,6 @@ def receive_telemetry():
 @device_bp.route('/ping', methods=['GET'])
 def ping():
     """Simple endpoint to check if device API is working"""
-    # ✅ FIXED: Use Philippine time
     return jsonify({
         'success':   True,
         'message':   'Device API is working',

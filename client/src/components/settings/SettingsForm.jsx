@@ -24,7 +24,7 @@ const SettingsForm = ({
         </div>
       )}
 
-      {/* Sensitivity */}
+      {/* Sensitivity
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Detection Sensitivity: {settings.sensitivity}%
@@ -42,7 +42,7 @@ const SettingsForm = ({
           <span>Low (fewer alerts)</span>
           <span>High (more alerts)</span>
         </div>
-      </div>
+      </div> */}
 
       {/* Distance Threshold */}
       <div>

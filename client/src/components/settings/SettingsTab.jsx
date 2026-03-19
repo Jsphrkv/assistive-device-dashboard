@@ -6,7 +6,7 @@ const APPLY_DELAY_SECONDS = 30;
 
 const SettingsTab = () => {
   const defaultSettings = {
-    sensitivity: 75,
+    // sensitivity: 75,
     distanceThreshold: 100,
     alertMode: "both",
     ultrasonicEnabled: true,
