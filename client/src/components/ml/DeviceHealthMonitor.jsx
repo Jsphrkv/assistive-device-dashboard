@@ -30,36 +30,36 @@ const DeviceHealthMonitor = ({
     }
 
     const latest = data[0];
-
-    // API /api/ml-history wraps flat DB columns into a `result` object for anomaly type:
-    // {
-    //   is_anomaly: bool                 ← top-level
-    //   confidence_score: number | null  ← top-level, 0-1 normalized
-    //   result: {
-    //     score: number,           ← _normalize_confidence(anomaly_score), i.e. 0-1
-    //     severity: string,        ← anomaly_severity
-    //     device_health_score: number,
-    //     message: string
-    //   }
-    // }
     const result = latest.result || {};
 
-    // anomaly_score from result.score is already 0-1; multiply for %
     const rawScore = result.score ?? 0;
     const anomalyScorePct = rawScore > 1 ? rawScore : rawScore * 100;
 
     const deviceHealthScore = result.device_health_score ?? 100;
     const severity = result.severity || "low";
-    const isAnomaly = latest.is_anomaly ?? false;
+
+    // FIX: The anomaly model sometimes returns is_anomaly=False but
+    // device_health_score=0 and severity='critical' — contradictory.
+    // Derive isAnomaly from health score as a fallback so the widget
+    // shows a consistent state instead of "Normal Operation" with score=0.
+    const isAnomalyFromModel = latest.is_anomaly ?? false;
+    const isAnomaly = isAnomalyFromModel || deviceHealthScore < 30;
+
+    // FIX: Use message from result if available, otherwise derive from state
+    const message =
+      result.message &&
+      result.message !== `Device anomaly detected (health: 0.0%)`
+        ? result.message
+        : isAnomaly
+          ? `Device health is low (${deviceHealthScore.toFixed(0)}%)`
+          : "Device operating normally";
 
     setHealthData({
       isAnomaly,
       anomalyScore: anomalyScorePct,
       severity,
       deviceHealthScore,
-      message:
-        result.message ||
-        (isAnomaly ? "Anomaly detected" : "Device operating normally"),
+      message,
       timestamp: latest.timestamp,
     });
   };
@@ -190,7 +190,7 @@ const DeviceHealthMonitor = ({
             </p>
           </div>
 
-          {/* Anomaly Status */}
+          {/* Anomaly Status — now consistent with health score */}
           <div
             className={`p-4 rounded-lg border-2 ${
               healthData.isAnomaly
@@ -250,7 +250,10 @@ const DeviceHealthMonitor = ({
           )}
 
           <div className="pt-2 border-t text-xs text-gray-500 text-center">
-            Updated {new Date(healthData.timestamp).toLocaleTimeString()}
+            Updated{" "}
+            {new Date(healthData.timestamp).toLocaleTimeString("en-PH", {
+              timeZone: "Asia/Manila",
+            })}
           </div>
         </div>
       )}

@@ -163,7 +163,7 @@ const SettingsForm = ({
           onClick={onEdit}
           className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium"
         >
-          ✏️ Edit Settings
+          Edit Settings
         </button>
       ) : (
         <div className="flex gap-3">
@@ -179,7 +179,7 @@ const SettingsForm = ({
             disabled={loading}
             className="flex-1 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50"
           >
-            {loading ? "Saving..." : "💾 Save Settings"}
+            {loading ? "Saving..." : "Save Settings"}
           </button>
         </div>
       )}

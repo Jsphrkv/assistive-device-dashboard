@@ -613,7 +613,7 @@ def get_system_info():
                 'hasDevice': True,
                 'deviceId': device_id
             }), 200
-        
+        datetime.fromtimestamp
         info = response.data[0]
         
         return jsonify({

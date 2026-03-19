@@ -33,16 +33,15 @@ def _safe_float(val, default=None):
 def _normalize_confidence(v):
     """
     Normalize confidence to 0-1 range.
-    Some older rows store confidence as percentage (e.g. 87.5) instead of decimal (0.875).
     Returns None if value is missing or effectively zero.
     """
     if v is None:
         return None
     v = float(v)
     if v <= 0.01:
-        return None          # treat near-zero as missing, not 0%
+        return None
     if v > 1:
-        v = v / 100          # normalize percentage-stored values
+        v = v / 100
     return v
 
 
@@ -67,7 +66,7 @@ def get_ml_history():
         supabase   = get_supabase()
         device_ids = _get_device_ids(supabase, user_id, user_role)
 
-        if device_ids == []:          # user has no devices
+        if device_ids == []:
             return jsonify({'data': [], 'total': 0, 'limit': limit, 'offset': offset}), 200
 
         combined = []
@@ -93,18 +92,27 @@ def get_ml_history():
             for item in q.order('created_at', desc=True).limit(limit).execute().data:
                 pt         = item.get('prediction_type', 'unknown')
                 result     = {}
-                confidence = None   # start as None — only set if real data exists
+                confidence = None
 
                 if pt == 'anomaly':
-                    health = _safe_float(item.get('device_health_score'), 0)
-                    score  = _safe_float(item.get('anomaly_score'))
+                    health      = _safe_float(item.get('device_health_score'), 0)
+                    score       = _safe_float(item.get('anomaly_score'))
+                    is_anomaly  = item.get('is_anomaly', False)
+
+                    # FIX: message now reflects actual is_anomaly state
+                    # Previously always said "anomaly detected" even when is_anomaly=False
+                    message = (
+                        f"Device anomaly detected (health: {health:.1f}%)"
+                        if is_anomaly
+                        else f"Device health: {health:.1f}%"
+                    )
+
                     result = {
                         'score':               score,
                         'severity':            item.get('anomaly_severity'),
                         'device_health_score': health,
-                        'message':             f"Device anomaly detected (health: {health:.1f}%)",
+                        'message':             message,
                     }
-                    # FIX: use real anomaly_score as confidence (already 0-1 range)
                     confidence = _normalize_confidence(score)
 
                 elif pt == 'object_detection':
@@ -117,7 +125,6 @@ def get_ml_history():
                         'danger_level':  item.get('danger_level'),
                         'confidence':    conf,
                     }
-                    # FIX: use real detection_confidence from ml_predictions row
                     confidence = _normalize_confidence(conf)
 
                 elif pt == 'danger_prediction':
@@ -129,7 +136,6 @@ def get_ml_history():
                         'time_to_collision':  item.get('time_to_collision'),
                         'message':            f"{action} - Danger score: {score:.1f}",
                     }
-                    # FIX: normalize danger_score (0-100) to 0-1
                     confidence = _normalize_confidence(score / 100) if score > 0 else None
 
                 elif pt == 'environment_classification':
@@ -141,7 +147,6 @@ def get_ml_history():
                         'complexity_level':   item.get('complexity_level'),
                         'message':            f"{env} - {light} lighting",
                     }
-                    # FIX: use detection_confidence if available, else None (not 0.85)
                     confidence = _normalize_confidence(item.get('detection_confidence'))
 
                 combined.append({
@@ -150,13 +155,14 @@ def get_ml_history():
                     'device_name':      (item.get('user_devices') or {}).get('device_name', 'Unknown'),
                     'prediction_type':  pt,
                     'is_anomaly':       item.get('is_anomaly', False),
-                    'confidence_score': confidence,   # real value or None — never fabricated
+                    'confidence_score': confidence,
                     'timestamp':        item['created_at'],
                     'result':           result,
                     'source':           'ml_prediction',
                 })
 
         # ── detection_logs ────────────────────────────────────────────────────
+        # Only included when source includes detections AND type is not anomaly-specific
         if source in ('all', 'detections') and pred_type in (None, 'detection'):
             q = supabase.table('detection_logs')\
                 .select('*, user_devices!detection_logs_device_id_fkey(device_name)')
@@ -173,7 +179,6 @@ def get_ml_history():
                     'device_name':      (item.get('user_devices') or {}).get('device_name', 'Unknown'),
                     'prediction_type':  'detection',
                     'is_anomaly':       item['danger_level'] == 'High',
-                    # FIX: use real detection_confidence from the row, not hardcoded 0.85
                     'confidence_score': _normalize_confidence(item.get('detection_confidence')),
                     'timestamp':        item['detected_at'],
                     'result': {
@@ -188,7 +193,6 @@ def get_ml_history():
 
         combined.sort(key=lambda x: x['timestamp'], reverse=True)
 
-        # ── real totals (count-only queries) ──────────────────────────────────
         real_total = 0
         try:
             if source in ('all', 'predictions'):
@@ -225,7 +229,15 @@ def get_ml_history():
 @ml_history_bp.route('/anomalies', methods=['GET'])
 @token_required
 def get_anomalies():
-    """Get anomalies from both tables."""
+    """
+    Get DEVICE anomalies only from ml_predictions.
+
+    FIX: Previously mixed detection_logs (obstacle detections like
+    'Obstacle_close at 8.4cm') into the anomaly feed. Those are
+    obstacle detection events — NOT device health anomalies.
+    The anomaly widget should only show actual device anomaly model output.
+    Detection logs with High danger are shown in the detections feed instead.
+    """
     try:
         user_id   = request.current_user['user_id']
         user_role = request.current_user['role']
@@ -239,7 +251,10 @@ def get_anomalies():
 
         combined = []
 
-        # ── ml_predictions anomalies ──────────────────────────────────────────
+        # ── ml_predictions anomalies ONLY ─────────────────────────────────────
+        # FIX: removed detection_logs block — obstacle detections are NOT
+        # device anomalies and were polluting the anomaly detection widget
+        # with messages like "Obstacle_close detected at 8.4cm"
         q = supabase.table('ml_predictions')\
             .select('*, user_devices(device_name)')\
             .eq('is_anomaly', True)\
@@ -257,6 +272,7 @@ def get_anomalies():
                 health   = _safe_float(item.get('device_health_score'), 0)
                 score    = _normalize_confidence(item.get('anomaly_score'))
                 severity = item.get('anomaly_severity', 'medium')
+                # FIX: message now correctly reflects is_anomaly=True state
                 message  = f"Device anomaly detected (health: {health:.1f}%)"
 
             elif pt == 'danger_prediction':
@@ -281,31 +297,9 @@ def get_anomalies():
                 'type':        pt,
                 'severity':    severity,
                 'message':     message,
-                'score':       score,   # real value or None — never fabricated
+                'score':       score,
                 'timestamp':   item['created_at'],
                 'source':      'ml_prediction',
-            })
-
-        # ── detection_logs anomalies (High danger only) ───────────────────────
-        q = supabase.table('detection_logs')\
-            .select('*, user_devices(device_name)')\
-            .eq('danger_level', 'High')\
-            .order('detected_at', desc=True)\
-            .limit(limit)
-        q = _apply_device_filter(q, device_ids)
-
-        for item in q.execute().data:
-            combined.append({
-                'id':          item['id'],
-                'device_id':   item['device_id'],
-                'device_name': (item.get('user_devices') or {}).get('device_name', 'Unknown'),
-                'type':        'detection',
-                'severity':    item['danger_level'].lower(),
-                'message':     f"{item['obstacle_type']} detected at {item['distance_cm']}cm",
-                # FIX: use real detection_confidence, not hardcoded 0.75
-                'score':       _normalize_confidence(item.get('detection_confidence')),
-                'timestamp':   item['detected_at'],
-                'source':      'detection_log',
             })
 
         combined.sort(key=lambda x: x['timestamp'], reverse=True)
@@ -340,7 +334,6 @@ def get_ml_stats():
 
         end_dt    = now_ph()
         start_iso = (end_dt - timedelta(days=days)).isoformat()
-        print(f"📊 Stats requested for {days} days | {start_iso} → {end_dt.isoformat()}")
 
         def ml_count(extra=None):
             q = supabase.table('ml_predictions')\
@@ -371,10 +364,6 @@ def get_ml_stats():
         anomalies  = ml_anomalies + det_anomalies
         anom_rate  = (anomalies / total * 100) if total > 0 else 0
 
-        print(f"   ML total: {ml_total} | ML anomalies: {ml_anomalies}")
-        print(f"   Det total: {det_total} | Det anomalies: {det_anomalies}")
-        print(f"   Combined anomalyCount: {anomalies}")
-
         by_type = {
             'anomaly':                    ml_count({'prediction_type': 'anomaly'}),
             'object_detection':           ml_count({'prediction_type': 'object_detection'}),
@@ -383,7 +372,6 @@ def get_ml_stats():
             'detection':                  det_total,
         }
 
-        # ── avg confidence — real values only, no fabricated fallbacks ────────
         conf_scores = []
         try:
             q = supabase.table('ml_predictions')\
@@ -401,14 +389,12 @@ def get_ml_stats():
                 elif pt == 'danger_prediction' and pred.get('danger_score') is not None:
                     v = _normalize_confidence(pred['danger_score'] / 100)
                     if v: conf_scores.append(v)
-                # environment_classification: only add if detection_confidence is real
                 elif pt == 'environment_classification' and pred.get('detection_confidence') is not None:
                     v = _normalize_confidence(pred['detection_confidence'])
                     if v: conf_scores.append(v)
         except Exception as ce:
             print(f"⚠️ Confidence fetch error (non-critical): {ce}")
 
-        # FIX: detection_logs — use real detection_confidence values, not 0.85 * count
         try:
             q = supabase.table('detection_logs')\
                 .select('detection_confidence')\
@@ -442,10 +428,7 @@ def get_ml_stats():
 @ml_history_bp.route('/daily-summary', methods=['GET'])
 @token_required
 def get_daily_summary():
-    """
-    Return per-day aggregated counts.
-    Uses 2 bulk fetches instead of N×8 per-day queries — safe for 90-day range.
-    """
+    """Return per-day aggregated counts."""
     try:
         user_id   = request.current_user['user_id']
         user_role = request.current_user['role']
@@ -465,7 +448,6 @@ def get_daily_summary():
         start_iso = start_dt.isoformat()
         end_iso   = end_dt.isoformat()
 
-        # ── BULK FETCH 1: ml_predictions (paginated) ──────────────────────────
         ml_rows = []
         page = 0
         while True:
@@ -482,7 +464,6 @@ def get_daily_summary():
                 break
             page += 1
 
-        # ── BULK FETCH 2: detection_logs (paginated) ──────────────────────────
         det_rows = []
         page = 0
         while True:
@@ -499,10 +480,8 @@ def get_daily_summary():
                 break
             page += 1
 
-        # ── Aggregate in Python ──────────────────────────────────────────────
-        daily       = defaultdict(lambda: defaultdict(int))
-        # FIX: store real confidence values per day instead of using hardcoded 0.85
-        daily_conf  = defaultdict(list)
+        daily      = defaultdict(lambda: defaultdict(int))
+        daily_conf = defaultdict(list)
 
         for row in ml_rows:
             day = row['created_at'][:10]
@@ -512,7 +491,6 @@ def get_daily_summary():
             if row.get('is_anomaly'):
                 daily[day]['ml_anomaly'] += 1
 
-            # collect real confidence for this row
             if pt == 'anomaly' and row.get('anomaly_score'):
                 v = _normalize_confidence(row['anomaly_score'])
                 if v: daily_conf[day].append(v)
@@ -531,12 +509,10 @@ def get_daily_summary():
             daily[day]['det_total'] += 1
             if row.get('danger_level') == 'High':
                 daily[day]['det_anomaly'] += 1
-            # FIX: use real detection_confidence from detection_logs
             if row.get('detection_confidence'):
                 v = _normalize_confidence(row['detection_confidence'])
                 if v: daily_conf[day].append(v)
 
-        # ── Build result list ────────────────────────────────────────────────
         result = []
         for i in range(days):
             day_dt  = start_dt + timedelta(days=i)
@@ -549,7 +525,6 @@ def get_daily_summary():
             total        = d['ml_total'] + count_det
             anomalies    = d['ml_anomaly'] + d['det_anomaly']
 
-            # FIX: avg confidence from real collected values, not hardcoded 0.85
             conf_list      = daily_conf[day_key]
             avg_confidence = round(
                 (sum(conf_list) / len(conf_list)) * 100, 2
